@@ -1,0 +1,31 @@
+[package]
+name = "backsteros-agent"
+version = "0.1.0"
+description = "BacksterOS Agent — local Cursor agent with notes and Linear"
+authors = ["Remon de Vries"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "backsteros_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+dirs = "6"
+log = "0.4"
+tauri = { version = "2.11.2", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSButton", "NSView"] }
+objc2-foundation = "0.3.2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"

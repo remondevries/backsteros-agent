@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Tauri
+src-tauri/target
+src-tauri/binaries/agent-server-*
+
+# Sidecar data
+.sidecar-data
+
+# Voice models (downloaded via npm run download:tts / download:stt)
+sidecar/tts/
+sidecar/stt/
+src-tauri/resources/tts/
+src-tauri/resources/stt/
+src-tauri/resources/sidecar/node_modules/
+
+# Legacy / duplicate model paths at repo root
+stt/

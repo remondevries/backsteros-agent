@@ -1,0 +1,27 @@
+{
+  "name": "backsteros-agent-sidecar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "build": "bun run build.ts",
+    "proof": "bun run src/proof.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@briangaoo/totem": "1.4.3",
+    "@cursor/sdk": "^1.0.18",
+    "@huggingface/transformers": "^3.5.1",
+    "google-auth-library": "^10.7.0",
+    "hono": "^4.12.23",
+    "kokoro-js": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.9.2"
+  },
+  "trustedDependencies": [
+    "onnxruntime-node",
+    "protobufjs"
+  ]
+}

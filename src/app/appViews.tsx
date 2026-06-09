@@ -1,0 +1,60 @@
+import type { ReactNode } from "react";
+import { BacksterIcon } from "../chat/BacksterIcon";
+import { LinearIcon } from "../chat/LinearIcon";
+import { ObsidianIcon } from "../chat/ObsidianIcon";
+import { WhoopIcon } from "../chat/WhoopIcon";
+
+export type AppView = "chat" | "whoop" | "linear" | "obsidian";
+
+export interface AppViewDefinition {
+  id: AppView;
+  label: string;
+  icon: ReactNode;
+  letter: string;
+  number: string;
+  lead?: boolean;
+}
+
+export const APP_VIEWS: AppViewDefinition[] = [
+  {
+    id: "chat",
+    label: "Backster",
+    icon: <BacksterIcon size={18} />,
+    letter: "b",
+    number: "1",
+    lead: true,
+  },
+  {
+    id: "whoop",
+    label: "Whoop",
+    icon: <WhoopIcon size={18} />,
+    letter: "w",
+    number: "2",
+  },
+  {
+    id: "linear",
+    label: "Linear",
+    icon: <LinearIcon size={18} />,
+    letter: "l",
+    number: "3",
+  },
+  {
+    id: "obsidian",
+    label: "Obsidian",
+    icon: <ObsidianIcon size={18} />,
+    letter: "o",
+    number: "4",
+  },
+];
+
+export function getAppViewIndex(view: AppView): number {
+  return APP_VIEWS.findIndex((item) => item.id === view);
+}
+
+export function buildGoToKeyHint(view: AppViewDefinition): string {
+  return `G + ${view.letter.toUpperCase()}`;
+}
+
+export function findAppViewByLetter(letter: string): AppViewDefinition | undefined {
+  return APP_VIEWS.find((view) => view.letter === letter.toLowerCase());
+}

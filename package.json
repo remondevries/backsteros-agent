@@ -1,0 +1,49 @@
+{
+  "name": "backsteros-agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "predev:sidecar": "lsof -ti :3847 | xargs kill -9 2>/dev/null || true",
+    "dev:sidecar": "cd sidecar && bun --watch run src/server.ts",
+    "dev:all": "concurrently -k \"npm run dev:sidecar\" \"npm run dev\"",
+    "build": "npm run copy:vad-assets && tsc -b && vite build",
+    "build:sidecar": "cd sidecar && bun run build.ts",
+    "download:tts": "cd sidecar && bun run download-tts.ts",
+    "download:stt": "cd sidecar && bun run download-stt.ts",
+    "copy:vad-assets": "node scripts/copy-vad-assets.mjs",
+    "postinstall": "node scripts/copy-vad-assets.mjs",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "npm run build:sidecar && tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-global-shortcut": "^2.3.2",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "@ricky0123/vad-web": "^0.0.22",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2.11.2",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}

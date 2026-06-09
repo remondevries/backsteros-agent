@@ -1,0 +1,37 @@
+const CALENDAR_CREATED_EVENT_PATH =
+  "M11 1C13.2091 1 15 2.79086 15 5V7.5H13.5V6H2.5V11C2.5 12.3807 3.61929 13.5 5 13.5H7.5V15H5C2.79086 15 1 13.2091 1 11V5C1 2.79086 2.79086 1 5 1H11Z";
+
+const CALENDAR_CREATED_EVENT_PLUS_PATH =
+  "M13 9C13.0964 9 13.1889 9.03831 13.2571 9.10651C13.3253 9.1747 13.3636 9.26719 13.3636 9.36364V12.6364H16.6364C16.7328 12.6364 16.8253 12.6747 16.8935 12.7429C16.9617 12.8111 17 12.9036 17 13C17 13.0964 16.9617 13.1889 16.8935 13.2571C16.8253 13.3253 16.7328 13.3636 16.6364 13.3636H13.3636V16.6364C13.3636 16.7328 13.3253 16.8253 13.2571 16.8935C13.1889 16.9617 13.0964 17 13 17C12.9036 17 12.8111 16.9617 12.7429 16.8935C12.6747 16.8253 12.6364 16.7328 12.6364 16.6364V13.3636H9.36364C9.26719 13.3636 9.1747 13.3253 9.10651 13.2571C9.03831 13.1889 9 13.0964 9 13C9 12.9036 9.03831 12.8111 9.10651 12.7429C9.1747 12.6747 9.26719 12.6364 9.36364 12.6364H12.6364V9.36364C12.6364 9.26719 12.6747 9.1747 12.7429 9.10651C12.8111 9.03831 12.9036 9 13 9Z";
+
+export function CalendarCreatedEventIcon({
+  className,
+  size = 16,
+  color,
+}: {
+  className?: string;
+  size?: number;
+  color?: string;
+}) {
+  const fill = color ?? "currentColor";
+
+  return (
+    <svg
+      className={className ?? "calendar-created-event-icon"}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path d={CALENDAR_CREATED_EVENT_PATH} fill={fill} />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d={CALENDAR_CREATED_EVENT_PLUS_PATH}
+        fill={fill}
+      />
+    </svg>
+  );
+}
