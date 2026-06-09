@@ -5,9 +5,11 @@ import { getSelectedModelSelection } from "./models.ts";
 import { loadSettings } from "./store.ts";
 import { runGoodMorningFeelFlow } from "./good-morning-feel.ts";
 import { runGoodNightActions } from "./good-night.ts";
+import { buildGoodNightChatResponse } from "./good-night-response.ts";
 import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
 import { GOOD_NIGHT_REFLECTION_SECTIONS } from "./good-night-sections.ts";
 import { prefetchMorningReviewData } from "./morning-review-prefetch.ts";
+import { loadUserFirstName } from "./context/profile.ts";
 
 function buildReflectionPayloadText(answers: string[]): string {
   return JSON.stringify({
@@ -54,7 +56,16 @@ export async function runGoodMorningFeelDashboardFlow(
 }
 
 export async function runGoodNightDashboardFlow(notesPath: string) {
-  return runGoodNightActions(notesPath);
+  const result = await runGoodNightActions(notesPath);
+  const response = buildGoodNightChatResponse({
+    firstName: loadUserFirstName(),
+    movedIssueCount: result.linear.moved.length,
+    completedIssueCount: result.completedIssues.count,
+    productivityScore: result.productivityScore,
+    whoop: result.whoop,
+  });
+
+  return { ...result, response };
 }
 
 export async function runGoodNightReflectionDashboardFlow(

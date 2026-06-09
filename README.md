@@ -154,7 +154,7 @@ The sidecar launches `@briangaoo/totem` via `npx` when Whoop tools are needed. R
 For the packaged app, create `~/.backsteros-agent/.env`:
 
 ```bash
-mkdir -p ~/.backster-agent
+mkdir -p ~/.backsteros-agent
 cp .env.example ~/.backsteros-agent/.env
 # edit ~/.backsteros-agent/.env with CURSOR_API_KEY
 ```

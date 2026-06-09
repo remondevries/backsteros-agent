@@ -13,7 +13,7 @@ export function integrationReadinessHints(tools: ToolSelection): string[] {
   if (tools.linear && !getLinearApiKey()) {
     hints.push(
       `[Linear setup]
-Linear MCP is attached but LINEAR_API_KEY is not set in ~/.backster-agent/.env.
+Linear MCP is attached but LINEAR_API_KEY is not set in ~/.backsteros-agent/.env.
 If Linear requests fail, add your API key or authenticate Linear MCP in Cursor.`,
     );
   }
@@ -22,7 +22,7 @@ If Linear requests fail, add your API key or authenticate Linear MCP in Cursor.`
     if (!isGoogleCalendarConfigured()) {
       hints.push(
         `[Calendar setup]
-Google Calendar is not configured. Set GOOGLE_OAUTH_CREDENTIALS in ~/.backster-agent/.env to a Desktop OAuth JSON file.`,
+Google Calendar is not configured. Set GOOGLE_OAUTH_CREDENTIALS in ~/.backsteros-agent/.env to a Desktop OAuth JSON file.`,
       );
     } else if (!isGoogleCalendarAuthenticated()) {
       hints.push(
@@ -37,12 +37,12 @@ Ask the user to connect Google Calendar before creating or updating events.`,
     if (!isWhoopConfigured()) {
       hints.push(
         `[Whoop setup]
-Whoop is not configured. Run \`npx -y @briangaoo/totem auth\` and save tokens to ~/.backster-agent/totem.env.`,
+Whoop is not configured. Run \`npx -y @briangaoo/totem auth\` and save tokens to ~/.backsteros-agent/totem.env.`,
       );
     } else if (!isWhoopAuthenticated()) {
       hints.push(
         `[Whoop setup]
-totem.env exists but Whoop tokens are missing. Re-run totem auth and update ~/.backster-agent/totem.env.`,
+totem.env exists but Whoop tokens are missing. Re-run totem auth and update ~/.backsteros-agent/totem.env.`,
       );
     }
   }

@@ -1,5 +1,5 @@
 {
-  "name": "backster-agent-sidecar",
+  "name": "backsteros-agent-sidecar",
   "private": true,
   "type": "module",
   "scripts": {

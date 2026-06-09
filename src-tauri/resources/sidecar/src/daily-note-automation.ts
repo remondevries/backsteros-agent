@@ -334,8 +334,12 @@ export function applyGoodNightDailyNote(
     productivity: computeProductivityScore(input.completedIssueCount),
   };
   const strain = formatStrainFrontmatterValue(input.whoop);
+  const recovery = formatRecoveryFrontmatterValue(input.whoop);
   if (strain != null) {
     frontmatterFields.strain = strain;
+  }
+  if (recovery != null) {
+    frontmatterFields.recovery = recovery;
   }
 
   content = upsertFrontmatterFields(content, frontmatterFields, note.date);

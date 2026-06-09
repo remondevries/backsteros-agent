@@ -4,7 +4,6 @@ import {
   computeProductivityScore,
   type DailyNoteWriteResult,
 } from "./daily-note-automation.ts";
-import { fetchCalendarEventsToday, type TodayCalendarSummary } from "./morning-review-calendar.ts";
 import {
   fetchIssuesCompletedToday,
   moveIssuesDueTodayToTomorrow,
@@ -44,10 +43,7 @@ export interface GoodNightActionResult {
   completedIssues: { count: number; issues: LinearIssueEntity[] };
   productivityScore: number | null;
   linear: Awaited<ReturnType<typeof moveIssuesDueTodayToTomorrow>>;
-  calendar: TodayCalendarSummary;
-  errors: Partial<
-    Record<"whoop" | "obsidian" | "linear" | "linearCompleted" | "calendar", string>
-  >;
+  errors: Partial<Record<"whoop" | "obsidian" | "linear" | "linearCompleted", string>>;
 }
 
 async function runStep<T>(
@@ -69,7 +65,7 @@ export async function runGoodNightActions(notesPath: string): Promise<GoodNightA
   const timezone = loadUserTimezone();
   const now = new Date();
 
-  const [linear, completedIssues, whoop, calendar] = await Promise.all([
+  const [linear, completedIssues, whoop] = await Promise.all([
     runStep("linear", errors, () => moveIssuesDueTodayToTomorrow({ timezone, now }), {
       moved: [] as LinearIssueEntity[],
       failed: [],
@@ -86,10 +82,6 @@ export async function runGoodNightActions(notesPath: string): Promise<GoodNightA
       () => fetchWhoopTodaySnapshot({ timezone, now, includeStrainDeepDive: true }),
       null,
     ),
-    runStep("calendar", errors, () => fetchCalendarEventsToday({ timezone, now }), {
-      events: [],
-      firstTimedEvent: null,
-    }),
   ]);
 
   const productivityScore = computeProductivityScore(completedIssues.count);
@@ -112,7 +104,6 @@ export async function runGoodNightActions(notesPath: string): Promise<GoodNightA
     completedIssues,
     productivityScore,
     linear,
-    calendar,
     errors,
   };
 }

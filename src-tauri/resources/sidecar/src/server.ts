@@ -77,6 +77,7 @@ import {
   runGoodNightActions,
 } from "./good-night.ts";
 import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
+import { buildGoodNightChatResponse } from "./good-night-response.ts";
 import {
   runGoodMorningDashboardFlow,
   runGoodMorningFeelDashboardFlow,
@@ -982,21 +983,6 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           });
         };
 
-        broadcast(runId, {
-          type: "entities.created",
-          runId,
-          entityType: "good_night_meta",
-          items: [
-            {
-              id: "good-night-meta",
-              greetingName: loadUserFirstName() ?? undefined,
-              productivityScore: result.productivityScore,
-              completedIssueCount: result.completedIssues.count,
-              tomorrowDate: result.linear.tomorrowDate || undefined,
-            },
-          ],
-        });
-
         if (result.errors.whoop) {
           logGoodNightStep(
             `good-night-whoop-${runId}`,
@@ -1005,12 +991,6 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             "error",
           );
         } else if (result.whoop) {
-          broadcast(runId, {
-            type: "entities.created",
-            runId,
-            entityType: "whoop_snapshot",
-            items: [result.whoop],
-          });
           logGoodNightStep(
             `good-night-whoop-${runId}`,
             "whoop",
@@ -1031,18 +1011,6 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             "error",
           );
         } else if (result.dailyNoteUpdate) {
-          broadcast(runId, {
-            type: "tool.completed",
-            runId,
-            toolCallId: `good-night-daily-note-${runId}`,
-            toolName: "write_workspace_file",
-            category: "notes",
-            structured: {
-              type: "file_diff",
-              path: result.dailyNoteUpdate.path,
-              summary: `Updated ${result.dailyNoteUpdate.lines.join(", ")}`,
-            },
-          });
           const productivityLabel =
             result.productivityScore != null
               ? `, productivity ${result.productivityScore} (${result.completedIssues.count} issues completed)`
@@ -1050,7 +1018,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           logGoodNightStep(
             `good-night-obsidian-${runId}`,
             "notes",
-            `Updated ${result.dailyNoteUpdate.path} with bedtime, strain, and productivity${productivityLabel}`,
+            `Updated ${result.dailyNoteUpdate.path} with bedtime, strain, recovery, and productivity${productivityLabel}`,
             "completed",
           );
         }
@@ -1063,52 +1031,10 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             "error",
           );
         } else {
-          if (result.completedIssues.issues.length > 0) {
-            const completedEvent = {
-              type: "entities.created" as const,
-              runId,
-              entityType: "linear_issue_completed" as const,
-              items: result.completedIssues.issues,
-            };
-            broadcast(runId, completedEvent);
-            scheduleLinearAvatarBackfill(runId, {
-              ...completedEvent,
-              entityType: "linear_issue",
-            });
-          }
           logGoodNightStep(
             `good-night-linear-completed-${runId}`,
             "linear",
             `${result.completedIssues.count} Linear issue(s) completed today`,
-            "completed",
-          );
-        }
-
-        if (result.errors.calendar) {
-          logGoodNightStep(
-            `good-night-calendar-${runId}`,
-            "calendar",
-            `Calendar fetch failed: ${result.errors.calendar}`,
-            "error",
-          );
-        } else if (result.calendar.events.length > 0) {
-          broadcast(runId, {
-            type: "entities.created",
-            runId,
-            entityType: "calendar_event",
-            items: result.calendar.events,
-          });
-          logGoodNightStep(
-            `good-night-calendar-${runId}`,
-            "calendar",
-            `Loaded ${result.calendar.events.length} calendar event(s) for today`,
-            "completed",
-          );
-        } else {
-          logGoodNightStep(
-            `good-night-calendar-${runId}`,
-            "calendar",
-            "No calendar events today",
             "completed",
           );
         }
@@ -1121,17 +1047,6 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             "error",
           );
         } else if (result.linear.moved.length > 0) {
-          const linearEvent = {
-            type: "entities.created" as const,
-            runId,
-            entityType: "linear_issue_moved" as const,
-            items: result.linear.moved,
-          };
-          broadcast(runId, linearEvent);
-          scheduleLinearAvatarBackfill(runId, {
-            ...linearEvent,
-            entityType: "linear_issue",
-          });
           logGoodNightStep(
             `good-night-linear-${runId}`,
             "linear",
@@ -1153,6 +1068,35 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             "completed",
           );
         }
+
+        if (result.completedIssues.issues.length > 0) {
+          const completedEvent = {
+            type: "entities.created" as const,
+            runId,
+            entityType: "linear_issue_completed" as const,
+            items: result.completedIssues.issues,
+          };
+          broadcast(runId, completedEvent);
+          scheduleLinearAvatarBackfill(runId, {
+            ...completedEvent,
+            entityType: "linear_issue",
+          });
+        }
+
+        const response = buildGoodNightChatResponse({
+          firstName: loadUserFirstName(),
+          movedIssueCount: result.linear.moved.length,
+          completedIssueCount: result.completedIssues.count,
+          productivityScore: result.productivityScore,
+          whoop: result.whoop,
+        });
+
+        state.lastAssistantText = response;
+        broadcast(runId, {
+          type: "message.delta",
+          runId,
+          text: response,
+        });
 
         completeRun(runId, state, "finished");
         return;

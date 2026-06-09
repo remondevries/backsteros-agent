@@ -8,7 +8,7 @@ let dataDir = "";
 let previousDataDir: string | undefined;
 
 beforeAll(() => {
-  dataDir = mkdtempSync(join(tmpdir(), "backster-agent-profile-"));
+  dataDir = mkdtempSync(join(tmpdir(), "backsteros-agent-profile-"));
   previousDataDir = process.env.BACKSTER_DATA_DIR;
   process.env.BACKSTER_DATA_DIR = dataDir;
 });

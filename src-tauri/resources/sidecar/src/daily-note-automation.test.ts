@@ -143,6 +143,8 @@ describe("daily note automation writes", () => {
           id: "whoop-2026-06-08",
           date: "2026-06-08",
           strainScore: 12.4,
+          recoveryScore: 71,
+          recoveryState: "GREEN",
         },
         completedIssueCount: 11,
         timezone: "UTC",
@@ -154,6 +156,7 @@ describe("daily note automation writes", () => {
       expect(content).toContain("bedtime: around 10:30 PM");
       expect(content).toContain("productivity: 9");
       expect(content).toContain("strain: 12.4");
+      expect(content).toContain("recovery: 71");
       expect(content.indexOf("productivity: 9")).toBeLessThan(content.indexOf("## Day log"));
       expect(content.indexOf("bedtime:")).toBeGreaterThan(content.indexOf("## Day log"));
     } finally {

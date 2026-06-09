@@ -19,8 +19,8 @@ function loadDotEnvFile(path: string) {
   }
 }
 
-loadDotEnvFile(join(homedir(), ".backster-agent", ".env"));
-loadDotEnvFile(join(homedir(), ".backster-agent", "totem.env"));
+loadDotEnvFile(join(homedir(), ".backsteros-agent", ".env"));
+loadDotEnvFile(join(homedir(), ".backsteros-agent", "totem.env"));
 
 const defaultPath = [
   "/opt/homebrew/bin",
@@ -35,7 +35,7 @@ if (!process.env.PATH?.includes("/usr/bin")) {
 }
 
 export function getDataDir(): string {
-  return process.env.BACKSTER_DATA_DIR ?? join(homedir(), ".backster-agent");
+  return process.env.BACKSTER_DATA_DIR ?? join(homedir(), ".backsteros-agent");
 }
 
 export function getUserProfilePath(): string {
