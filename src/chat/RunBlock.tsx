@@ -3,11 +3,14 @@ import { useRunPlaybackActive } from "../hooks/useTtsPlayback";
 import { ActivityHeader, ActivityStepRow, ActivityTimeline } from "./ActivityTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { collectTableEntityBrands, EntityBrand } from "./entityBrands";
-import { BacksterBrand } from "./BacksterBrand";
+import { BacksterBrandHeader } from "./BacksterAssistantBlock";
+import { GeminiBrandHeader } from "../lookup/GeminiBrand";
 import { EntityListCard } from "./EntityListCard";
 import { WhoopSnapshotBrand } from "./WhoopSnapshotCard";
 import { MessageActions } from "./MessageActions";
 import { TerminalTypingText } from "./TerminalTypingText";
+import { UpdateConfirmationPresentation } from "./UpdateConfirmationPresentation";
+import { parseUpdateConfirmationToken, formatUpdateConfirmationMessage } from "./updateConfirmation";
 import { ToolResultCard } from "./ToolResultCard";
 import type { RunViewModel } from "./types";
 
@@ -19,9 +22,10 @@ export function RunBlock({
   canSpeak,
   voiceModeEnabled = false,
   sourceBrand,
-  typingAnimated = false,
+  animate = true,
   onOpenLinearDashboard,
   onOpenWhoopDashboard,
+  onPresentationComplete,
 }: {
   run: RunViewModel;
   onToggle: () => void;
@@ -29,14 +33,19 @@ export function RunBlock({
   onReject: (approvalId: string) => void;
   canSpeak?: boolean;
   voiceModeEnabled?: boolean;
-  sourceBrand?: "backster";
-  typingAnimated?: boolean;
+  sourceBrand?: "backster" | "gemini";
+  animate?: boolean;
   onOpenLinearDashboard?: () => void;
   onOpenWhoopDashboard?: () => void;
+  onPresentationComplete?: () => void;
 }) {
   const running = run.status === "running";
   const [typingComplete, setTypingComplete] = useState(false);
   const readingAloud = useRunPlaybackActive(voiceModeEnabled ? run.runId : "");
+  const updateConfirmation = parseUpdateConfirmationToken(run.text);
+  const runActionText = updateConfirmation
+    ? formatUpdateConfirmationMessage(updateConfirmation)
+    : run.text;
 
   useEffect(() => {
     if (running) {
@@ -53,7 +62,8 @@ export function RunBlock({
   const whoopSnapshotForFileDiff = run.entities.find(
     (entity) => entity.type === "whoop_snapshots",
   )?.items[0];
-  const hideRedundantText = !running && (hasFileDiff || showWhoopWidget);
+  const hideRedundantText =
+    !running && (hasFileDiff || showWhoopWidget) && updateConfirmation == null;
   const hasPendingApproval = run.approvals.some((approval) => !approval.resolved);
   const hideTextForApproval = hasPendingApproval && run.text.trim().length > 0;
   const showTextBlock =
@@ -68,51 +78,99 @@ export function RunBlock({
   const textAboveEntities = hasTableEntities && showTextBlock;
   const tableEntityBrands = collectTableEntityBrands(run.entities);
   const showBacksterBrand = sourceBrand === "backster" && showTextBlock;
+  const showGeminiBrand = sourceBrand === "gemini" && showTextBlock;
   const showEntityBrands =
     !showBacksterBrand &&
+    !showGeminiBrand &&
     ((hasTableEntities && tableEntityBrands.length > 0) || showWhoopBrandForFileDiff);
-  const textBelowBrand = showBacksterBrand || textAboveEntities;
+  const textBelowBrand = showBacksterBrand || showGeminiBrand || textAboveEntities;
 
-  const delayTableEntitiesUntilTypingComplete =
-    showTextBlock && typingAnimated && hasTableEntities;
+  const delayTableEntitiesUntilTypingComplete = showTextBlock && hasTableEntities;
   const showTableEntities = !delayTableEntitiesUntilTypingComplete || typingComplete;
 
-  const textBlock = showTextBlock ? (
-    <div className="run-text-block">
-      <TerminalTypingText
-        key={run.runId}
-        text={run.text}
-        running={running}
-        readingAloud={readingAloud}
-        liveStream={voiceModeEnabled && running}
-        typingAnimated={typingAnimated}
-        onTypingComplete={() => setTypingComplete(true)}
-        onOpenLinearDashboard={onOpenLinearDashboard}
-        onOpenWhoopDashboard={onOpenWhoopDashboard}
-      />
-    </div>
-  ) : null;
+  useEffect(() => {
+    if (!animate || running || !onPresentationComplete) return;
+    if (run.status !== "finished") return;
+    if (showTextBlock && run.text.trim().length > 0) return;
+    onPresentationComplete();
+  }, [
+    animate,
+    running,
+    onPresentationComplete,
+    run.status,
+    run.text,
+    showTextBlock,
+  ]);
+
+  const textBlock = showTextBlock ? (() => {
+    if (updateConfirmation) {
+      return (
+        <div className="run-text-block">
+          <UpdateConfirmationPresentation
+            what={updateConfirmation.what}
+            where={updateConfirmation.where}
+            message={updateConfirmation.message}
+            running={running}
+            startedAt={run.startedAt}
+            readingAloud={readingAloud}
+            animate={animate}
+            onTypingComplete={() => {
+              setTypingComplete(true);
+              onPresentationComplete?.();
+            }}
+            onOpenLinearDashboard={onOpenLinearDashboard}
+            onOpenWhoopDashboard={onOpenWhoopDashboard}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="run-text-block">
+        <TerminalTypingText
+          key={run.runId}
+          text={run.text}
+          running={running}
+          startedAt={run.startedAt}
+          readingAloud={readingAloud}
+          animate={animate}
+          onTypingComplete={() => {
+            setTypingComplete(true);
+            onPresentationComplete?.();
+          }}
+          onOpenLinearDashboard={onOpenLinearDashboard}
+          onOpenWhoopDashboard={onOpenWhoopDashboard}
+        />
+      </div>
+    );
+  })() : null;
 
   return (
     <div className="run-block">
-      {(showBacksterBrand || showEntityBrands) ? (
-        <div className="run-entity-brands">
-          {showBacksterBrand ? (
-            <BacksterBrand />
-          ) : (
+      {(showBacksterBrand || showGeminiBrand || showEntityBrands) ? (
+        showBacksterBrand ? (
+          <BacksterBrandHeader />
+        ) : showGeminiBrand ? (
+          <GeminiBrandHeader />
+        ) : (
+          <div className="run-entity-brands">
             <>
               {tableEntityBrands.map((entity) => (
                 <EntityBrand key={entity.type} payload={entity} />
               ))}
               {showWhoopBrandForFileDiff && <WhoopSnapshotBrand />}
             </>
-          )}
-        </div>
+          </div>
+        )
       ) : null}
 
       {textBelowBrand && textBlock}
 
       {run.entities.map((entity, index) => {
+        if (entity.type === "file_diff" && updateConfirmation) {
+          return null;
+        }
+
         if (entity.type === "whoop_snapshots" && hasFileDiff) {
           return null;
         }
@@ -183,9 +241,9 @@ export function RunBlock({
             ))}
           </ActivityTimeline>
         )}
-        {run.text.trim() && !hideRedundantText && !hideTextForApproval && (
+        {runActionText.trim() && !hideRedundantText && !hideTextForApproval && (
           <MessageActions
-            text={run.text}
+            text={runActionText}
             playbackId={run.runId}
             canSpeak={canSpeak}
             showCopy={!running && typingComplete}

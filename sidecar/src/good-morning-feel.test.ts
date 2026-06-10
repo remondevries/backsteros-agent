@@ -33,6 +33,10 @@ describe("good morning feel helpers", () => {
     expect(accumulateAssistantText("I feel pretty", "I feel pretty good.")).toBe("I feel pretty good.");
   });
 
+  test("dedupes overlapped stream chunks", () => {
+    expect(accumulateAssistantText("I feel pre", "pretty good.")).toBe("I feel pretty good.");
+  });
+
   test("local feel polish fallback", () => {
     expect(polishFeelLocally("i feel pretty good")).toBe("I feel pretty good.");
   });
@@ -66,11 +70,9 @@ describe("good morning feel helpers", () => {
     ).toBe("mixed");
   });
 
-  test("builds simple encouragement copy", () => {
+  test("builds simple feel confirmation copy", () => {
     expect(buildYesterdayEncouragement("good")).toContain("Yesterday was a good day");
-    expect(buildGoodMorningFeelResponse("good")).toBe(
-      "Thank you — enjoy the day!\n\nYesterday was a good day — let's do it again today.",
-    );
+    expect(buildGoodMorningFeelResponse()).toBe("{{update:update|daily note}}");
   });
 
   test("writes feel line after slept in today's note", () => {
@@ -124,7 +126,7 @@ describe("good morning feel helpers", () => {
 
       expect(result.polishedFeel).toBe("I feel rested and ready.");
       expect(result.dailyNoteUpdate.lines[0]).toBe("feel: I feel rested and ready.");
-      expect(result.response).toContain("Thank you — enjoy the day!");
+      expect(result.response).toBe("{{update:update|daily note}}");
     } finally {
       if (previousEnv === undefined) {
         delete process.env.BACKSTER_EXECUTION_MODE;

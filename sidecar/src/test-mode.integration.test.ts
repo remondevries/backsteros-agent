@@ -99,7 +99,7 @@ describe("test mode HTTP flows", () => {
     };
 
     expect(body.polishedFeel).toBe("I feel rested and ready today.");
-    expect(body.response).toContain("Thank you — enjoy the day!");
+    expect(body.response).toBe("{{update:update|daily note}}");
     expect(body.dailyNoteUpdate.lines[0]).toBe("feel: I feel rested and ready today.");
 
     const note = readFileSync(join(notesPath, body.dailyNoteUpdate.path), "utf8");
@@ -133,7 +133,7 @@ describe("test mode HTTP flows", () => {
 
     expect(body.reflectionMarkdown).toContain("## Evening reflection");
     expect(body.reflectionMarkdown).toContain("- Shipped the feature.");
-    expect(body.response).toContain("evening reflection");
+    expect(body.response).toContain("Thanks for your answers");
 
     const note = readFileSync(join(notesPath, body.dailyNoteUpdate.path), "utf8");
     expect(note).toContain("## Evening reflection");

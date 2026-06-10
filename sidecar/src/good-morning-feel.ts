@@ -2,6 +2,7 @@ import type { ModelSelection } from "@cursor/sdk";
 import { createEphemeralAgent, disposeEphemeralAgent, sendPolishPrompt } from "./agent.ts";
 import { isTestExecutionMode } from "./execution-mode.ts";
 import { applyGoodMorningFeelDailyNote, type DailyNoteWriteResult } from "./daily-note-automation.ts";
+import { buildUpdateConfirmationToken } from "./update-confirmation.ts";
 import {
   formatDateInTimezone,
   readDailyNoteStats,
@@ -66,8 +67,25 @@ export function polishFeelLocally(rawAnswer: string): string {
 export function accumulateAssistantText(previous: string, chunk: string): string {
   if (!chunk) return previous;
   if (!previous) return chunk;
+
+  // Fast paths for the common streaming patterns where one side fully extends the other.
   if (chunk.startsWith(previous)) return chunk;
   if (previous.startsWith(chunk)) return previous;
+
+  // If the new chunk is already contained, keep the longer previous text.
+  if (previous.includes(chunk)) return previous;
+  if (chunk.includes(previous)) return chunk;
+
+  // Generic overlap: stream chunks sometimes overlap on a suffix/prefix boundary
+  // (e.g. "...pre" + "pretty..."). Dedupe via the longest overlap.
+  const maxOverlap = Math.min(previous.length, chunk.length);
+  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
+    const overlapPrefix = chunk.slice(0, overlap);
+    if (previous.endsWith(overlapPrefix)) {
+      return `${previous}${chunk.slice(overlap)}`;
+    }
+  }
+
   return `${previous}${chunk}`;
 }
 
@@ -132,8 +150,8 @@ export function buildYesterdayEncouragement(rating: YesterdayDayRating["rating"]
   }
 }
 
-export function buildGoodMorningFeelResponse(rating: YesterdayDayRating["rating"]): string {
-  return `Thank you — enjoy the day!\n\n${buildYesterdayEncouragement(rating)}`;
+export function buildGoodMorningFeelResponse(): string {
+  return buildUpdateConfirmationToken("update", "daily note");
 }
 
 export function loadYesterdayDayRating(
@@ -209,7 +227,9 @@ export async function runGoodMorningFeelFlow(
     try {
       const candidate = await polishFeelWithAgent(notesPath, rawAnswer, options.model);
       if (isUsablePolishedFeel(candidate)) {
-        polishedFeel = candidate;
+        // Ensure agent output gets the same final formatting guarantees as the local fallback
+        // (capitalization + trailing punctuation).
+        polishedFeel = polishFeelLocally(candidate);
       }
     } catch {
       // Keep local polish fallback.
@@ -225,11 +245,9 @@ export async function runGoodMorningFeelFlow(
     now,
   });
 
-  const yesterday = loadYesterdayDayRating(notesPath, timezone, now);
-
   return {
     polishedFeel,
     dailyNoteUpdate,
-    response: buildGoodMorningFeelResponse(yesterday.rating),
+    response: buildGoodMorningFeelResponse(),
   };
 }

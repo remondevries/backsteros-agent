@@ -66,8 +66,10 @@ describe("good night reflection helpers", () => {
   });
 
   test("builds good night closing response", () => {
-    expect(buildGoodNightReflectionResponse("Remon")).toContain("Good night, Remon");
-    expect(buildGoodNightReflectionResponse("Remon")).toContain("evening reflection");
+    const response = buildGoodNightReflectionResponse();
+    expect(response).toContain("{{update:reflection|journal|");
+    expect(response).toContain("Thanks for your answers");
+    expect(response).toContain("Get some good rest");
   });
 
   test("writes evening reflection into today's note", () => {
@@ -144,7 +146,7 @@ describe("good night reflection helpers", () => {
       expect(result.reflectionMarkdown).toContain("## Evening reflection");
       expect(result.reflectionMarkdown).toContain("- Reflection for What went well.");
       expect(result.dailyNoteUpdate.path).toContain("2026-06-08.md");
-      expect(result.response).toContain("evening reflection");
+      expect(result.response).toContain("Thanks for your answers");
     } finally {
       if (previousEnv === undefined) {
         delete process.env.BACKSTER_EXECUTION_MODE;

@@ -28,6 +28,7 @@ import { startGoogleCalendarAuth } from "./calendarAuth.ts";
 import {
   getAgentProfilePath,
   getCursorApiKey,
+  getGeminiApiKey,
   getLinearApiKey,
   getNotesDirOverride,
   getSidecarPort,
@@ -56,28 +57,24 @@ import {
   isMorningReviewQuickAction,
   resolveMorningReviewDueDate,
 } from "./morning-review-linear.ts";
-import { prefetchMorningReviewData } from "./morning-review-prefetch.ts";
-import { applyMorningReviewDailyNote } from "./daily-note-automation.ts";
+import {
+  isGoodMorningFeelQuickAction,
+} from "./good-morning.ts";
+import { isDailyCaptureQuickAction } from "./daily-capture.ts";
+import { isGroceryListQuickAction } from "./grocery-list.ts";
+import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
+import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
+import { dispatchAutomationHandler } from "./automation/registry.ts";
+import type { AutomationHandlerContext } from "./automation/types.ts";
 import {
   DAILY_NOTE_FOLDER,
   getTodayDailyNote,
   readDailyNoteStats,
 } from "./daily-note.ts";
 import {
-  isGoodMorningFeelQuickAction,
-} from "./good-morning.ts";
-import {
-  buildGoodMorningChatResponse,
-  filterUrgentLinearIssues,
-} from "./good-morning-response.ts";
-import { runGoodMorningFeelFlow } from "./good-morning-feel.ts";
-import {
   isGoodNightQuickAction,
   isGoodNightReflectionQuickAction,
-  runGoodNightActions,
 } from "./good-night.ts";
-import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
-import { buildGoodNightChatResponse } from "./good-night-response.ts";
 import {
   findPdfAttachmentMeta,
   isLetterConfirmQuickAction,
@@ -120,6 +117,23 @@ import {
   setActiveSession,
   updateSessionTitle,
 } from "./sessions.ts";
+import {
+  clearLookupSessionState,
+  createLookupSessionRecord,
+  DEFAULT_LOOKUP_SESSION_TITLE,
+  deleteLookupSessionRecord,
+  getActiveLookupSessionId,
+  listLookupSessions,
+  lookupSessionExists,
+  saveLookupSessionState,
+  setActiveLookupSession,
+  updateLookupSessionTitle,
+} from "./lookup-sessions.ts";
+import { persistLookupAttachments } from "./lookup-attachment-store.ts";
+import { buildGeminiUserParts } from "./lookup-attachments.ts";
+import { completeLookupRun, runLookupMessage } from "./lookup-handler.ts";
+import { normalizeLookupOutputFormat } from "./lookup-output-format.ts";
+import { normalizeLookupSearchMode } from "./lookup-tools.ts";
 import { loadSettings, saveSettings } from "./store.ts";
 import type { AgentEvent, ReadyMessage } from "./types.ts";
 import {
@@ -184,10 +198,12 @@ interface ActiveRun {
   state: ReturnType<typeof createRunState>;
   cancelRequested: boolean;
   sdkRun?: Run;
+  abortController?: AbortController;
 }
 
 const activeRuns = new Map<string, ActiveRun>();
 const sessionRunId = new Map<string, string>();
+const lookupSessionRunId = new Map<string, string>();
 
 function isTerminalEvent(event: AgentEvent): boolean {
   return (
@@ -256,44 +272,13 @@ function scheduleLinearAvatarBackfill(runId: string, event: AgentEvent): void {
     });
 }
 
-function splitTextIntoChunks(text: string, chunkSize = 36): string[] {
-  if (!text) return [];
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += chunkSize) {
-    chunks.push(text.slice(i, i + chunkSize));
-  }
-  return chunks;
-}
-
-async function broadcastAssistantTextInChunks(
-  runId: string,
-  text: string,
-  {
-    initialDelayMs = 220,
-    interChunkDelayMs = 80,
-    chunkSize = 36,
-  }: {
-    initialDelayMs?: number;
-    interChunkDelayMs?: number;
-    chunkSize?: number;
-  } = {},
-): Promise<void> {
-  const chunks = splitTextIntoChunks(text, chunkSize);
-  if (chunks.length === 0) return;
-
-  // Intentionally delay the first delta so the client can render the "thinking"
-  // cursor while `run.status === running && run.text.length === 0`.
-  await Bun.sleep(initialDelayMs);
-  for (let index = 0; index < chunks.length; index += 1) {
-    broadcast(runId, {
-      type: "message.delta",
-      runId,
-      text: chunks[index]!,
-    });
-    if (index < chunks.length - 1) {
-      await Bun.sleep(interChunkDelayMs);
-    }
-  }
+function broadcastAssistantMessage(runId: string, text: string): void {
+  if (!text) return;
+  broadcast(runId, {
+    type: "message.delta",
+    runId,
+    text,
+  });
 }
 
 const app = new Hono();
@@ -311,12 +296,15 @@ app.use(
 app.use("/flows/*", bearerAuth({ token }));
 app.use("/settings", bearerAuth({ token }));
 app.use("/sessions/*", bearerAuth({ token }));
+app.use("/lookup/*", bearerAuth({ token }));
 app.use("/runs/*", bearerAuth({ token }));
 app.use("/approvals/*", bearerAuth({ token }));
 app.use("/hooks/*", bearerAuth({ token }));
 app.use("/workspace/*", bearerAuth({ token }));
 app.use("/tts/*", bearerAuth({ token }));
 app.use("/stt/*", bearerAuth({ token }));
+app.use("/llm-extract/*", bearerAuth({ token }));
+app.use("/linear/*", bearerAuth({ token }));
 
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : "Unknown error";
@@ -328,12 +316,87 @@ app.get("/healthz", (c) => {
   return c.json({
     ok: true,
     hasApiKey: Boolean(getCursorApiKey()),
+    hasGeminiApiKey: Boolean(getGeminiApiKey()),
     hasLinearApiKey: Boolean(getLinearApiKey()),
     hasGoogleCalendarCredentials: isGoogleCalendarConfigured(),
     hasGoogleCalendarAuth: isGoogleCalendarAuthenticated(),
     hasWhoopConfigured: isWhoopConfigured(),
     hasWhoopAuth: isWhoopAuthenticated(),
   });
+});
+
+app.get("/llm-extract/tasks", (c) => {
+  return c.json({ tasks: listLlmExtractTasks() });
+});
+
+app.post("/llm-extract", async (c) => {
+  if (!getGeminiApiKey()) {
+    return c.json({ error: "Set GEMINI_API_KEY in ~/.backsteros-agent/.env" }, 400);
+  }
+
+  const body = (await c.req.json()) as {
+    taskId?: string;
+    message?: string;
+    context?: Record<string, unknown>;
+  };
+
+  const taskId = body.taskId?.trim();
+  const message = body.message?.trim();
+  if (!taskId) {
+    return c.json({ error: "taskId is required" }, 400);
+  }
+  if (!message) {
+    return c.json({ error: "message is required" }, 400);
+  }
+
+  try {
+    const data = await runLlmExtract(taskId, message, { context: body.context });
+    return c.json({ taskId, data });
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : "Extraction failed";
+    return c.json({ error: messageText }, 500);
+  }
+});
+
+app.get("/linear/projects", async (c) => {
+  if (!getLinearApiKey()) {
+    return c.json({ error: "LINEAR_API_KEY is not configured", projects: [] }, 400);
+  }
+
+  const query = c.req.query("q")?.trim() || undefined;
+  const after = c.req.query("after")?.trim() || undefined;
+  const firstRaw = Number(c.req.query("first"));
+  const first = Number.isFinite(firstRaw) ? firstRaw : undefined;
+
+  try {
+    const page = await fetchLinearProjectsPage({ query, after, first });
+    return c.json(page);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear projects";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.get("/linear/projects/:projectId", async (c) => {
+  if (!getLinearApiKey()) {
+    return c.json({ error: "LINEAR_API_KEY is not configured" }, 400);
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required" }, 400);
+  }
+
+  try {
+    const project = await fetchLinearProjectById(projectId);
+    if (!project) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+    return c.json({ project });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear project";
+    return c.json({ error: message }, 500);
+  }
 });
 
 app.post("/integrations/whoop/setup", async (c) => {
@@ -506,6 +569,7 @@ app.get("/settings", async (c) => {
     modelName,
     executionMode: getExecutionMode(settings),
     issueLinkMode: settings.issueLinkMode ?? "external",
+    groceryLinearProjectId: settings.groceryLinearProjectId ?? null,
     defaultModelMode: "auto",
     defaultExecutionMode: "live",
     defaultNotesPath: join(homedir(), "notes"),
@@ -521,15 +585,30 @@ app.put("/settings", async (c) => {
     modelMode?: string;
     executionMode?: string;
     issueLinkMode?: string;
+    groceryLinearProjectId?: string | null;
   };
   const notesPath = body.notesPath?.trim();
   const modelMode = body.modelMode?.trim();
   const executionMode = body.executionMode?.trim();
   const hasVaultName = body.vaultName !== undefined;
   const hasIssueLinkMode = body.issueLinkMode !== undefined;
+  const hasGroceryLinearProjectId = body.groceryLinearProjectId !== undefined;
 
-  if (!notesPath && !modelMode && !executionMode && !hasVaultName && !hasIssueLinkMode) {
-    return c.json({ error: "notesPath, vaultName, modelMode, executionMode, or issueLinkMode is required" }, 400);
+  if (
+    !notesPath &&
+    !modelMode &&
+    !executionMode &&
+    !hasVaultName &&
+    !hasIssueLinkMode &&
+    !hasGroceryLinearProjectId
+  ) {
+    return c.json(
+      {
+        error:
+          "notesPath, vaultName, modelMode, executionMode, issueLinkMode, or groceryLinearProjectId is required",
+      },
+      400,
+    );
   }
 
   if (modelMode && modelMode !== "auto" && modelMode !== "max") {
@@ -576,6 +655,11 @@ app.put("/settings", async (c) => {
     settings.issueLinkMode = body.issueLinkMode === "internal" ? "internal" : "external";
   }
 
+  if (hasGroceryLinearProjectId) {
+    const trimmedProjectId = body.groceryLinearProjectId?.trim();
+    settings.groceryLinearProjectId = trimmedProjectId || null;
+  }
+
   saveSettings(settings);
 
   if (notesPath) {
@@ -597,6 +681,7 @@ app.put("/settings", async (c) => {
     modelName,
     executionMode: getExecutionMode(next),
     issueLinkMode: next.issueLinkMode ?? "external",
+    groceryLinearProjectId: next.groceryLinearProjectId ?? null,
   });
 });
 
@@ -764,6 +849,8 @@ app.post("/sessions/:sessionId/messages", async (c) => {
     attachments?: Array<{ name?: string; mimeType?: string; data?: string }>;
     toolPins?: ToolPinSelection;
     quickActionId?: string;
+    captureTime?: string;
+    groceryWeek?: string;
   };
   const text = body.text?.trim() ?? "";
   const attachments = (body.attachments ?? []).map((attachment) => ({
@@ -804,8 +891,10 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isGoodNightReflection = isGoodNightReflectionQuickAction(body.quickActionId);
   const isLetterInitial = isLetterQuickAction(body.quickActionId);
   const isLetterConfirm = isLetterConfirmQuickAction(body.quickActionId);
+  const isDailyCapture = isDailyCaptureQuickAction(body.quickActionId);
+  const isGroceryList = isGroceryListQuickAction(body.quickActionId);
   const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
-  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm
+  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList
     ? {
         obsidian: false,
         linear: false,
@@ -908,15 +997,15 @@ app.post("/sessions/:sessionId/messages", async (c) => {
 
       let messageForAgent = userMessage;
 
-      if (isMorningReview) {
-        const prefetched = await prefetchMorningReviewData();
-
-        const logPrefetchStep = (
-          stepId: string,
-          kind: ToolCategory,
-          label: string,
-          status: "completed" | "error",
-        ) => {
+      const automationHandlerContext: AutomationHandlerContext = {
+        runId,
+        text,
+        notesPath,
+        timezone: loadUserTimezone(),
+        captureTime: body.captureTime?.trim() || undefined,
+        groceryWeek: body.groceryWeek?.trim() || undefined,
+        selectedModel: isTestExecutionMode() ? undefined : selectedModel,
+        logStep: (stepId, kind, label, status, toolName = "automation") => {
           broadcast(runId, {
             type: "activity.step",
             runId,
@@ -924,395 +1013,27 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             kind,
             label,
             status,
-            toolName: "morning_review",
+            toolName,
           });
-        };
-
-        if (prefetched.errors.weather) {
-          logPrefetchStep(`morning-weather-${runId}`, "generic", `Weather fetch failed: ${prefetched.errors.weather}`, "error");
-        } else if (prefetched.weather) {
-          logPrefetchStep(`morning-weather-${runId}`, "generic", "Loaded today's weather", "completed");
-        }
-
-        if (prefetched.errors.whoop) {
-          logPrefetchStep(`morning-whoop-${runId}`, "whoop", `Whoop fetch failed: ${prefetched.errors.whoop}`, "error");
-        } else if (prefetched.whoop) {
-          logPrefetchStep(`morning-whoop-${runId}`, "whoop", "Loaded today's Whoop snapshot", "completed");
-        } else {
-          logPrefetchStep(`morning-whoop-${runId}`, "whoop", "No Whoop data for today", "completed");
-        }
-
-        if (prefetched.errors.linear) {
-          logPrefetchStep(`morning-linear-${runId}`, "linear", `Linear fetch failed: ${prefetched.errors.linear}`, "error");
-        } else {
-          logPrefetchStep(
-            `morning-linear-${runId}`,
-            "linear",
-            prefetched.linearIssues.length > 0
-              ? `Loaded ${prefetched.linearIssues.length} Linear issue(s) due today`
-              : "No Linear issues due today",
-            "completed",
-          );
-        }
-
-        if (prefetched.errors.calendar) {
-          logPrefetchStep(`morning-calendar-${runId}`, "calendar", `Calendar fetch failed: ${prefetched.errors.calendar}`, "error");
-        } else {
-          logPrefetchStep(
-            `morning-calendar-${runId}`,
-            "calendar",
-            prefetched.calendar.events.length > 0
-              ? `Loaded ${prefetched.calendar.events.length} calendar event(s) for today`
-              : "No calendar events today",
-            "completed",
-          );
-        }
-
-        try {
-          applyMorningReviewDailyNote(notesPath, {
-            whoop: prefetched.whoop,
-            weather: prefetched.weather,
-            timezone: loadUserTimezone(),
-          });
-          logPrefetchStep(
-            `morning-obsidian-${runId}`,
-            "notes",
-            "Updated today's daily note with wake time, sleep, weather, and recovery",
-            "completed",
-          );
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          logPrefetchStep(
-            `morning-obsidian-${runId}`,
-            "notes",
-            `Daily note update failed: ${message}`,
-            "error",
-          );
-        }
-
-        const urgentIssues = filterUrgentLinearIssues(prefetched.linearIssues);
-        if (urgentIssues.length > 0) {
-          const urgentEvent = {
-            type: "entities.created" as const,
-            runId,
-            entityType: "linear_issue" as const,
-            items: urgentIssues,
-          };
-          broadcast(runId, urgentEvent);
-          scheduleLinearAvatarBackfill(runId, urgentEvent);
-        }
-
-        const response = buildGoodMorningChatResponse({
-          firstName: loadUserFirstName(),
-          linearIssues: prefetched.linearIssues,
-          whoop: prefetched.whoop,
-        });
-
-        state.lastAssistantText = response;
-        if (isTestExecutionMode()) {
-          await broadcastAssistantTextInChunks(runId, response);
-        } else {
-          broadcast(runId, {
-            type: "message.delta",
-            runId,
-            text: response,
-          });
-        }
-
-        completeRun(runId, state, "finished");
-        return;
-      }
-
-      if (isGoodNightInitial) {
-        const result = await runGoodNightActions(notesPath);
-
-        const logGoodNightStep = (
-          stepId: string,
-          kind: ToolCategory,
-          label: string,
-          status: "completed" | "error",
-        ) => {
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId,
-            kind,
-            label,
-            status,
-            toolName: "good_night",
-          });
-        };
-
-        if (result.errors.whoop) {
-          logGoodNightStep(
-            `good-night-whoop-${runId}`,
-            "whoop",
-            `Whoop fetch failed: ${result.errors.whoop}`,
-            "error",
-          );
-        } else if (result.whoop) {
-          logGoodNightStep(
-            `good-night-whoop-${runId}`,
-            "whoop",
-            result.whoop.strainScore != null
-              ? `Loaded today's strain (${result.whoop.strainScore})`
-              : "Loaded today's Whoop snapshot",
-            "completed",
-          );
-        } else {
-          logGoodNightStep(`good-night-whoop-${runId}`, "whoop", "No Whoop data for today", "completed");
-        }
-
-        if (result.errors.obsidian) {
-          logGoodNightStep(
-            `good-night-obsidian-${runId}`,
-            "notes",
-            `Daily note update failed: ${result.errors.obsidian}`,
-            "error",
-          );
-        } else if (result.dailyNoteUpdate) {
-          const productivityLabel =
-            result.productivityScore != null
-              ? `, productivity ${result.productivityScore} (${result.completedIssues.count} issues completed)`
-              : "";
-          logGoodNightStep(
-            `good-night-obsidian-${runId}`,
-            "notes",
-            `Updated ${result.dailyNoteUpdate.path} with bedtime, strain, recovery, and productivity${productivityLabel}`,
-            "completed",
-          );
-        }
-
-        if (result.errors.linearCompleted) {
-          logGoodNightStep(
-            `good-night-linear-completed-${runId}`,
-            "linear",
-            `Completed issues fetch failed: ${result.errors.linearCompleted}`,
-            "error",
-          );
-        } else {
-          logGoodNightStep(
-            `good-night-linear-completed-${runId}`,
-            "linear",
-            `${result.completedIssues.count} Linear issue(s) completed today`,
-            "completed",
-          );
-        }
-
-        if (result.errors.linear) {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            `Linear rollover failed: ${result.errors.linear}`,
-            "error",
-          );
-        } else if (result.linear.moved.length > 0) {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            `Moved ${result.linear.moved.length} Linear issue(s) to ${result.linear.tomorrowDate}`,
-            "completed",
-          );
-        } else if (result.linear.failed.length > 0) {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            `Failed to move ${result.linear.failed.length} Linear issue(s) to tomorrow`,
-            "error",
-          );
-        } else {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            "No Linear issues due today to move",
-            "completed",
-          );
-        }
-
-        if (result.completedIssues.issues.length > 0) {
-          const completedEvent = {
-            type: "entities.created" as const,
-            runId,
-            entityType: "linear_issue_completed" as const,
-            items: result.completedIssues.issues,
-          };
-          broadcast(runId, completedEvent);
-          scheduleLinearAvatarBackfill(runId, {
-            ...completedEvent,
-            entityType: "linear_issue",
-          });
-        }
-
-        const response = buildGoodNightChatResponse({
-          firstName: loadUserFirstName(),
-          movedIssueCount: result.linear.moved.length,
-          completedIssueCount: result.completedIssues.count,
-          productivityScore: result.productivityScore,
-          whoop: result.whoop,
-        });
-
-        state.lastAssistantText = response;
-        if (isTestExecutionMode()) {
-          await broadcastAssistantTextInChunks(runId, response);
-        } else {
-          broadcast(runId, {
-            type: "message.delta",
-            runId,
-            text: response,
-          });
-        }
-
-        completeRun(runId, state, "finished");
-        return;
-      }
-
-      if (isGoodNightReflection) {
-        const logReflectionStep = (
-          stepId: string,
-          label: string,
-          status: "completed" | "error" | "running",
-        ) => {
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId,
-            kind: "generic",
-            label,
-            status,
-            toolName: "good_night_reflection",
-          });
-        };
-
-        const polishStepId = `good-night-reflection-polish-${runId}`;
-        logReflectionStep(polishStepId, "Polishing your evening reflection", "running");
-
-        try {
-          const result = await runGoodNightReflectionFlow(notesPath, text, {
-            model: isTestExecutionMode() ? undefined : selectedModel,
-            timezone: loadUserTimezone(),
-          });
-
-          logReflectionStep(polishStepId, "Polished evening reflection", "completed");
-
-          broadcast(runId, {
-            type: "tool.completed",
-            runId,
-            toolCallId: `good-night-reflection-daily-note-${runId}`,
-            toolName: "write_workspace_file",
-            category: "notes",
-            structured: {
-              type: "file_diff",
-              path: result.dailyNoteUpdate.path,
-              summary: `Updated ${result.dailyNoteUpdate.path} with evening reflection`,
-            },
-          });
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId: `good-night-reflection-note-${runId}`,
-            kind: "notes",
-            label: `Updated ${result.dailyNoteUpdate.path} with evening reflection`,
-            status: "completed",
-            toolName: "good_night_reflection",
-          });
-
-          state.lastAssistantText = result.response;
-          if (isTestExecutionMode()) {
-            await broadcastAssistantTextInChunks(runId, result.response);
-          } else {
-            broadcast(runId, {
-              type: "message.delta",
-              runId,
-              text: result.response,
-            });
-          }
-
-          completeRun(runId, state, "finished");
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Good night reflection failed";
-          logReflectionStep(polishStepId, message, "error");
+        },
+        broadcastAssistantMessage: (assistantText) => broadcastAssistantMessage(runId, assistantText),
+        setLastAssistantText: (assistantText) => {
+          state.lastAssistantText = assistantText;
+        },
+        completeFinished: () => completeRun(runId, state, "finished"),
+        completeFailed: (message) => {
           broadcast(runId, {
             type: "run.failed",
             runId,
             message,
           });
           completeRun(runId, state, "error");
-        }
-        return;
-      }
+        },
+        broadcast: (event) => broadcast(runId, event as AgentEvent),
+        scheduleLinearAvatarBackfill,
+      };
 
-      if (isGoodMorningFeel) {
-        const logFeelStep = (
-          stepId: string,
-          label: string,
-          status: "completed" | "error" | "running",
-        ) => {
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId,
-            kind: "generic",
-            label,
-            status,
-            toolName: "good_morning_feel",
-          });
-        };
-
-        const polishStepId = `good-morning-feel-polish-${runId}`;
-        logFeelStep(polishStepId, "Polishing your feel line", "running");
-
-        try {
-          const result = await runGoodMorningFeelFlow(notesPath, text, {
-            model: isTestExecutionMode() ? undefined : selectedModel,
-            timezone: loadUserTimezone(),
-          });
-
-          logFeelStep(polishStepId, "Polished feel line", "completed");
-
-          broadcast(runId, {
-            type: "tool.completed",
-            runId,
-            toolCallId: `good-morning-feel-daily-note-${runId}`,
-            toolName: "write_workspace_file",
-            category: "notes",
-            structured: {
-              type: "file_diff",
-              path: result.dailyNoteUpdate.path,
-              summary: `Updated ${result.dailyNoteUpdate.lines.join(", ")}`,
-            },
-          });
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId: `good-morning-feel-note-${runId}`,
-            kind: "notes",
-            label: `Updated ${result.dailyNoteUpdate.path} with feel line`,
-            status: "completed",
-            toolName: "good_morning_feel",
-          });
-
-          state.lastAssistantText = result.response;
-          if (isTestExecutionMode()) {
-            await broadcastAssistantTextInChunks(runId, result.response);
-          } else {
-            broadcast(runId, {
-              type: "message.delta",
-              runId,
-              text: result.response,
-            });
-          }
-
-          completeRun(runId, state, "finished");
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Good morning feel failed";
-          logFeelStep(polishStepId, message, "error");
-          broadcast(runId, {
-            type: "run.failed",
-            runId,
-            message,
-          });
-          completeRun(runId, state, "error");
-        }
+      if (await dispatchAutomationHandler(body.quickActionId, automationHandlerContext)) {
         return;
       }
 
@@ -1348,15 +1069,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           logLetterStep(`letter-read-${runId}`, "Analyzed the PDF letter", "completed");
 
           state.lastAssistantText = result.response;
-          if (isTestExecutionMode()) {
-            await broadcastAssistantTextInChunks(runId, result.response);
-          } else {
-            broadcast(runId, {
-              type: "message.delta",
-              runId,
-              text: result.response,
-            });
-          }
+          broadcastAssistantMessage(runId, result.response);
 
           completeRun(runId, state, "finished");
         } catch (error) {
@@ -1412,15 +1125,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           });
 
           state.lastAssistantText = result.response;
-          if (isTestExecutionMode()) {
-            await broadcastAssistantTextInChunks(runId, result.response);
-          } else {
-            broadcast(runId, {
-              type: "message.delta",
-              runId,
-              text: result.response,
-            });
-          }
+          broadcastAssistantMessage(runId, result.response);
 
           completeRun(runId, state, "finished");
         } catch (error) {
@@ -1525,6 +1230,282 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   return c.json({ runId, attachments: attachmentMeta });
 });
 
+app.get("/lookup/sessions", (c) => {
+  const sessions = listLookupSessions();
+  const activeSessionId = getActiveLookupSessionId() ?? sessions[0]?.sessionId ?? null;
+  return c.json({ activeSessionId, sessions });
+});
+
+app.post("/lookup/sessions", (c) => {
+  const record = createLookupSessionRecord();
+  return c.json({
+    sessionId: record.sessionId,
+    title: record.title,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    messages: record.messages,
+    runs: record.runs,
+  });
+});
+
+app.delete("/lookup/sessions/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!lookupSessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const index = deleteLookupSessionRecord(sessionId);
+  if (index.tabs.length === 0) {
+    const record = createLookupSessionRecord();
+    return c.json({
+      activeSessionId: record.sessionId,
+      createdSession: {
+        sessionId: record.sessionId,
+        title: record.title,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        messages: record.messages,
+        runs: record.runs,
+      },
+    });
+  }
+
+  return c.json({
+    activeSessionId: index.activeSessionId,
+    createdSession: null,
+  });
+});
+
+app.put("/lookup/sessions/:sessionId/state", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!lookupSessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const body = (await c.req.json()) as {
+    messages?: unknown[];
+    runs?: Record<string, unknown>;
+  };
+
+  const updated = saveLookupSessionState(sessionId, {
+    messages: (body.messages ?? []) as import("./sessions.ts").PersistedChatMessage[],
+    runs: (body.runs ?? {}) as import("./sessions.ts").PersistedRunViewModel,
+  });
+
+  if (!updated) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  return c.json({ ok: true });
+});
+
+app.post("/lookup/sessions/:sessionId/clear", (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!lookupSessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  clearLookupSessionState(sessionId);
+  const updated = updateLookupSessionTitle(sessionId, DEFAULT_LOOKUP_SESSION_TITLE);
+  return c.json({ ok: true, title: updated?.title ?? DEFAULT_LOOKUP_SESSION_TITLE });
+});
+
+app.put("/lookup/sessions/:sessionId/active", (c) => {
+  const sessionId = c.req.param("sessionId");
+  const index = setActiveLookupSession(sessionId);
+  if (!index) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+  return c.json({ activeSessionId: index.activeSessionId });
+});
+
+app.put("/lookup/sessions/:sessionId/title", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const body = (await c.req.json()) as { title?: string };
+  const updated = updateLookupSessionTitle(sessionId, body.title ?? DEFAULT_LOOKUP_SESSION_TITLE);
+  if (!updated) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+  return c.json({ title: updated.title });
+});
+
+app.post("/lookup/sessions/:sessionId/messages", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!lookupSessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  if (!getGeminiApiKey()) {
+    return c.json({ error: "Set GEMINI_API_KEY in ~/.backsteros-agent/.env" }, 400);
+  }
+
+  const body = (await c.req.json()) as {
+    text?: string;
+    depthMode?: string;
+    searchMode?: string;
+    outputFormat?: string;
+    attachments?: Array<{ name?: string; mimeType?: string; data?: string }>;
+  };
+  const text = body.text?.trim() ?? "";
+  const attachments = (body.attachments ?? []).map((attachment) => ({
+    name: attachment.name?.trim() ?? "attachment",
+    mimeType: resolveMimeType(
+      attachment.name?.trim() ?? "attachment",
+      attachment.mimeType?.trim() || "application/octet-stream",
+    ),
+    data: (attachment.data ?? "").replace(/\s+/g, ""),
+  }));
+
+  if (!text && attachments.length === 0) {
+    return c.json({ error: "text or attachments are required" }, 400);
+  }
+
+  for (const attachment of attachments) {
+    if (!attachment.data) {
+      return c.json({ error: `Attachment ${attachment.name} is missing data` }, 400);
+    }
+  }
+
+  const depthMode = body.depthMode?.trim();
+  if (depthMode && depthMode !== "fast" && depthMode !== "deep") {
+    return c.json({ error: "depthMode must be fast or deep" }, 400);
+  }
+
+  const searchMode = normalizeLookupSearchMode(body.searchMode);
+  const outputFormat = normalizeLookupOutputFormat(body.outputFormat);
+
+  const runId = crypto.randomUUID();
+
+  let attachmentMeta;
+  try {
+    const built = await buildGeminiUserParts(text, attachments);
+    attachmentMeta = built.attachmentMeta;
+    if (attachments.length > 0) {
+      attachmentMeta = await persistLookupAttachments(
+        sessionId,
+        runId,
+        attachments,
+        attachmentMeta,
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid attachments";
+    return c.json({ error: message }, 400);
+  }
+  const state = createRunState(runId);
+
+  activeRuns.set(runId, {
+    runId,
+    subscribers: new Set(),
+    events: [],
+    done: false,
+    state,
+    cancelRequested: false,
+  });
+  lookupSessionRunId.set(sessionId, runId);
+
+  const abortController = new AbortController();
+  const active = activeRuns.get(runId);
+  if (active) {
+    active.abortController = abortController;
+  }
+
+  void runLookupMessage({
+    runId,
+    sessionId,
+    prompt: text,
+    attachments,
+    depthMode: depthMode === "deep" ? "deep" : "fast",
+    searchMode,
+    outputFormat,
+    signal: abortController.signal,
+    broadcast: (event) => broadcast(runId, event),
+    isCancelled: () => isRunCancelled(runId),
+    complete: (status) => completeLookupRun(runId, state, status, (event) => broadcast(runId, event)),
+  });
+
+  return c.json({ runId, attachments: attachmentMeta });
+});
+
+app.get("/lookup/sessions/:sessionId/events", (c) => {
+  const authHeader = c.req.header("authorization");
+  const authQuery = c.req.query("auth");
+  const provided = authHeader?.replace("Bearer ", "") ?? authQuery;
+  if (provided !== token) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const sessionId = c.req.param("sessionId");
+  const runId = c.req.query("runId") ?? lookupSessionRunId.get(sessionId);
+
+  if (!runId || !activeRuns.has(runId)) {
+    return c.json({ error: "No active run" }, 404);
+  }
+
+  return streamSSE(c, async (stream) => {
+    const run = activeRuns.get(runId)!;
+
+    for (const event of run.events) {
+      await stream.writeSSE({
+        event: event.type,
+        data: JSON.stringify(event),
+      });
+      if (isTerminalEvent(event)) {
+        activeRuns.delete(runId);
+        return;
+      }
+    }
+
+    if (run.done) {
+      activeRuns.delete(runId);
+      return;
+    }
+
+    const queue: AgentEvent[] = [];
+    let notify: (() => void) | null = null;
+
+    const subscriber: RunSubscriber = (event) => {
+      queue.push(event);
+      notify?.();
+    };
+
+    run.subscribers.add(subscriber);
+
+    try {
+      while (true) {
+        while (queue.length > 0) {
+          const event = queue.shift()!;
+          await stream.writeSSE({
+            event: event.type,
+            data: JSON.stringify(event),
+          });
+
+          if (isTerminalEvent(event)) {
+            activeRuns.delete(runId);
+            return;
+          }
+        }
+
+        if (run.done) {
+          activeRuns.delete(runId);
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          notify = resolve;
+          if (queue.length > 0 || run.done) {
+            notify = null;
+            resolve();
+          }
+        });
+        notify = null;
+      }
+    } finally {
+      run.subscribers.delete(subscriber);
+    }
+  });
+});
+
 app.get("/sessions/:sessionId/events", (c) => {
   const authHeader = c.req.header("authorization");
   const authQuery = c.req.query("auth");
@@ -1612,6 +1593,7 @@ app.post("/runs/:runId/cancel", async (c) => {
   }
 
   run.cancelRequested = true;
+  run.abortController?.abort();
 
   const sdkRun = run.sdkRun;
   if (sdkRun?.supports("cancel")) {

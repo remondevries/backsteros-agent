@@ -6,15 +6,27 @@ import { ChatView, type ChatViewHandle } from "./chat/ChatView";
 import { SessionTabBar } from "./chat/SessionTabBar";
 import type { ModelMode } from "./chat/types";
 import { useCommandPanelShortcuts } from "./hooks/useCommandPanelShortcuts";
+import { useAppViewNavigationShortcuts } from "./hooks/useAppViewNavigationShortcuts";
 import { useSessionTabShortcuts } from "./hooks/useSessionTabShortcuts";
+import { useLookupSessionTabs } from "./hooks/useLookupSessionTabs";
 import { useSessionTabs } from "./hooks/useSessionTabs";
 import { useSystemTheme } from "./hooks/useSystemTheme";
+import { LookupView, type LookupViewHandle } from "./lookup/LookupView";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import { VaultProvider } from "./chat/VaultContext";
 import { LinearDashboard } from "./linear/LinearDashboard";
 import { ObsidianDashboard } from "./obsidian/ObsidianDashboard";
 import { WhoopDashboard } from "./whoop/WhoopDashboard";
-import { connectGoogleCalendar, getHealth, getSettings, getWhoopSetup, setSidecarConnection, waitForSidecar } from "./lib/api";
+import {
+  connectGoogleCalendar,
+  formatSidecarReachabilityError,
+  getHealth,
+  getSettings,
+  getWhoopSetup,
+  setSidecarConnection,
+  waitForSidecar,
+} from "./lib/api";
+import { isTauriRuntime } from "./lib/tauriRuntime";
 import { setLinearIssueLinkMode } from "./lib/linear/linearLink";
 import { openExternalUrl } from "./lib/openExternalUrl";
 
@@ -24,14 +36,16 @@ async function loadTauriConnection() {
     const connection = await invoke<{ baseUrl: string; token: string }>("get_sidecar_connection");
     if (connection.token) {
       setSidecarConnection({
-        // In dev, route through Vite's /api proxy so the webview does not race the sidecar bind.
-        baseUrl: import.meta.env.DEV ? "/api" : connection.baseUrl,
+        // Tauri talks to the sidecar directly; browser dev keeps the Vite /api proxy.
+        baseUrl: connection.baseUrl,
         token: connection.token,
       });
+      return true;
     }
   } catch {
     // Browser dev mode uses Vite proxy defaults.
   }
+  return false;
 }
 
 export default function App() {
@@ -44,18 +58,26 @@ export default function App() {
   const [agentProfilePath, setAgentProfilePath] = useState<string | undefined>();
   const [showSettings, setShowSettings] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
   const [linearWarning, setLinearWarning] = useState<string | null>(null);
   const [calendarWarning, setCalendarWarning] = useState<string | null>(null);
   const [calendarConnecting, setCalendarConnecting] = useState(false);
   const [needsCalendarConnect, setNeedsCalendarConnect] = useState(false);
   const [whoopWarning, setWhoopWarning] = useState<string | null>(null);
+  const [geminiWarning, setGeminiWarning] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renamingLookupSessionId, setRenamingLookupSessionId] = useState<string | null>(null);
   const [appView, setAppView] = useState<AppView>("chat");
   const [commandPanelOpen, setCommandPanelOpen] = useState(false);
   const activeChatRef = useRef<ChatViewHandle>(null);
+  const activeLookupRef = useRef<LookupViewHandle>(null);
 
   const focusActiveComposer = useCallback(() => {
     activeChatRef.current?.focusComposer();
+  }, []);
+
+  const focusActiveLookupComposer = useCallback(() => {
+    activeLookupRef.current?.focusComposer();
   }, []);
 
   const handleAppViewChange = useCallback(
@@ -65,11 +87,15 @@ export default function App() {
       if (nextView === "chat") {
         focusActiveComposer();
       }
+      if (nextView === "lookup") {
+        focusActiveLookupComposer();
+      }
     },
-    [focusActiveComposer],
+    [focusActiveComposer, focusActiveLookupComposer],
   );
 
   const chatEnabled = ready && Boolean(notesPath) && !showSettings;
+  const lookupEnabled = chatEnabled;
   const {
     tabs,
     activeSessionId,
@@ -85,6 +111,19 @@ export default function App() {
     saveTabState,
     reloadTabs,
   } = useSessionTabs(chatEnabled);
+
+  const {
+    tabs: lookupTabs,
+    activeSessionId: activeLookupSessionId,
+    loading: lookupTabsLoading,
+    selectTab: selectLookupTab,
+    newTab: newLookupTab,
+    closeTab: closeLookupTab,
+    selectRelativeTab: selectRelativeLookupTab,
+    updateTabTitle: updateLookupTabTitle,
+    renameTab: renameLookupTab,
+    saveTabState: saveLookupTabState,
+  } = useLookupSessionTabs(lookupEnabled);
 
   useSystemTheme();
 
@@ -111,63 +150,103 @@ export default function App() {
     onNavigate: handleAppViewChange,
   });
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        await loadTauriConnection();
-        await waitForSidecar();
+  useAppViewNavigationShortcuts({
+    enabled: commandPanelEnabled,
+    activeView: appView,
+    onNavigate: handleAppViewChange,
+  });
 
-        const health = await getHealth();
-        if (!health.hasApiKey) {
-          setHealthError("Set CURSOR_API_KEY in ~/.backsteros-agent/.env");
-        } else {
-          if (!health.hasLinearApiKey) {
-            setLinearWarning("Linear MCP is not configured. Add LINEAR_API_KEY to ~/.backsteros-agent/.env.");
-          }
-          if (!health.hasGoogleCalendarCredentials) {
-            setCalendarWarning(
-              "Google Calendar MCP is not configured. Add GOOGLE_OAUTH_CREDENTIALS to ~/.backsteros-agent/.env.",
-            );
-            setNeedsCalendarConnect(false);
-          } else if (!health.hasGoogleCalendarAuth) {
-            setCalendarWarning(
-              "Google Calendar is configured but not linked yet. Connect your Google account in your browser (not inside this window).",
-            );
-            setNeedsCalendarConnect(true);
-          } else {
-            setNeedsCalendarConnect(false);
-          }
-          if (!health.hasWhoopAuth) {
-            setWhoopWarning(
-              "Whoop is not connected. Add tokens to ~/.backsteros-agent/totem.env after running `npx -y @briangaoo/totem auth`.",
-            );
-          } else {
-            setWhoopWarning(null);
-          }
-        }
+  const connectToSidecar = useCallback(async () => {
+    setConnecting(true);
+    setHealthError(null);
 
-        const settings = await getSettings();
-        setNotesPath(settings.notesPath);
-        setVaultName(settings.vaultName ?? null);
-        setDefaultNotesPath(settings.defaultNotesPath);
-        setModelMode(settings.modelMode);
-        setLinearIssueLinkMode(settings.issueLinkMode ?? "external");
-        setUserProfilePath(settings.userProfilePath);
-        setAgentProfilePath(settings.agentProfilePath);
-      } catch (err) {
-        setHealthError(
-          err instanceof Error ? err.message : "Sidecar is not reachable",
-        );
-      } finally {
-        setReady(true);
+    try {
+      const usingTauri = await loadTauriConnection();
+      await waitForSidecar({
+        retries: usingTauri || isTauriRuntime() ? 12 : 60,
+        delayMs: 200,
+        healthTimeoutMs: usingTauri || isTauriRuntime() ? 2_000 : 8_000,
+      });
+
+      const health = await getHealth();
+      if (!health.hasApiKey) {
+        setHealthError("Set CURSOR_API_KEY in ~/.backsteros-agent/.env");
+        return;
       }
-    })();
+
+      if (!health.hasGeminiApiKey) {
+        setGeminiWarning(
+          "Gemini Lookup is not configured. Add GEMINI_API_KEY to ~/.backsteros-agent/.env.",
+        );
+      } else {
+        setGeminiWarning(null);
+      }
+      if (!health.hasLinearApiKey) {
+        setLinearWarning("Linear MCP is not configured. Add LINEAR_API_KEY to ~/.backsteros-agent/.env.");
+      } else {
+        setLinearWarning(null);
+      }
+      if (!health.hasGoogleCalendarCredentials) {
+        setCalendarWarning(
+          "Google Calendar MCP is not configured. Add GOOGLE_OAUTH_CREDENTIALS to ~/.backsteros-agent/.env.",
+        );
+        setNeedsCalendarConnect(false);
+      } else if (!health.hasGoogleCalendarAuth) {
+        setCalendarWarning(
+          "Google Calendar is configured but not linked yet. Connect your Google account in your browser (not inside this window).",
+        );
+        setNeedsCalendarConnect(true);
+      } else {
+        setCalendarWarning(null);
+        setNeedsCalendarConnect(false);
+      }
+      if (!health.hasWhoopAuth) {
+        setWhoopWarning(
+          "Whoop is not connected. Add tokens to ~/.backsteros-agent/totem.env after running `npx -y @briangaoo/totem auth`.",
+        );
+      } else {
+        setWhoopWarning(null);
+      }
+
+      const settings = await getSettings();
+      setNotesPath(settings.notesPath);
+      setVaultName(settings.vaultName ?? null);
+      setDefaultNotesPath(settings.defaultNotesPath);
+      setModelMode(settings.modelMode);
+      setLinearIssueLinkMode(settings.issueLinkMode ?? "external");
+      setUserProfilePath(settings.userProfilePath);
+      setAgentProfilePath(settings.agentProfilePath);
+    } catch (err) {
+      setHealthError(formatSidecarReachabilityError(err));
+    } finally {
+      setConnecting(false);
+    }
   }, []);
 
+  useEffect(() => {
+    void (async () => {
+      await connectToSidecar();
+      setReady(true);
+    })();
+  }, [connectToSidecar]);
+
   const handleCloseActiveTab = useCallback(async () => {
+    if (appView === "lookup") {
+      if (!activeLookupSessionId || lookupTabs.length <= 1) return;
+      await closeLookupTab(activeLookupSessionId);
+      return;
+    }
     if (!activeSessionId || tabs.length <= 1) return;
     await closeTab(activeSessionId);
-  }, [activeSessionId, closeTab, tabs.length]);
+  }, [
+    activeLookupSessionId,
+    activeSessionId,
+    appView,
+    closeLookupTab,
+    closeTab,
+    lookupTabs.length,
+    tabs.length,
+  ]);
 
   const handleRenameCommit = useCallback(
     (sessionId: string, title: string) => {
@@ -192,18 +271,50 @@ export default function App() {
   const shortcutHandlers = useMemo(
     () => ({
       onNewTab: () => {
+        if (appView === "lookup") {
+          void newLookupTab().then(focusActiveLookupComposer);
+          return;
+        }
         void newTab();
       },
       onCloseTab: handleCloseActiveTab,
       onRenameTab: () => {
+        if (appView === "lookup") {
+          if (activeLookupSessionId) {
+            setRenamingLookupSessionId(activeLookupSessionId);
+          }
+          return;
+        }
         if (activeSessionId) {
           setRenamingSessionId(activeSessionId);
         }
       },
-      onPreviousTab: () => selectRelativeTab(-1),
-      onNextTab: () => selectRelativeTab(1),
+      onPreviousTab: () => {
+        if (appView === "lookup") {
+          selectRelativeLookupTab(-1);
+          return;
+        }
+        selectRelativeTab(-1);
+      },
+      onNextTab: () => {
+        if (appView === "lookup") {
+          selectRelativeLookupTab(1);
+          return;
+        }
+        selectRelativeTab(1);
+      },
     }),
-    [activeSessionId, handleCloseActiveTab, newTab, selectRelativeTab],
+    [
+      activeLookupSessionId,
+      activeSessionId,
+      appView,
+      focusActiveLookupComposer,
+      handleCloseActiveTab,
+      newLookupTab,
+      newTab,
+      selectRelativeLookupTab,
+      selectRelativeTab,
+    ],
   );
 
   useSessionTabShortcuts(chatEnabled, shortcutHandlers);
@@ -212,6 +323,17 @@ export default function App() {
     if (!chatEnabled || !activeSessionId || appView !== "chat") return;
     focusActiveComposer();
   }, [activeSessionId, appView, chatEnabled, focusActiveComposer]);
+
+  useEffect(() => {
+    if (!lookupEnabled || !activeLookupSessionId || appView !== "lookup") return;
+    focusActiveLookupComposer();
+  }, [activeLookupSessionId, appView, focusActiveLookupComposer, lookupEnabled]);
+
+  useEffect(() => {
+    setRenamingLookupSessionId((current) =>
+      current && current !== activeLookupSessionId ? null : current,
+    );
+  }, [activeLookupSessionId]);
 
   async function handleSettingsUpdated(path: string, nextVaultName?: string | null) {
     setNotesPath(path);
@@ -274,7 +396,21 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {healthError && <div className="error-banner">{healthError}</div>}
+      {healthError && (
+        <div className="warning-banner">
+          <span>{healthError}</span>
+          <button
+            type="button"
+            className="warning-banner-action"
+            disabled={connecting}
+            onClick={() => {
+              void connectToSidecar();
+            }}
+          >
+            {connecting ? "Connecting…" : "Retry connection"}
+          </button>
+        </div>
+      )}
       {!healthError && linearWarning && <div className="warning-banner">{linearWarning}</div>}
       {!healthError && calendarWarning && (
         <div className="warning-banner">
@@ -307,6 +443,9 @@ export default function App() {
           </button>
         </div>
       )}
+      {!healthError && geminiWarning && appView === "lookup" && (
+        <div className="warning-banner">{geminiWarning}</div>
+      )}
 
       {!notesPath || showSettings ? (
         <SettingsPanel
@@ -334,23 +473,55 @@ export default function App() {
             <AppViewRibbon activeView={appView} onChange={handleAppViewChange} />
 
             <div className="app-content-shell">
-              {appView === "chat" && (
+              {(appView === "chat" || appView === "lookup") && (
                 <SessionTabBar
-                  tabs={tabs}
-                  activeSessionId={activeSessionId}
-                  renamingSessionId={renamingSessionId}
+                  tabs={appView === "lookup" ? lookupTabs : tabs}
+                  activeSessionId={
+                    appView === "lookup" ? activeLookupSessionId : activeSessionId
+                  }
+                  renamingSessionId={
+                    appView === "lookup" ? renamingLookupSessionId : renamingSessionId
+                  }
                   onSelect={(sessionId) => {
+                    if (appView === "lookup") {
+                      selectLookupTab(sessionId);
+                      focusActiveLookupComposer();
+                      return;
+                    }
                     selectTab(sessionId);
                     focusActiveComposer();
                   }}
                   onClose={(sessionId) => {
+                    if (appView === "lookup") {
+                      void closeLookupTab(sessionId);
+                      return;
+                    }
                     void closeTab(sessionId);
                   }}
                   onNewTab={() => {
+                    if (appView === "lookup") {
+                      void newLookupTab().then(focusActiveLookupComposer);
+                      return;
+                    }
                     void newTab().then(focusActiveComposer);
                   }}
-                  onRenameCommit={handleRenameCommit}
-                  onRenameCancel={handleRenameCancel}
+                  onRenameCommit={(sessionId, title) => {
+                    if (appView === "lookup") {
+                      renameLookupTab(sessionId, title);
+                      setRenamingLookupSessionId(null);
+                      focusActiveLookupComposer();
+                      return;
+                    }
+                    handleRenameCommit(sessionId, title);
+                  }}
+                  onRenameCancel={() => {
+                    if (appView === "lookup") {
+                      setRenamingLookupSessionId(null);
+                      focusActiveLookupComposer();
+                      return;
+                    }
+                    handleRenameCancel();
+                  }}
                 />
               )}
 
@@ -380,6 +551,34 @@ export default function App() {
                           renameTab(tab.sessionId, title);
                         }}
                         onNavigateToView={handleAppViewChange}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="chat-views" hidden={appView !== "lookup"}>
+                {lookupTabsLoading && lookupTabs.length === 0 ? (
+                  <div className="app-shell loading">Loading lookup sessions…</div>
+                ) : (
+                  lookupTabs.map((tab) => (
+                    <div
+                      key={tab.sessionId}
+                      className={`chat-view-pane ${tab.sessionId === activeLookupSessionId ? "chat-view-pane-active" : ""}`}
+                      hidden={tab.sessionId !== activeLookupSessionId}
+                    >
+                      <LookupView
+                        ref={
+                          tab.sessionId === activeLookupSessionId ? activeLookupRef : undefined
+                        }
+                        sessionId={tab.sessionId}
+                        isActive={tab.sessionId === activeLookupSessionId && appView === "lookup"}
+                        initialMessages={tab.initialMessages}
+                        initialRuns={tab.initialRuns}
+                        onTitleChange={(title) => updateLookupTabTitle(tab.sessionId, title)}
+                        onStateChange={(messages, runs) =>
+                          saveLookupTabState(tab.sessionId, messages, runs)
+                        }
                       />
                     </div>
                   ))

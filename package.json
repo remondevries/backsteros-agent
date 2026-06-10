@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "predev:sidecar": "lsof -ti :3847 | xargs kill -9 2>/dev/null || true",
-    "dev:sidecar": "cd sidecar && bun --watch run src/server.ts",
-    "dev:all": "concurrently -k \"npm run dev:sidecar\" \"npm run dev\"",
+    "kill:sidecar": "lsof -ti :3847 | xargs kill -9 2>/dev/null || true",
+    "dev:sidecar": "npm run kill:sidecar && cd sidecar && bun --watch run src/server.ts",
+    "dev:all": "npm run kill:sidecar && concurrently -k \"cd sidecar && bun --watch run src/server.ts\" \"node scripts/wait-for-sidecar.mjs && npm run dev\"",
     "build": "npm run copy:vad-assets && tsc -b && vite build",
     "build:sidecar": "cd sidecar && bun run build.ts",
     "download:tts": "cd sidecar && bun run download-tts.ts",

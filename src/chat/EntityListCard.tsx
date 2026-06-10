@@ -36,7 +36,7 @@ export function EntityListCard({
     }
 
     return (
-      <div className="entity-source-block">
+      <div className="entity-source-block entity-source-block--section-intro">
         <LinearUrgentIssuesHeader />
         {list}
       </div>
@@ -60,7 +60,7 @@ export function EntityListCard({
     }
 
     return (
-      <div className="entity-source-block">
+      <div className="entity-source-block entity-source-block--section-intro">
         <LinearCompletedIssuesHeader />
         {list}
       </div>

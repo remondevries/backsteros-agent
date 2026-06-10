@@ -36,6 +36,7 @@ export interface PersistedChatMessage {
     mimeType: string;
     vaultPath?: string;
     previewUrl?: string;
+    storageId?: string;
   }>;
   contextChips?: Array<{ id: string; title: string; entityType: string }>;
 }

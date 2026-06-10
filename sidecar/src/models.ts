@@ -28,7 +28,12 @@ export async function listAvailableModels(): Promise<ModelListItem[]> {
   }
 
   try {
-    const models = await Cursor.models.list({ apiKey });
+    const models = await Promise.race([
+      Cursor.models.list({ apiKey }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Cursor model list timed out")), 5_000);
+      }),
+    ]);
     return Array.isArray(models) && models.length > 0 ? models : FALLBACK_MODELS;
   } catch {
     return FALLBACK_MODELS;

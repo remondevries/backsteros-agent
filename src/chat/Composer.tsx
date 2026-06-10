@@ -1,16 +1,32 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ComposerTextarea } from "./ComposerTextarea";
 import { RunUiPreviewPanel } from "./dev/RunUiPreviewPanel";
 import { AttachmentChip } from "./AttachmentChip";
 import { filesFromClipboard } from "./attachments";
 import { ComposerToolIndicators } from "./ComposerToolIndicators";
 import { ComposerModeToggle } from "./ComposerModeToggle";
-import { QuickActionsBar } from "./QuickActionsBar";
-import type { QuickAction } from "./quickActions";
+import type { AutomationFlowId } from "./automation/types";
+import { DailyCaptureTimeTag, type DailyCaptureTimeTagHandle } from "./DailyCaptureTimeTag";
+import { GroceryWeekTag, type GroceryWeekTagHandle } from "./GroceryWeekTag";
 import { composerModeDisplayName } from "./composerMode";
 import type { ComposerMode } from "./composerMode";
 import { TextVoiceToggle, type InputMode } from "./TextVoiceToggle";
 import { TtsToggle } from "./TtsToggle";
 import type { ToolPinSelection, ToolSelection } from "./tool-routing";
+import { SlashCommandMenu } from "./SlashCommandMenu";
+import {
+  filterSlashCommands,
+  isSlashCommandPaletteOpen,
+  parseSlashCommandInput,
+  type SlashCommandDefinition,
+} from "./slashCommands";
 import type { PendingAttachment } from "./types";
 
 export type ComposerHandle = {
@@ -18,21 +34,6 @@ export type ComposerHandle = {
   blur: () => void;
   isFocused: () => boolean;
 };
-
-const MAX_TEXTAREA_ROWS = 8;
-
-function resizeComposerTextarea(textarea: HTMLTextAreaElement) {
-  const styles = getComputedStyle(textarea);
-  const lineHeight = Number.parseFloat(styles.lineHeight) || 21;
-  const paddingTop = Number.parseFloat(styles.paddingTop) || 0;
-  const paddingBottom = Number.parseFloat(styles.paddingBottom) || 0;
-  const maxHeight = lineHeight * MAX_TEXTAREA_ROWS + paddingTop + paddingBottom;
-
-  textarea.style.height = "auto";
-  const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
-  textarea.style.height = `${nextHeight}px`;
-  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
-}
 
 function ComposerSendIcon() {
   return (
@@ -93,21 +94,31 @@ export const Composer = forwardRef<
     toolIndicators?: ToolSelection;
     toolPins?: ToolPinSelection;
     onToggleToolPin?: (tool: keyof ToolSelection) => void;
-    quickActions?: {
-      disabled?: boolean;
-      morningReviewUsageVersion?: number;
-      onAction: (action: QuickAction) => void;
-    };
     composerQuickAction?: {
-      label: string;
-      placeholder?: string;
       onClear: () => void;
-      tagVariant?: "daily-capture" | "good-morning" | "good-night" | "letter";
+    };
+    composerAutomationFlow?: AutomationFlowId | null;
+    dailyCaptureTime?: {
+      value: string;
+      onChange: (value: string) => void;
+      onUserEdit?: () => void;
+      onCommit?: () => void;
+      inputRef?: React.RefObject<DailyCaptureTimeTagHandle | null>;
+    };
+    groceryWeek?: {
+      value: string;
+      onChange: (value: string) => void;
+      onUserEdit?: () => void;
+      onCommit?: () => void;
+      inputRef?: React.RefObject<GroceryWeekTagHandle | null>;
     };
     onActivateDailyCaptureShortcut?: () => void;
+    onActivateGroceryListShortcut?: () => void;
     onTriggerGoodMorningShortcut?: () => void;
     onTriggerGoodNightShortcut?: () => void;
     onTriggerLetterShortcut?: () => void;
+    onSlashCommandSelect?: (command: SlashCommandDefinition) => void;
+    onCancelAutomationFlow?: () => boolean;
     onEscapeBlur?: () => void;
     onComposerFocus?: () => void;
   }
@@ -135,12 +146,17 @@ export const Composer = forwardRef<
     toolIndicators,
     toolPins,
     onToggleToolPin,
-    quickActions,
     composerQuickAction,
+    composerAutomationFlow = null,
+    dailyCaptureTime,
+    groceryWeek,
     onActivateDailyCaptureShortcut,
+    onActivateGroceryListShortcut,
     onTriggerGoodMorningShortcut,
     onTriggerGoodNightShortcut,
     onTriggerLetterShortcut,
+    onSlashCommandSelect,
+    onCancelAutomationFlow,
     onEscapeBlur,
     onComposerFocus,
   },
@@ -149,6 +165,27 @@ export const Composer = forwardRef<
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+
+  const slashMenuEnabled = Boolean(
+    !composerAutomationFlow && !voiceMode && !disabled && onSlashCommandSelect,
+  );
+
+  const slashCommands = useMemo(() => {
+    if (!slashMenuEnabled) return [];
+    const slashState = parseSlashCommandInput(value);
+    if (!slashState) return [];
+    return filterSlashCommands(slashState.query, { context: "chat" });
+  }, [slashMenuEnabled, value]);
+
+  const slashMenuOpen = isSlashCommandPaletteOpen(value, {
+    enabled: slashMenuEnabled,
+    context: "chat",
+  });
+
+  useEffect(() => {
+    setSlashSelectedIndex(0);
+  }, [value, slashCommands.length]);
 
   useEffect(() => {
     if (!voiceMode) return;
@@ -203,15 +240,13 @@ export const Composer = forwardRef<
   function handleComposerEscape(event: React.KeyboardEvent) {
     event.preventDefault();
     event.stopPropagation();
+    if (onCancelAutomationFlow?.()) {
+      blurComposerInput();
+      return;
+    }
     blurComposerInput();
     onEscapeBlur?.();
   }
-
-  useLayoutEffect(() => {
-    if (textareaRef.current) {
-      resizeComposerTextarea(textareaRef.current);
-    }
-  }, [value]);
 
   const activeTools = toolIndicators ?? { obsidian: false, linear: false, calendar: false, whoop: false };
   const showFooter = Boolean(
@@ -262,60 +297,157 @@ export const Composer = forwardRef<
         </div>
 
         <div className="composer-input-block composer-input-block-slide">
-          {(quickActions || onToggleToolPin) && (
+          {slashMenuOpen && onSlashCommandSelect && (
+            <SlashCommandMenu
+              commands={slashCommands}
+              selectedIndex={Math.min(slashSelectedIndex, slashCommands.length - 1)}
+              onSelect={onSlashCommandSelect}
+              onHover={setSlashSelectedIndex}
+            />
+          )}
+
+          {onToggleToolPin && (
             <div className="composer-floating-controls">
-              {onToggleToolPin && (
-                <ComposerToolIndicators
-                  tools={activeTools}
-                  pins={toolPins}
-                  onTogglePin={onToggleToolPin}
-                />
-              )}
-              {quickActions && (
-                <QuickActionsBar
-                  composerText={value}
-                  disabled={quickActions.disabled}
-                  morningReviewUsageVersion={quickActions.morningReviewUsageVersion}
-                  onAction={quickActions.onAction}
-                />
-              )}
+              <ComposerToolIndicators
+                tools={activeTools}
+                pins={toolPins}
+                onTogglePin={onToggleToolPin}
+              />
             </div>
           )}
 
-          <div className="composer-input-shell">
+          <div
+            className={[
+              "composer-input-shell",
+              composerAutomationFlow ? "composer-input-shell--automation" : "",
+              composerAutomationFlow === "daily-capture"
+                ? "composer-input-shell--daily-capture"
+                : composerAutomationFlow === "grocery-list"
+                  ? "composer-input-shell--grocery-list"
+                  : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             <div className="composer-input-row">
-              <button
-                type="button"
-                className="composer-icon-button composer-attach"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={disabled}
-                aria-label="Attach files"
-                title="Attach files"
-              >
-                <svg className="composer-attach-icon" viewBox="0 0 16 16" aria-hidden="true">
-                  <path
-                    d="M8 3.5v9M3.5 8h9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
+              {composerAutomationFlow === "daily-capture" && dailyCaptureTime ? (
+                <DailyCaptureTimeTag
+                  ref={dailyCaptureTime.inputRef}
+                  value={dailyCaptureTime.value}
+                  onChange={dailyCaptureTime.onChange}
+                  onUserEdit={dailyCaptureTime.onUserEdit}
+                  onCommit={
+                    dailyCaptureTime.onCommit ??
+                    (() => {
+                      textareaRef.current?.focus();
+                    })
+                  }
+                  disabled={disabled}
+                />
+              ) : composerAutomationFlow === "grocery-list" && groceryWeek ? (
+                <GroceryWeekTag
+                  ref={groceryWeek.inputRef}
+                  value={groceryWeek.value}
+                  onChange={groceryWeek.onChange}
+                  onUserEdit={groceryWeek.onUserEdit}
+                  onCommit={
+                    groceryWeek.onCommit ??
+                    (() => {
+                      textareaRef.current?.focus();
+                    })
+                  }
+                  disabled={disabled}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="composer-icon-button composer-attach"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={disabled}
+                  aria-label="Attach files"
+                  title="Attach files"
+                >
+                  <svg className="composer-attach-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M8 3.5v9M3.5 8h9"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              )}
 
-              <textarea
+              <ComposerTextarea
                 ref={textareaRef}
-                className="composer-textarea"
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 onPaste={handlePaste}
                 onFocus={() => onComposerFocus?.()}
-                placeholder={composerQuickAction?.placeholder ?? "Reply…"}
-                rows={1}
+                placeholder={
+                  composerAutomationFlow === "grocery-list"
+                    ? "milk, eggs, bread…"
+                    : composerAutomationFlow === "daily-capture"
+                      ? "What happened?"
+                      : "Reply…"
+                }
                 disabled={disabled || voiceMode}
                 tabIndex={voiceMode ? -1 : 0}
                 onKeyDown={(event) => {
+                  if (slashMenuOpen && onSlashCommandSelect) {
+                    const activeIndex = Math.min(slashSelectedIndex, slashCommands.length - 1);
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setSlashSelectedIndex((current) =>
+                        Math.min(current + 1, slashCommands.length - 1),
+                      );
+                      return;
+                    }
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setSlashSelectedIndex((current) => Math.max(current - 1, 0));
+                      return;
+                    }
+                    if (event.key === "Enter" || event.key === "Tab") {
+                      const selected = slashCommands[activeIndex];
+                      if (selected) {
+                        event.preventDefault();
+                        onSlashCommandSelect(selected);
+                      }
+                      return;
+                    }
+                  }
+
                   if (event.key === "Escape") {
+                    if (slashMenuOpen) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onChange("");
+                      return;
+                    }
                     handleComposerEscape(event);
+                    return;
+                  }
+                  if (
+                    event.key === "Tab" &&
+                    event.shiftKey &&
+                    composerAutomationFlow === "daily-capture" &&
+                    dailyCaptureTime?.inputRef?.current
+                  ) {
+                    event.preventDefault();
+                    dailyCaptureTime.inputRef.current.focus();
+                    dailyCaptureTime.inputRef.current.select();
+                    return;
+                  }
+                  if (
+                    event.key === "Tab" &&
+                    event.shiftKey &&
+                    composerAutomationFlow === "grocery-list" &&
+                    groceryWeek?.inputRef?.current
+                  ) {
+                    event.preventDefault();
+                    groceryWeek.inputRef.current.focus();
+                    groceryWeek.inputRef.current.select();
                     return;
                   }
                   if (
@@ -334,6 +466,15 @@ export const Composer = forwardRef<
                   ) {
                     event.preventDefault();
                     onActivateDailyCaptureShortcut();
+                    return;
+                  }
+                  if (
+                    event.key === " " &&
+                    onActivateGroceryListShortcut &&
+                    /^\/(?:gr|grocery)$/i.test(value)
+                  ) {
+                    event.preventDefault();
+                    onActivateGroceryListShortcut();
                     return;
                   }
                   if (

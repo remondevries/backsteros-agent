@@ -1,5 +1,6 @@
 import type {
   CalendarEventEntity,
+  ChatMessage,
   LinearIssueEntity,
   StructuredPayload,
   WhoopSnapshotEntity,
@@ -7,8 +8,11 @@ import type {
 import { filterOpenLinearIssues } from "./linearIssue";
 export const GOOD_MORNING_FEEL_ACTION_ID = "good-morning-feel";
 
-export const GOOD_MORNING_FEEL_PROMPT =
-  "How do you feel and how was your sleep?";
+export const GOOD_MORNING_FEEL_PROMPT = "How do you feel? How was your sleep?";
+
+export function getGoodMorningFeelPlaceholder(): string {
+  return "Share how you're feeling and how you slept…";
+}
 
 export const LEGACY_MORNING_REVIEW_ACTION_ID = "morning-review";
 
@@ -92,6 +96,19 @@ export function isGoodMorningFlowMessage(quickActionId?: string): boolean {
 
 export function isGoodMorningComposerMode(composerQuickActionId?: string | null): boolean {
   return composerQuickActionId === GOOD_MORNING_ACTION_ID;
+}
+
+export function hasGoodMorningFeelPromptForRun(
+  messages: Array<Pick<ChatMessage, "role" | "flowVariant" | "text" | "flowRunId">>,
+  runId: string,
+): boolean {
+  return messages.some(
+    (entry) =>
+      entry.role === "assistant" &&
+      entry.flowVariant === "good-morning" &&
+      entry.text === GOOD_MORNING_FEEL_PROMPT &&
+      entry.flowRunId === runId,
+  );
 }
 
 export interface MorningReviewWeatherEntity {

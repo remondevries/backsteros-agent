@@ -1,12 +1,13 @@
 import type { ModelSelection } from "@cursor/sdk";
 import { createEphemeralAgent, disposeEphemeralAgent, sendPolishPrompt } from "./agent.ts";
 import { isTestExecutionMode } from "./execution-mode.ts";
-import { loadUserFirstName, loadUserTimezone } from "./context/profile.ts";
+import { loadUserTimezone } from "./context/profile.ts";
 import {
   applyGoodNightReflectionDailyNote,
   type DailyNoteWriteResult,
 } from "./daily-note-automation.ts";
 import { accumulateAssistantText } from "./good-morning-feel.ts";
+import { buildGoodNightReflectionResponse } from "./good-night-response.ts";
 import {
   GOOD_NIGHT_MEDITATIONS_STYLE,
   GOOD_NIGHT_REFLECTION_SECTIONS,
@@ -220,10 +221,7 @@ export async function polishReflectionWithAgent(
   }
 }
 
-export function buildGoodNightReflectionResponse(firstName?: string | null): string {
-  const name = firstName ? `, ${firstName}` : "";
-  return `Good night${name}. I've updated today's note with your evening reflection. Rest well.`;
-}
+export { buildGoodNightReflectionResponse } from "./good-night-response.ts";
 
 export interface GoodNightReflectionFlowResult {
   reflectionMarkdown: string;
@@ -266,6 +264,6 @@ export async function runGoodNightReflectionFlow(
   return {
     reflectionMarkdown,
     dailyNoteUpdate,
-    response: buildGoodNightReflectionResponse(loadUserFirstName()),
+    response: buildGoodNightReflectionResponse(),
   };
 }

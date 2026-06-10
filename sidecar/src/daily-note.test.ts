@@ -120,12 +120,12 @@ describe("daily note helpers", () => {
     const withMetrics = upsertMetricInDayLog(base, "woke", "around 7:00 AM", date);
     const updated = appendDayLogLine(
       withMetrics,
-      "- 17:00 — Daily capture: shipped good night automation",
+      "- 17:00 — shipped good night automation",
       date,
     );
 
     expect(updated).toContain("woke: around 7:00 AM");
-    expect(updated).toContain("- 17:00 — Daily capture: shipped good night automation");
+    expect(updated).toContain("- 17:00 — shipped good night automation");
     const dayLogStart = updated.indexOf("## Day log");
     expect(updated.indexOf("- 17:00")).toBeGreaterThan(dayLogStart);
     expect(updated).not.toMatch(/weather:[^\n]*\n---\n/);

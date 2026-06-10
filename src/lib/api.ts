@@ -40,7 +40,23 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
-const HEALTH_REQUEST_TIMEOUT_MS = 4_000;
+const HEALTH_REQUEST_TIMEOUT_MS = 8_000;
+const SETTINGS_REQUEST_TIMEOUT_MS = 15_000;
+
+export function formatSidecarReachabilityError(error: unknown): string {
+  const message =
+    error instanceof Error && error.name === "AbortError"
+      ? "timed out"
+      : error instanceof Error
+        ? error.message
+        : "failed";
+
+  if (message.includes("Cannot reach agent server")) {
+    return `${message} Start the agent server with \`npm run dev:all\` (browser) or \`npm run tauri:dev\` (desktop), then retry.`;
+  }
+
+  return `Cannot reach agent server at ${connection.baseUrl}: ${message}. Start the agent server with \`npm run dev:all\` (browser) or \`npm run tauri:dev\` (desktop), then retry.`;
+}
 
 async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -89,10 +105,18 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_
   }
 }
 
-export async function waitForSidecar(retries = 60, delayMs = 250): Promise<void> {
+export async function waitForSidecar(options?: {
+  retries?: number;
+  delayMs?: number;
+  healthTimeoutMs?: number;
+}): Promise<void> {
+  const retries = options?.retries ?? 60;
+  const delayMs = options?.delayMs ?? 250;
+  const healthTimeoutMs = options?.healthTimeoutMs ?? HEALTH_REQUEST_TIMEOUT_MS;
+
   for (let attempt = 0; attempt < retries; attempt += 1) {
     try {
-      await getHealth();
+      await getHealth(healthTimeoutMs);
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -201,10 +225,10 @@ export async function submitGoodNightReflection(answers: string[]) {
   }, 180_000);
 }
 
-export async function getHealth() {
+export async function getHealth(timeoutMs = HEALTH_REQUEST_TIMEOUT_MS) {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${connection.baseUrl}/healthz`, undefined, HEALTH_REQUEST_TIMEOUT_MS);
+    response = await fetchWithTimeout(`${connection.baseUrl}/healthz`, undefined, timeoutMs);
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AbortError"
@@ -222,6 +246,7 @@ export async function getHealth() {
   return response.json() as Promise<{
     ok: boolean;
     hasApiKey: boolean;
+    hasGeminiApiKey: boolean;
     hasLinearApiKey: boolean;
     hasGoogleCalendarCredentials: boolean;
     hasGoogleCalendarAuth: boolean;
@@ -231,7 +256,36 @@ export async function getHealth() {
 }
 
 export async function getSettings() {
-  return request<AppSettings>("/settings");
+  return request<AppSettings>("/settings", undefined, SETTINGS_REQUEST_TIMEOUT_MS);
+}
+
+export type LinearProjectSummary = {
+  id: string;
+  name: string;
+  slugId?: string;
+};
+
+export async function fetchLinearProjectsPage(options: {
+  query?: string;
+  after?: string | null;
+  first?: number;
+} = {}) {
+  const params = new URLSearchParams();
+  if (options.query?.trim()) params.set("q", options.query.trim());
+  if (options.after) params.set("after", options.after);
+  if (options.first != null) params.set("first", String(options.first));
+
+  const query = params.toString();
+  return request<{
+    projects: LinearProjectSummary[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  }>(`/linear/projects${query ? `?${query}` : ""}`);
+}
+
+export async function fetchLinearProjectById(projectId: string) {
+  return request<{ project: LinearProjectSummary }>(
+    `/linear/projects/${encodeURIComponent(projectId)}`,
+  );
 }
 
 export async function updateSettings(updates: {
@@ -240,6 +294,7 @@ export async function updateSettings(updates: {
   modelMode?: ModelMode;
   executionMode?: ExecutionMode;
   issueLinkMode?: LinearIssueLinkMode;
+  groceryLinearProjectId?: string | null;
 }) {
   return request<{
     notesPath: string | null;
@@ -250,6 +305,7 @@ export async function updateSettings(updates: {
     modelName: string;
     executionMode: ExecutionMode;
     issueLinkMode: LinearIssueLinkMode;
+    groceryLinearProjectId: string | null;
   }>("/settings", {
     method: "PUT",
     body: JSON.stringify(updates),
@@ -338,6 +394,7 @@ export async function sendMessage(
   attachments?: AttachmentWireInput[],
   toolPins?: ToolPinSelection,
   quickActionId?: string,
+  options?: { captureTime?: string; groceryWeek?: string },
 ) {
   return request<{ runId: string; attachments?: MessageAttachment[] }>(
     `/sessions/${encodeURIComponent(sessionId)}/messages`,
@@ -348,6 +405,8 @@ export async function sendMessage(
         attachments,
         toolPins: toolPins && Object.keys(toolPins).length > 0 ? toolPins : undefined,
         quickActionId,
+        captureTime: options?.captureTime,
+        groceryWeek: options?.groceryWeek,
       }),
     },
     120_000,

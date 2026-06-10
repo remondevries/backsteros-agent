@@ -13,6 +13,7 @@ import {
   GOOD_NIGHT_LABEL,
   GOOD_NIGHT_MESSAGE,
 } from "./goodNight";
+import { GROCERY_LIST_ACTION_ID, GROCERY_LIST_LABEL } from "./groceryList";
 
 export type QuickActionBehavior = "send" | "prefill";
 
@@ -33,6 +34,12 @@ export const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "daily-capture",
     label: "Daily capture",
+    behavior: "prefill",
+    message: "",
+  },
+  {
+    id: GROCERY_LIST_ACTION_ID,
+    label: GROCERY_LIST_LABEL,
     behavior: "prefill",
     message: "",
   },

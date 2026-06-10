@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   modelMode: "auto",
   executionMode: "live",
   issueLinkMode: "external",
+  groceryLinearProjectId: null,
 };
 
 function settingsPath(): string {

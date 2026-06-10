@@ -1,3 +1,4 @@
+import { InlineDetailPill } from "./InlineDetailPill";
 import { WhoopIcon } from "./WhoopIcon";
 
 export function WhoopSleepScoreLabel({
@@ -8,19 +9,13 @@ export function WhoopSleepScoreLabel({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className="whoop-sleep-inline-label"
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClick();
-      }}
-      aria-label={`Whoop sleep score ${score} — open Whoop dashboard`}
+    <InlineDetailPill
+      icon={<WhoopIcon size={18} variant="solid" />}
+      value={score}
+      scoreVariant="sleep"
+      onClick={onClick}
+      ariaLabel={`Whoop sleep score ${score} — open Whoop dashboard`}
       title="Open Whoop dashboard"
-    >
-      <WhoopIcon className="whoop-sleep-inline-label-icon" size={12} variant="solid" />
-      <span className="whoop-sleep-inline-label-score">{score}</span>
-    </button>
+    />
   );
 }

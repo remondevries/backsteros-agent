@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { BacksterIcon } from "../chat/BacksterIcon";
 import { LinearIcon } from "../chat/LinearIcon";
+import { GeminiIcon } from "../chat/GeminiIcon";
 import { ObsidianIcon } from "../chat/ObsidianIcon";
 import { WhoopIcon } from "../chat/WhoopIcon";
 
-export type AppView = "chat" | "whoop" | "linear" | "obsidian";
+export type AppView = "lookup" | "chat" | "whoop" | "linear" | "obsidian";
 
 export interface AppViewDefinition {
   id: AppView;
@@ -16,6 +17,13 @@ export interface AppViewDefinition {
 }
 
 export const APP_VIEWS: AppViewDefinition[] = [
+  {
+    id: "lookup",
+    label: "Gemini",
+    icon: <GeminiIcon size={18} />,
+    letter: "g",
+    number: "0",
+  },
   {
     id: "chat",
     label: "Backster",
@@ -49,6 +57,15 @@ export const APP_VIEWS: AppViewDefinition[] = [
 
 export function getAppViewIndex(view: AppView): number {
   return APP_VIEWS.findIndex((item) => item.id === view);
+}
+
+export function getAdjacentAppView(view: AppView, direction: "up" | "down"): AppView {
+  const index = getAppViewIndex(view);
+  if (index < 0) return view;
+
+  const delta = direction === "up" ? -1 : 1;
+  const nextIndex = (index + delta + APP_VIEWS.length) % APP_VIEWS.length;
+  return APP_VIEWS[nextIndex]?.id ?? view;
 }
 
 export function buildGoToKeyHint(view: AppViewDefinition): string {

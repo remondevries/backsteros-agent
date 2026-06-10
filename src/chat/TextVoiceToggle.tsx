@@ -13,9 +13,9 @@ export function TextVoiceToggle({
     <div
       className="text-voice-toggle"
       role="group"
-      aria-label="Input mode — toggle with Ctrl+V"
+      aria-label="Input mode — Option+Command+Left for text, Option+Command+Right for voice"
       data-mode={mode}
-      title="Toggle text / voice (Ctrl+V)"
+      title="Text (⌥⌘←) · Voice (⌥⌘→)"
     >
       <span className="text-voice-indicator" aria-hidden="true" />
       <button

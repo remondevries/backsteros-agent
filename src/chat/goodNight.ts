@@ -1,5 +1,6 @@
 import type {
   CalendarEventEntity,
+  ChatMessage,
   GoodNightMetaEntity,
   LinearIssueEntity,
   StructuredPayload,
@@ -32,9 +33,6 @@ export const GOOD_NIGHT_REFLECTION_QUESTIONS = [
 ] as const;
 
 export const GOOD_NIGHT_REFLECTION_COUNT = GOOD_NIGHT_REFLECTION_QUESTIONS.length;
-
-/** Pause before the next reflection question so the flow feels conversational. */
-export const GOOD_NIGHT_REFLECTION_THINKING_MS = 1600;
 
 export const GOOD_NIGHT_MEDITATIONS_STYLE = `[Evening reflection writing style — apply ONLY for this edit]
 - Self-dialogue: first person ("I...", "Remember..."), not for an audience
@@ -181,6 +179,21 @@ export function isGoodNightFlowUserMessage(
 
 export function isGoodNightComposerMode(composerQuickActionId?: string | null): boolean {
   return composerQuickActionId === GOOD_NIGHT_ACTION_ID;
+}
+
+export function hasGoodNightReflectionStartedForRun(
+  messages: Array<Pick<ChatMessage, "role" | "flowVariant" | "text" | "flowRunId">>,
+  runId: string,
+): boolean {
+  return messages.some(
+    (entry) =>
+      entry.role === "assistant" &&
+      entry.flowVariant === "good-night" &&
+      entry.flowRunId === runId &&
+      GOOD_NIGHT_REFLECTION_QUESTIONS.includes(
+        entry.text as (typeof GOOD_NIGHT_REFLECTION_QUESTIONS)[number],
+      ),
+  );
 }
 
 export function parseGoodNightShortcut(text: string): boolean {

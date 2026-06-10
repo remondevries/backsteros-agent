@@ -23,14 +23,26 @@ import {
   type ComposerMode,
 } from "./composerMode";
 import { MessageActions } from "./MessageActions";
-import { formatMessageTimestamp } from "./formatMessageTimestamp";
 import { useRunUiPreviewShortcut } from "./dev/RunUiPreviewPanel";
+import {
+  formatAutomationFlowCancellationMessage,
+  isAutomationComposerFlow,
+  resolveActiveAutomationFlow,
+} from "./automationFlow";
+import { resolveAutomationFlowByComposerMode } from "./automation/registry";
+import {
+  resolveAutomationFlowVariant,
+  resolveAutomationFlowForOutgoingMessage,
+  shouldBlockRegisteredAutomationComposerSend,
+} from "./automation/orchestration";
+import { useAutomationOrchestration } from "./automation/useAutomationOrchestration";
+import { BacksterAssistantBlock } from "./BacksterAssistantBlock";
 import { RunBlock } from "./RunBlock";
+import { TerminalTypingText } from "./TerminalTypingText";
+import { useTranscriptPacing } from "./useTranscriptPacing";
 import type { AppView } from "../app/appViews";
 import {
   GOOD_MORNING_ACTION_ID,
-  GOOD_MORNING_FEEL_ACTION_ID,
-  GOOD_MORNING_LABEL,
   isGoodMorningComposerMode,
   isGoodMorningFeelMessage,
   isGoodMorningFlowMessage,
@@ -41,27 +53,39 @@ import {
 } from "./morningReview";
 import {
   DAILY_CAPTURE_ACTION_ID,
-  DAILY_CAPTURE_LABEL,
+  DAILY_CAPTURE_MESSAGE_LABEL,
   formatDailyCaptureLogEntry,
+  formatDailyCaptureLogTime,
+  isDailyCaptureComposerMode,
   isDailyCaptureMessage,
+  normalizeDailyCaptureLogTime,
+  parseDailyCaptureLogEntry,
   parseDailyCaptureShortcut,
-  wrapDailyCaptureForAgent,
 } from "./dailyCapture";
 import {
+  GROCERY_LIST_ACTION_ID,
+  GROCERY_LIST_MESSAGE_LABEL,
+  isGroceryListComposerMode,
+  isGroceryListMessage,
+  parseGroceryShortcut,
+} from "./groceryList";
+import {
+  formatCurrentGroceryWeekNumber,
+  formatGroceryLogEntry,
+  normalizeGroceryWeekNumber,
+  parseGroceryLogEntry,
+} from "./groceryWeek";
+import type { GroceryWeekTagHandle } from "./GroceryWeekTag";
+import type { DailyCaptureTimeTagHandle } from "./DailyCaptureTimeTag";
+import {
   GOOD_NIGHT_ACTION_ID,
-  GOOD_NIGHT_LABEL,
   GOOD_NIGHT_MESSAGE,
   GOOD_NIGHT_REFLECTION_ACTION_ID,
-  GOOD_NIGHT_REFLECTION_COUNT,
-  GOOD_NIGHT_REFLECTION_THINKING_MS,
-  getGoodNightReflectionPlaceholder,
-  getGoodNightReflectionQuestion,
   isGoodNightComposerMode,
   isGoodNightFlowMessage,
   isGoodNightMessage,
   isGoodNightReflectionMessage,
   parseGoodNightShortcut,
-  serializeGoodNightReflectionAnswers,
 } from "./goodNight";
 import {
   isLetterComposerMode,
@@ -70,12 +94,12 @@ import {
   isLetterMessage,
   LETTER_ACTION_ID,
   LETTER_CONFIRM_ACTION_ID,
-  LETTER_CONFIRM_PLACEHOLDER,
   LETTER_LABEL,
   LETTER_MESSAGE,
   parseLetterShortcut,
   shouldSendComposerAttachments,
 } from "./letter";
+import { isSlashCommandPaletteOpen, type SlashCommandDefinition } from "./slashCommands";
 import { mergeStructuredPayload } from "./runEntities";
 import {
   cycleToolPin,
@@ -84,7 +108,6 @@ import {
   type ToolPinSelection,
   type ToolSelection,
 } from "./tool-routing";
-import type { QuickAction } from "./quickActions";
 import type {
   AgentEvent,
   AttachmentPreviewTarget,
@@ -92,6 +115,8 @@ import type {
   PendingAttachment,
   RunViewModel,
 } from "./types";
+import { useInputModeShortcuts } from "../hooks/useInputModeShortcuts";
+import { useStreamingRunTts } from "../hooks/useStreamingRunTts";
 import { useVoiceMode } from "../hooks/useVoiceMode";
 import { useTts } from "../hooks/useTts";
 import {
@@ -105,7 +130,6 @@ import {
   updateSettings,
 } from "../lib/api";
 import { subscribeToRunWithAuth } from "../lib/sse";
-import { prefetchSpeech } from "../lib/tts";
 import { setTrafficLightsVisible } from "../lib/traffic-lights";
 
 const EMPTY_TOOLS: ToolSelection = { obsidian: false, linear: false, calendar: false, whoop: false };
@@ -307,21 +331,44 @@ export const ChatView = forwardRef<
   ref,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [runs, setRuns] = useState<Record<string, RunViewModel>>(initialRuns);
   const [input, setInput] = useState("");
+  const inputRef = useRef(input);
+  inputRef.current = input;
   const [composerQuickActionId, setComposerQuickActionId] = useState<string | null>(null);
-  const [goodMorningAwaitingFeel, setGoodMorningAwaitingFeel] = useState(false);
-  const [goodNightAwaitingReflection, setGoodNightAwaitingReflection] = useState(false);
-  const [goodNightReflectionAnswers, setGoodNightReflectionAnswers] = useState<string[]>([]);
-  const [goodNightReflectionThinking, setGoodNightReflectionThinking] = useState(false);
+  const composerQuickActionIdRef = useRef<string | null>(null);
+  composerQuickActionIdRef.current = composerQuickActionId;
+  const [dailyCaptureLogTime, setDailyCaptureLogTime] = useState(() => formatDailyCaptureLogTime());
+  const dailyCaptureTimeTouchedRef = useRef(false);
+  const dailyCaptureTimeTagRef = useRef<DailyCaptureTimeTagHandle>(null);
+  const [groceryWeekNumber, setGroceryWeekNumber] = useState(() => formatCurrentGroceryWeekNumber());
+  const groceryWeekTouchedRef = useRef(false);
+  const groceryWeekTagRef = useRef<GroceryWeekTagHandle>(null);
   const [letterAwaitingConfirm, setLetterAwaitingConfirm] = useState(false);
-  const [morningReviewUsageVersion, setMorningReviewUsageVersion] = useState(0);
-  const goodMorningFeelActivatedRef = useRef(new Set<string>());
-  const goodNightReflectionActivatedRef = useRef(new Set<string>());
+  const {
+    enqueueReveal,
+    markPresentationActive,
+    markPresentationComplete,
+    clearPendingReveals,
+    resetPacing,
+  } = useTranscriptPacing();
+  const automation = useAutomationOrchestration({
+    messagesRef,
+    enqueueReveal,
+    setMessages,
+    setComposerQuickActionId,
+    focusComposer: () => {
+      scheduleComposerFocus(() => {
+        composerRef.current?.focus();
+      });
+    },
+  });
   const letterConfirmActivatedRef = useRef(new Set<string>());
-  const goodNightReflectionTimerRef = useRef<number | null>(null);
-  const reflectionPayloadRef = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  busyRef.current = busy;
   const [diff, setDiff] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
@@ -337,23 +384,53 @@ export const ChatView = forwardRef<
   const [toolPins, setToolPins] = useState<ToolPinSelection>(EMPTY_TOOL_PINS);
   const composerRef = useRef<ComposerHandle>(null);
   const chatContentRef = useRef<HTMLDivElement>(null);
-  const composerStackRef = useRef<HTMLDivElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const dragDepthRef = useRef(0);
   const pendingAttachmentsRef = useRef(pendingAttachments);
-  const prevRunStatusRef = useRef<Record<string, RunViewModel["status"]>>({});
   const liveRunIdRef = useRef<string | null>(null);
   const streamControllerRef = useRef<AbortController | null>(null);
   const cancellingRef = useRef(false);
-  const ttsSessionReadyRef = useRef(false);
-  const prefetchedRunIdsRef = useRef(new Set<string>());
-  const typingAnimatedRunIdsRef = useRef(new Set<string>());
+  const skipAnimationRunIdsRef = useRef(new Set(Object.keys(initialRuns)));
+  const skipAnimationMessageIdsRef = useRef(
+    new Set(initialMessages.filter((message) => message.role === "assistant").map((message) => message.id)),
+  );
   const titleUpdatedRef = useRef(initialMessages.some((message) => message.role === "user"));
   const onStateChangeRef = useRef(onStateChange);
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
+
+  useEffect(() => {
+    if (Object.keys(initialRuns).length > 0) {
+      markPresentationComplete();
+    }
+  }, [initialRuns, markPresentationComplete]);
+
+  useEffect(() => {
+    if (!isDailyCaptureComposerMode(composerQuickActionId)) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      if (!dailyCaptureTimeTouchedRef.current) {
+        setDailyCaptureLogTime(formatDailyCaptureLogTime());
+      }
+    }, 30_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [composerQuickActionId]);
+
+  useEffect(() => {
+    if (!isGroceryListComposerMode(composerQuickActionId)) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      if (!groceryWeekTouchedRef.current) {
+        setGroceryWeekNumber(formatCurrentGroceryWeekNumber());
+      }
+    }, 60_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [composerQuickActionId]);
+
   pendingAttachmentsRef.current = pendingAttachments;
   const handleSendRef = useRef<(messageText?: string, quickActionId?: string) => Promise<void>>(
     async () => {},
@@ -380,6 +457,23 @@ export const ChatView = forwardRef<
       });
     }
   }, [voiceModeEnabled, toggleVoiceModeRaw]);
+  const setVoiceModeEnabled = useCallback(
+    (enabled: boolean) => {
+      if (!voiceModeSupported) return;
+      voiceMode.setEnabled(enabled);
+      if (!enabled) {
+        scheduleComposerFocus(() => {
+          composerRef.current?.focus();
+        });
+      }
+    },
+    [voiceMode, voiceModeSupported],
+  );
+  useInputModeShortcuts({
+    isActive,
+    supported: voiceModeSupported,
+    setEnabled: setVoiceModeEnabled,
+  });
   const advanceStreamingTts = voiceModeSupported ? voiceMode.advance : fallbackTts.advance;
   const stopSpeaking = voiceModeSupported ? voiceMode.stop : fallbackTts.stop;
   const interruptVoice = voiceModeSupported ? voiceMode.interrupt : fallbackTts.stop;
@@ -408,6 +502,15 @@ export const ChatView = forwardRef<
     return null;
   }, [voiceModeEnabled, speaking, transcribing]);
 
+  const { resetTtsRunTracking } = useStreamingRunTts({
+    runs,
+    isActive,
+    ttsEnabled,
+    ttsSupported,
+    advanceStreamingTts,
+    latestFinishedRunId,
+  });
+
   const scrollTranscriptToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = transcriptRef.current;
     if (!el) return;
@@ -432,6 +535,38 @@ export const ChatView = forwardRef<
     composerFocusSuspendedRef.current = true;
     composerRef.current?.blur();
   }, []);
+
+  const clearAutomationFlowState = useCallback(() => {
+    clearPendingReveals();
+    setComposerQuickActionId(null);
+    automation.clearRegisteredAutomationState();
+    setLetterAwaitingConfirm(false);
+  }, [automation, clearPendingReveals]);
+
+  const cancelAutomationFlow = useCallback(() => {
+    const flow = resolveActiveAutomationFlow(composerQuickActionIdRef.current);
+    if (!flow) return false;
+
+    clearAutomationFlowState();
+    setInput("");
+    stickToBottomRef.current = true;
+    setMessages((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: formatAutomationFlowCancellationMessage(flow),
+        presentation: "backster",
+        createdAt: Date.now(),
+      },
+    ]);
+    composerFocusSuspendedRef.current = false;
+    focusComposer();
+    return true;
+  }, [clearAutomationFlowState, focusComposer]);
+
+  const cancelAutomationFlowRef = useRef(cancelAutomationFlow);
+  cancelAutomationFlowRef.current = cancelAutomationFlow;
 
   useEffect(() => {
     if (!voiceModeEnabled || !isActive) return;
@@ -579,22 +714,20 @@ export const ChatView = forwardRef<
 
       const key = event.key.toLowerCase();
 
-      if (key === "v" && voiceModeSupported) {
-        event.preventDefault();
-        toggleVoiceMode();
-        return;
-      }
-
       if (key === "c") {
         if (shouldAllowCopyShortcut(event.target)) return;
         event.preventDefault();
+        if (isAutomationComposerFlow(composerQuickActionIdRef.current) && !busyRef.current) {
+          cancelAutomationFlowRef.current();
+          return;
+        }
         void handleInterrupt();
       }
     }
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [handleInterrupt, isActive, toggleVoiceMode, voiceModeSupported]);
+  }, [handleInterrupt, isActive]);
 
   useEffect(() => {
     if (!isActive || voiceModeEnabled) return;
@@ -612,10 +745,29 @@ export const ChatView = forwardRef<
         return;
       }
 
-      if (event.key === "Escape" && composerRef.current?.isFocused()) {
-        event.preventDefault();
-        event.stopPropagation();
-        blurComposer();
+      if (event.key === "Escape") {
+        if (isAutomationComposerFlow(composerQuickActionIdRef.current)) {
+          event.preventDefault();
+          event.stopPropagation();
+          cancelAutomationFlowRef.current();
+          return;
+        }
+        if (
+          isSlashCommandPaletteOpen(inputRef.current, {
+            enabled: !isAutomationComposerFlow(composerQuickActionIdRef.current),
+            context: "chat",
+          })
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          setInput("");
+          return;
+        }
+        if (composerRef.current?.isFocused()) {
+          event.preventDefault();
+          event.stopPropagation();
+          blurComposer();
+        }
       }
     }
 
@@ -710,29 +862,6 @@ export const ChatView = forwardRef<
     void refreshDiff();
   }, [refreshDiff, runCount]);
 
-  useEffect(() => {
-    const content = chatContentRef.current;
-    const stack = composerStackRef.current;
-    if (!content || !stack) return;
-
-    const syncComposerLayout = () => {
-      const stackHeight = Math.ceil(stack.getBoundingClientRect().height);
-      const fadeZone = Number.parseFloat(
-        getComputedStyle(content).getPropertyValue("--transcript-fade-zone"),
-      ) || 88;
-      const reserve = stackHeight + fadeZone + 12;
-      content.style.setProperty("--composer-input-reserve", `${reserve}px`);
-      if (stickToBottomRef.current) {
-        scrollTranscriptToBottom();
-      }
-    };
-
-    syncComposerLayout();
-    const observer = new ResizeObserver(syncComposerLayout);
-    observer.observe(stack);
-    return () => observer.disconnect();
-  }, [scrollTranscriptToBottom]);
-
   useLayoutEffect(() => {
     if (stickToBottomRef.current) {
       scrollTranscriptToBottom();
@@ -741,23 +870,6 @@ export const ChatView = forwardRef<
 
   useEffect(() => {
     onStateChangeRef.current?.(messages, runs);
-  }, [messages, runs]);
-
-  useEffect(() => {
-    for (const message of messages) {
-      if (!isGoodMorningMessage(message.quickActionId) || !message.runId) continue;
-      if (goodMorningFeelActivatedRef.current.has(message.runId)) continue;
-
-      const run = runs[message.runId];
-      if (run?.status !== "finished") continue;
-
-      goodMorningFeelActivatedRef.current.add(message.runId);
-      setComposerQuickActionId(GOOD_MORNING_ACTION_ID);
-      setGoodMorningAwaitingFeel(true);
-      scheduleComposerFocus(() => {
-        composerRef.current?.focus();
-      });
-    }
   }, [messages, runs]);
 
   useEffect(() => {
@@ -777,87 +889,6 @@ export const ChatView = forwardRef<
     }
   }, [messages, runs]);
 
-  useEffect(() => {
-    for (const message of messages) {
-      if (!isGoodNightMessage(message.quickActionId) || !message.runId) continue;
-      if (goodNightReflectionActivatedRef.current.has(message.runId)) continue;
-
-      const run = runs[message.runId];
-      if (run?.status !== "finished") continue;
-
-      goodNightReflectionActivatedRef.current.add(message.runId);
-
-      if (goodNightReflectionTimerRef.current != null) {
-        window.clearTimeout(goodNightReflectionTimerRef.current);
-      }
-
-      goodNightReflectionTimerRef.current = window.setTimeout(() => {
-        goodNightReflectionTimerRef.current = null;
-        setComposerQuickActionId(GOOD_NIGHT_ACTION_ID);
-        setGoodNightAwaitingReflection(true);
-        setGoodNightReflectionAnswers([]);
-        setMessages((current) => [
-          ...current,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            text: getGoodNightReflectionQuestion(0),
-            flowVariant: "good-night",
-            createdAt: Date.now(),
-          },
-        ]);
-        scheduleComposerFocus(() => {
-          composerRef.current?.focus();
-        });
-      }, GOOD_NIGHT_REFLECTION_THINKING_MS);
-    }
-  }, [messages, runs]);
-
-  useEffect(() => {
-    if (!ttsSupported || !latestFinishedRunId) return;
-    if (prefetchedRunIdsRef.current.has(latestFinishedRunId)) return;
-
-    const run = runs[latestFinishedRunId];
-    if (!run?.text.trim()) return;
-
-    prefetchedRunIdsRef.current.add(latestFinishedRunId);
-    prefetchSpeech(run.text, { playbackId: latestFinishedRunId });
-  }, [ttsSupported, latestFinishedRunId, runs]);
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    if (!ttsSessionReadyRef.current) {
-      for (const [runId, run] of Object.entries(runs)) {
-        prevRunStatusRef.current[runId] = run.status;
-      }
-      ttsSessionReadyRef.current = true;
-      return;
-    }
-
-    if (!ttsEnabled) return;
-
-    const liveRunId = liveRunIdRef.current;
-    if (!liveRunId) return;
-
-    const run = runs[liveRunId];
-    if (!run?.text.trim()) return;
-
-    const previousStatus = prevRunStatusRef.current[liveRunId];
-
-    if (run.status === "running") {
-      advanceStreamingTts(liveRunId, run.text, false);
-    } else if (run.status === "finished" && previousStatus === "running") {
-      advanceStreamingTts(liveRunId, run.text, true);
-      if (ttsSupported) {
-        prefetchedRunIdsRef.current.add(liveRunId);
-        prefetchSpeech(run.text, { playbackId: liveRunId, priority: true });
-      }
-    }
-
-    prevRunStatusRef.current[liveRunId] = run.status;
-  }, [runs, ttsEnabled, ttsSupported, advanceStreamingTts, isActive]);
-
   async function handleClearChat() {
     void stopSpeaking();
     onBeforeSessionClear?.();
@@ -876,21 +907,14 @@ export const ChatView = forwardRef<
       const result = await clearSessionChat(sessionId);
       setMessages([]);
       setRuns({});
-      prevRunStatusRef.current = {};
+      resetTtsRunTracking();
       setComposerQuickActionId(null);
-      setGoodMorningAwaitingFeel(false);
-      setGoodNightAwaitingReflection(false);
-      setGoodNightReflectionAnswers([]);
-      setGoodNightReflectionThinking(false);
+      automation.clearRegisteredAutomationState();
       setLetterAwaitingConfirm(false);
-      goodMorningFeelActivatedRef.current.clear();
-      goodNightReflectionActivatedRef.current.clear();
+      clearPendingReveals();
+      resetPacing();
+      automation.clearEnqueuedFollowUps();
       letterConfirmActivatedRef.current.clear();
-      if (goodNightReflectionTimerRef.current != null) {
-        window.clearTimeout(goodNightReflectionTimerRef.current);
-        goodNightReflectionTimerRef.current = null;
-      }
-      reflectionPayloadRef.current = null;
       liveRunIdRef.current = null;
       titleUpdatedRef.current = false;
       stickToBottomRef.current = true;
@@ -905,32 +929,15 @@ export const ChatView = forwardRef<
 
   function recordMorningReviewUsage() {
     markMorningReviewUsedToday();
-    setMorningReviewUsageVersion((version) => version + 1);
   }
 
-  const scheduleNextGoodNightQuestion = useCallback((questionIndex: number) => {
-    setGoodNightReflectionThinking(true);
-    if (goodNightReflectionTimerRef.current != null) {
-      window.clearTimeout(goodNightReflectionTimerRef.current);
-    }
-    goodNightReflectionTimerRef.current = window.setTimeout(() => {
-      goodNightReflectionTimerRef.current = null;
-      setGoodNightReflectionThinking(false);
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: getGoodNightReflectionQuestion(questionIndex),
-          flowVariant: "good-night",
-          createdAt: Date.now(),
-        },
-      ]);
-      scheduleComposerFocus(() => {
-        composerRef.current?.focus();
-      });
-    }, GOOD_NIGHT_REFLECTION_THINKING_MS);
-  }, []);
+  const handleRunPresentationComplete = useCallback(
+    (runId: string, quickActionId?: string) => {
+      markPresentationComplete();
+      automation.onRegisteredAutomationRunPresentationComplete(quickActionId, runId);
+    },
+    [automation, markPresentationComplete],
+  );
 
   async function handleSend(messageText?: string, quickActionId?: string) {
     const rawText = (messageText ?? input).trim();
@@ -948,7 +955,7 @@ export const ChatView = forwardRef<
         setInput("");
         setComposerQuickActionId(null);
       }
-      setGoodMorningAwaitingFeel(false);
+      automation.resetAwaitingFollowUp("good-morning");
       recordMorningReviewUsage();
       await handleSendRef.current(MORNING_REVIEW_MESSAGE, GOOD_MORNING_ACTION_ID);
       return;
@@ -959,8 +966,7 @@ export const ChatView = forwardRef<
         setInput("");
         setComposerQuickActionId(null);
       }
-      setGoodNightAwaitingReflection(false);
-      setGoodNightReflectionAnswers([]);
+      automation.resetAwaitingFollowUp("good-night");
       await handleSendRef.current(GOOD_NIGHT_MESSAGE, GOOD_NIGHT_ACTION_ID);
       return;
     }
@@ -976,29 +982,42 @@ export const ChatView = forwardRef<
     }
 
     const dcShortcut = parseDailyCaptureShortcut(rawText);
+    const grShortcut = parseGroceryShortcut(rawText);
 
     if (dcShortcut?.kind === "activate") {
       if (!messageText) {
         setInput("");
       }
-      setComposerQuickActionId(DAILY_CAPTURE_ACTION_ID);
-      focusComposer();
+      activateDailyCaptureMode();
       return;
     }
 
-    const text = dcShortcut?.kind === "send" ? dcShortcut.body : rawText;
-    const inGoodMorningMode = isGoodMorningComposerMode(composerQuickActionId);
-    const inGoodNightMode = isGoodNightComposerMode(composerQuickActionId);
+    if (grShortcut?.kind === "activate") {
+      if (!messageText) {
+        setInput("");
+      }
+      activateGroceryListMode();
+      return;
+    }
+
+    const text =
+      dcShortcut?.kind === "send"
+        ? dcShortcut.body
+        : grShortcut?.kind === "send"
+          ? grShortcut.body
+          : rawText;
     const inLetterMode = isLetterComposerMode(composerQuickActionId);
     const isVoiceSend = messageText !== undefined;
 
+    const activeComposerFlow = resolveAutomationFlowByComposerMode(composerQuickActionId);
+    let questionnaireSubmitPayload: string | null = null;
     if (
-      inGoodNightMode &&
-      goodNightAwaitingReflection &&
-      !isGoodNightMessage(quickActionId) &&
-      !parseGoodNightShortcut(rawText)
+      activeComposerFlow &&
+      automation.questionnaireState &&
+      automation.isAwaitingFollowUp(activeComposerFlow.id) &&
+      !activeComposerFlow.isInitialRun(quickActionId) &&
+      !(activeComposerFlow.trigger.shortcut?.test(rawText.trim()) ?? false)
     ) {
-      if (goodNightReflectionThinking) return;
       if (!text && pendingAttachments.length === 0) return;
       if (busy && !isVoiceSend) return;
 
@@ -1007,50 +1026,56 @@ export const ChatView = forwardRef<
         setInput("");
       }
 
-      const nextAnswers = [...goodNightReflectionAnswers, text];
-      setGoodNightReflectionAnswers(nextAnswers);
+      const questionnaireResult = automation.tryHandleQuestionnaireAnswer({
+        flowId: activeComposerFlow.id,
+        text,
+        appendUserMessage: (message) => {
+          stickToBottomRef.current = true;
+          setMessages((current) => [...current, message]);
+        },
+      });
 
-      if (nextAnswers.length < GOOD_NIGHT_REFLECTION_COUNT) {
-        const reflectionUserMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "user",
-          text,
-          createdAt: Date.now(),
-          quickActionId: GOOD_NIGHT_REFLECTION_ACTION_ID,
-          flowVariant: "good-night",
-        };
-        stickToBottomRef.current = true;
-        setMessages((current) => [...current, reflectionUserMessage]);
-        scheduleNextGoodNightQuestion(nextAnswers.length);
+      if (questionnaireResult?.status === "continue") {
         return;
       }
-
-      reflectionPayloadRef.current = serializeGoodNightReflectionAnswers(nextAnswers);
-      setGoodNightAwaitingReflection(false);
-      setComposerQuickActionId(null);
-      setGoodNightReflectionAnswers([]);
+      if (questionnaireResult?.status === "submit") {
+        questionnaireSubmitPayload = questionnaireResult.payload;
+      }
     }
 
-    const effectiveQuickActionId =
-      reflectionPayloadRef.current != null
-        ? GOOD_NIGHT_REFLECTION_ACTION_ID
-        : quickActionId ??
-      (dcShortcut?.kind === "send"
-        ? DAILY_CAPTURE_ACTION_ID
-        : inLetterMode && letterAwaitingConfirm
-          ? LETTER_CONFIRM_ACTION_ID
-        : inGoodMorningMode && goodMorningAwaitingFeel
-          ? GOOD_MORNING_FEEL_ACTION_ID
-          : composerQuickActionId) ??
-      undefined;
+    if (questionnaireSubmitPayload == null) {
+      questionnaireSubmitPayload = automation.getQuestionnaireSubmitPayload();
+    }
+
+    const { effectiveQuickActionId: registeredEffectiveQuickActionId } =
+      resolveAutomationFlowForOutgoingMessage({
+        composerQuickActionId,
+        awaitingState: automation.awaitingState,
+        quickActionId,
+        inLetterMode,
+        letterAwaitingConfirm,
+        letterConfirmQuickActionId: LETTER_CONFIRM_ACTION_ID,
+        dailyCaptureQuickActionId: DAILY_CAPTURE_ACTION_ID,
+        isDailyCaptureShortcutSend: dcShortcut?.kind === "send",
+        groceryListQuickActionId: GROCERY_LIST_ACTION_ID,
+        isGroceryListShortcutSend: grShortcut?.kind === "send",
+        questionnaireSubmitPayload,
+      });
+
+    const effectiveQuickActionId = registeredEffectiveQuickActionId;
     const isDailyCapture = isDailyCaptureMessage(effectiveQuickActionId);
+    const isGroceryList = isGroceryListMessage(effectiveQuickActionId);
     const isGoodMorningFeel = isGoodMorningFeelMessage(effectiveQuickActionId);
+    const isGoodNightReflection = isGoodNightReflectionMessage(effectiveQuickActionId);
 
     if (
-      inGoodMorningMode &&
-      !goodMorningAwaitingFeel &&
-      !isGoodMorningMessage(quickActionId) &&
-      !parseGoodMorningShortcut(rawText)
+      shouldBlockRegisteredAutomationComposerSend({
+        composerQuickActionId,
+        awaitingState: automation.awaitingState,
+        quickActionId,
+        rawText,
+        questionnaireActive: automation.questionnaireState != null,
+      })
     ) {
       return;
     }
@@ -1064,25 +1089,48 @@ export const ChatView = forwardRef<
       return;
     }
 
-    if (
-      inGoodNightMode &&
-      !goodNightAwaitingReflection &&
-      reflectionPayloadRef.current == null &&
-      !isGoodNightMessage(quickActionId) &&
-      !parseGoodNightShortcut(rawText)
-    ) {
-      return;
-    }
-
-    const displayText = isDailyCapture ? formatDailyCaptureLogEntry(text) : text;
-    const reflectionPayload = reflectionPayloadRef.current;
+    const displayText = isDailyCapture
+      ? formatDailyCaptureLogEntry(
+          text,
+          normalizeDailyCaptureLogTime(
+            isDailyCaptureComposerMode(composerQuickActionId)
+              ? dailyCaptureLogTime
+              : formatDailyCaptureLogTime(),
+          ) ?? formatDailyCaptureLogTime(),
+        )
+      : isGroceryList
+        ? formatGroceryLogEntry(
+            text,
+            normalizeGroceryWeekNumber(
+              isGroceryListComposerMode(composerQuickActionId)
+                ? groceryWeekNumber
+                : formatCurrentGroceryWeekNumber(),
+            ) ?? Number(formatCurrentGroceryWeekNumber()),
+          )
+        : text;
+    const captureTimeForSend = isDailyCapture
+      ? normalizeDailyCaptureLogTime(
+          isDailyCaptureComposerMode(composerQuickActionId)
+            ? dailyCaptureLogTime
+            : formatDailyCaptureLogTime(),
+        ) ?? formatDailyCaptureLogTime()
+      : undefined;
+    const groceryWeekForSend = isGroceryList
+      ? String(
+          normalizeGroceryWeekNumber(
+            isGroceryListComposerMode(composerQuickActionId)
+              ? groceryWeekNumber
+              : formatCurrentGroceryWeekNumber(),
+          ) ?? Number(formatCurrentGroceryWeekNumber()),
+        )
+      : undefined;
     const agentText =
-      reflectionPayload ?? (isDailyCapture ? wrapDailyCaptureForAgent(text) : text);
-    if (reflectionPayload) {
-      reflectionPayloadRef.current = null;
+      questionnaireSubmitPayload ?? text;
+    if (questionnaireSubmitPayload) {
+      automation.clearQuestionnaireSubmitPayload();
     }
 
-    if (!text && pendingAttachments.length === 0 && !reflectionPayload) return;
+    if (!text && pendingAttachments.length === 0 && !questionnaireSubmitPayload) return;
     if (busy && !isVoiceSend) return;
 
     if (isVoiceSend && busy) {
@@ -1102,10 +1150,25 @@ export const ChatView = forwardRef<
     if (!messageText) {
       setInput("");
       setPendingAttachments([]);
-      if (isDailyCapture || isGoodMorningFeel || isLetterConfirmMessage(effectiveQuickActionId)) {
+      if (
+        isDailyCapture ||
+        isGroceryList ||
+        isGoodMorningFeel ||
+        isGoodNightReflection ||
+        isLetterConfirmMessage(effectiveQuickActionId)
+      ) {
         setComposerQuickActionId(null);
+        if (isDailyCapture) {
+          resetDailyCaptureLogTime();
+        }
+        if (isGroceryList) {
+          resetGroceryWeekNumber();
+        }
         if (isGoodMorningFeel) {
-          setGoodMorningAwaitingFeel(false);
+          automation.resetAwaitingFollowUp("good-morning");
+        }
+        if (isGoodNightReflection) {
+          automation.resetAwaitingFollowUp("good-night");
         }
         if (isLetterConfirmMessage(effectiveQuickActionId)) {
           setLetterAwaitingConfirm(false);
@@ -1116,16 +1179,16 @@ export const ChatView = forwardRef<
     setToolPins(EMPTY_TOOL_PINS);
     focusComposer();
 
+    const registeredFlowVariant = resolveAutomationFlowVariant(effectiveQuickActionId);
     const flowVariant =
-      isGoodMorningFeel || isGoodMorningMessage(effectiveQuickActionId)
-        ? "good-morning"
-        : isGoodNightReflectionMessage(effectiveQuickActionId)
+      registeredFlowVariant ??
+      (isGoodNightReflectionMessage(effectiveQuickActionId)
+        ? "good-night"
+        : isGoodNightMessage(effectiveQuickActionId)
           ? "good-night"
-          : isGoodNightMessage(effectiveQuickActionId)
-            ? "good-night"
-            : isLetterFlowMessage(effectiveQuickActionId)
-              ? "letter"
-            : undefined;
+          : isLetterFlowMessage(effectiveQuickActionId)
+            ? "letter"
+            : undefined);
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -1160,9 +1223,9 @@ export const ChatView = forwardRef<
         wireAttachments.length > 0 ? wireAttachments : undefined,
         pinsForSend,
         effectiveQuickActionId,
+        { captureTime: captureTimeForSend, groceryWeek: groceryWeekForSend },
       );
       liveRunIdRef.current = runId;
-      typingAnimatedRunIdsRef.current.add(runId);
       setMessages((current) =>
         current.map((message) =>
           message.id === userMessage.id
@@ -1178,6 +1241,7 @@ export const ChatView = forwardRef<
         ),
       );
       setRuns((current) => ({ ...current, [runId]: createEmptyRun(runId) }));
+      markPresentationActive();
 
       streamController = new AbortController();
       streamControllerRef.current = streamController;
@@ -1263,8 +1327,26 @@ export const ChatView = forwardRef<
   }
   handleSendRef.current = handleSend;
 
+  function resetDailyCaptureLogTime() {
+    dailyCaptureTimeTouchedRef.current = false;
+    setDailyCaptureLogTime(formatDailyCaptureLogTime());
+  }
+
   function activateDailyCaptureMode() {
+    resetDailyCaptureLogTime();
     setComposerQuickActionId(DAILY_CAPTURE_ACTION_ID);
+    setInput("");
+    focusComposer();
+  }
+
+  function resetGroceryWeekNumber() {
+    groceryWeekTouchedRef.current = false;
+    setGroceryWeekNumber(formatCurrentGroceryWeekNumber());
+  }
+
+  function activateGroceryListMode() {
+    resetGroceryWeekNumber();
+    setComposerQuickActionId(GROCERY_LIST_ACTION_ID);
     setInput("");
     focusComposer();
   }
@@ -1272,6 +1354,10 @@ export const ChatView = forwardRef<
   function handleComposerInputChange(next: string) {
     if (/^\/dc\s$/i.test(next)) {
       activateDailyCaptureMode();
+      return;
+    }
+    if (/^\/(?:gr|grocery)\s$/i.test(next)) {
+      activateGroceryListMode();
       return;
     }
     if (/^\/gm\s$/i.test(next)) {
@@ -1289,25 +1375,11 @@ export const ChatView = forwardRef<
     setInput(next);
   }
 
-  function handleQuickAction(action: QuickAction) {
-    if (busy) return;
-    if (isGoodMorningComposerMode(composerQuickActionId)) return;
-    if (isGoodNightComposerMode(composerQuickActionId)) return;
-    if (isLetterComposerMode(composerQuickActionId)) return;
-    if (action.behavior === "send") {
-      setComposerQuickActionId(null);
-      void handleSendRef.current(action.message, action.id);
-      return;
-    }
-    setComposerQuickActionId(action.id);
-    setInput(action.message);
-    focusComposer();
-  }
-
   function handleActivateDailyCaptureShortcut() {
     if (
       busy ||
       isDailyCaptureMessage(composerQuickActionId ?? undefined) ||
+      isGroceryListComposerMode(composerQuickActionId) ||
       isGoodMorningComposerMode(composerQuickActionId) ||
       isGoodNightComposerMode(composerQuickActionId) ||
       isLetterComposerMode(composerQuickActionId)
@@ -1317,20 +1389,44 @@ export const ChatView = forwardRef<
     activateDailyCaptureMode();
   }
 
-  function handleClearGoodMorningMode() {
+  function handleActivateGroceryListShortcut() {
+    if (
+      busy ||
+      isGroceryListComposerMode(composerQuickActionId) ||
+      isDailyCaptureComposerMode(composerQuickActionId) ||
+      isGoodMorningComposerMode(composerQuickActionId) ||
+      isGoodNightComposerMode(composerQuickActionId) ||
+      isLetterComposerMode(composerQuickActionId)
+    ) {
+      return;
+    }
+    activateGroceryListMode();
+  }
+
+  function handleClearDailyCaptureMode() {
+    clearPendingReveals();
     setComposerQuickActionId(null);
-    setGoodMorningAwaitingFeel(false);
+    automation.resetAwaitingFollowUp("daily-capture");
+    resetDailyCaptureLogTime();
+  }
+
+  function handleClearGroceryListMode() {
+    clearPendingReveals();
+    setComposerQuickActionId(null);
+    automation.resetAwaitingFollowUp("grocery-list");
+    resetGroceryWeekNumber();
+  }
+
+  function handleClearGoodMorningMode() {
+    clearPendingReveals();
+    setComposerQuickActionId(null);
+    automation.resetAwaitingFollowUp("good-morning");
   }
 
   function handleClearGoodNightMode() {
+    clearPendingReveals();
     setComposerQuickActionId(null);
-    setGoodNightAwaitingReflection(false);
-    setGoodNightReflectionAnswers([]);
-    setGoodNightReflectionThinking(false);
-    if (goodNightReflectionTimerRef.current != null) {
-      window.clearTimeout(goodNightReflectionTimerRef.current);
-      goodNightReflectionTimerRef.current = null;
-    }
+    automation.resetAwaitingFollowUp("good-night");
   }
 
   function handleClearLetterMode() {
@@ -1341,7 +1437,7 @@ export const ChatView = forwardRef<
   function handleTriggerGoodMorningShortcut() {
     if (busy || isGoodMorningComposerMode(composerQuickActionId)) return;
     setComposerQuickActionId(null);
-    setGoodMorningAwaitingFeel(false);
+    automation.resetAwaitingFollowUp("good-morning");
     setInput("");
     void handleSendRef.current(MORNING_REVIEW_MESSAGE, GOOD_MORNING_ACTION_ID);
   }
@@ -1349,8 +1445,7 @@ export const ChatView = forwardRef<
   function handleTriggerGoodNightShortcut() {
     if (busy || isGoodNightComposerMode(composerQuickActionId)) return;
     setComposerQuickActionId(null);
-    setGoodNightAwaitingReflection(false);
-    setGoodNightReflectionAnswers([]);
+    automation.resetAwaitingFollowUp("good-night");
     setInput("");
     void handleSendRef.current(GOOD_NIGHT_MESSAGE, GOOD_NIGHT_ACTION_ID);
   }
@@ -1370,6 +1465,28 @@ export const ChatView = forwardRef<
     setLetterAwaitingConfirm(false);
     setInput("");
     void handleSendRef.current(LETTER_MESSAGE, LETTER_ACTION_ID);
+  }
+
+  function handleSlashCommandSelect(command: SlashCommandDefinition) {
+    switch (command.id) {
+      case "daily-capture":
+        handleActivateDailyCaptureShortcut();
+        return;
+      case "grocery-list":
+        handleActivateGroceryListShortcut();
+        return;
+      case "good-morning":
+        void handleTriggerGoodMorningShortcut();
+        return;
+      case "good-night":
+        void handleTriggerGoodNightShortcut();
+        return;
+      case "letter":
+        void handleTriggerLetterShortcut();
+        return;
+      case "clear":
+        void handleClearChat();
+    }
   }
 
   async function handleComposerModeChange(nextMode: ComposerMode) {
@@ -1456,55 +1573,122 @@ export const ChatView = forwardRef<
             message.role === "user" &&
             (isLetterFlowMessage(message.quickActionId) ||
               message.flowVariant === "letter");
+          const isFlowAssistantMessage =
+            message.role === "assistant" &&
+            (message.flowVariant === "good-morning" ||
+              message.flowVariant === "good-night" ||
+              message.presentation === "backster");
+          const animateFlowAssistantMessage =
+            !skipAnimationMessageIdsRef.current.has(message.id);
+          const animateRun = run ? !skipAnimationRunIdsRef.current.has(run.runId) : false;
 
           return (
             <div key={message.id} className="chat-turn">
               <div className={`chat-message ${message.role === "user" ? "user" : "assistant"}`}>
                 {message.text && (
                   <>
-                    {message.role === "user" && (
-                      <div className="chat-message-meta">
-                        <span className="chat-message-meta-label">you</span>
-                        {message.createdAt != null && (
-                          <span className="chat-message-meta-timestamp">
-                            {formatMessageTimestamp(message.createdAt)}
+                    {message.role === "assistant" ? (
+                      isFlowAssistantMessage ? (
+                        <BacksterAssistantBlock
+                          messageId={message.id}
+                          text={message.text}
+                          sentAt={message.createdAt}
+                          animate={animateFlowAssistantMessage}
+                          canSpeak={
+                            ttsSupported &&
+                            message.text.trim().length > 0 &&
+                            !voiceModeEnabled
+                          }
+                          onTypingComplete={
+                            animateFlowAssistantMessage
+                              ? markPresentationComplete
+                              : undefined
+                          }
+                          onOpenLinearDashboard={openLinearDashboard}
+                          onOpenWhoopDashboard={openWhoopDashboard}
+                        />
+                      ) : (
+                        <TerminalTypingText
+                          key={message.id}
+                          text={message.text}
+                          running={false}
+                          startedAt={message.createdAt}
+                          animate={!skipAnimationMessageIdsRef.current.has(message.id)}
+                        />
+                      )
+                    ) : isDailyCaptureMessage(message.quickActionId) ? (
+                      (() => {
+                        const parsed = parseDailyCaptureLogEntry(message.text);
+                        const body = parsed?.body ?? message.text;
+                        const logTime = parsed?.logTime ?? formatDailyCaptureLogTime();
+
+                        return (
+                          <>
+                            <div className="chat-daily-capture-user-message">
+                              <span className="chat-daily-capture-heading">{DAILY_CAPTURE_MESSAGE_LABEL}</span>
+                              <div className="bubble chat-daily-capture-bubble">
+                                <span className="chat-quick-action-tag chat-quick-action-tag-daily-capture chat-daily-capture-time-tag">
+                                  {logTime}
+                                </span>
+                                <span className="chat-daily-capture-text">{body}</span>
+                              </div>
+                            </div>
+                            <MessageActions text={body} />
+                          </>
+                        );
+                      })()
+                    ) : isGroceryListMessage(message.quickActionId) ? (
+                      (() => {
+                        const parsed = parseGroceryLogEntry(message.text);
+                        const body = parsed?.body ?? message.text;
+                        const week = parsed?.week ?? Number(formatCurrentGroceryWeekNumber());
+
+                        return (
+                          <>
+                            <div className="chat-grocery-list-user-message">
+                              <span className="chat-grocery-list-heading">{GROCERY_LIST_MESSAGE_LABEL}</span>
+                              <div className="bubble chat-grocery-list-bubble">
+                                <span className="chat-quick-action-tag chat-quick-action-tag-grocery-list chat-grocery-list-week-tag">
+                                  W{week}
+                                </span>
+                                <span className="chat-grocery-list-text">{body}</span>
+                              </div>
+                            </div>
+                            <MessageActions text={body} />
+                          </>
+                        );
+                      })()
+                    ) : (
+                      <>
+                        {isLetterFlow && (
+                          <span className="chat-quick-action-tag chat-quick-action-tag-letter">
+                            {LETTER_LABEL}
                           </span>
                         )}
-                      </div>
-                    )}
-                    {isDailyCaptureMessage(message.quickActionId) && (
-                      <span className="chat-quick-action-tag chat-quick-action-tag-daily-capture">
-                        {DAILY_CAPTURE_LABEL}
-                      </span>
-                    )}
-                    {isLetterFlow && (
-                      <span className="chat-quick-action-tag chat-quick-action-tag-letter">
-                        {LETTER_LABEL}
-                      </span>
-                    )}
-                    <div
-                      className={`bubble ${
-                        message.quickActionId &&
-                        !isDailyCaptureMessage(message.quickActionId) &&
-                        !isGoodMorningFlow &&
-                        !isGoodNightFlow &&
-                        !isLetterFlow
-                          ? "bubble-quick-action"
-                          : ""
-                      }`}
-                    >
-                      {isGoodMorningMessage(message.quickActionId)
-                        ? MORNING_REVIEW_MESSAGE
-                        : isGoodNightMessage(message.quickActionId)
-                          ? GOOD_NIGHT_MESSAGE
-                          : isLetterMessage(message.quickActionId)
-                            ? LETTER_MESSAGE
-                          : message.text}
-                    </div>
-                    {!isGoodMorningMessage(message.quickActionId) &&
-                      !isGoodNightMessage(message.quickActionId) &&
-                      !isLetterFlow && (
-                      <MessageActions text={message.text} />
+                        <div
+                          className={`bubble ${
+                            message.quickActionId &&
+                            !isGoodMorningFlow &&
+                            !isGoodNightFlow &&
+                            !isLetterFlow
+                              ? "bubble-quick-action"
+                              : ""
+                          }`}
+                        >
+                          {isGoodMorningMessage(message.quickActionId)
+                            ? MORNING_REVIEW_MESSAGE
+                            : isGoodNightMessage(message.quickActionId)
+                              ? GOOD_NIGHT_MESSAGE
+                              : isLetterMessage(message.quickActionId)
+                                ? LETTER_MESSAGE
+                              : message.text}
+                        </div>
+                        {!isGoodMorningMessage(message.quickActionId) &&
+                          !isGoodNightMessage(message.quickActionId) &&
+                          !isLetterFlow && (
+                          <MessageActions text={message.text} />
+                        )}
+                      </>
                     )}
                   </>
                 )}
@@ -1529,10 +1713,14 @@ export const ChatView = forwardRef<
               {run && (
                 <RunBlock
                   run={run}
-                  typingAnimated={typingAnimatedRunIdsRef.current.has(run.runId)}
+                  animate={animateRun}
                   sourceBrand={
                     isGoodMorningFlowMessage(message.quickActionId) ||
-                    isGoodNightMessage(message.quickActionId)
+                    isGoodNightFlowMessage(message.quickActionId) ||
+                    isDailyCaptureMessage(message.quickActionId) ||
+                    isGroceryListMessage(message.quickActionId) ||
+                    message.flowVariant === "daily-capture" ||
+                    message.flowVariant === "grocery-list"
                       ? "backster"
                       : undefined
                   }
@@ -1556,6 +1744,11 @@ export const ChatView = forwardRef<
                   voiceModeEnabled={voiceModeEnabled}
                   onOpenLinearDashboard={openLinearDashboard}
                   onOpenWhoopDashboard={openWhoopDashboard}
+                  onPresentationComplete={
+                    animateRun && message.runId
+                      ? () => handleRunPresentationComplete(message.runId!, message.quickActionId)
+                      : undefined
+                  }
                 />
               )}
             </div>
@@ -1589,18 +1782,19 @@ export const ChatView = forwardRef<
 
         <div
           className={`composer-stack ${voiceModeEnabled ? "composer-stack-voice-mode" : ""}`}
-          ref={composerStackRef}
         >
           <Composer
             ref={composerRef}
             value={input}
             onChange={handleComposerInputChange}
             onEscapeBlur={blurComposer}
+            onCancelAutomationFlow={cancelAutomationFlow}
             onComposerFocus={() => {
               composerFocusSuspendedRef.current = false;
             }}
             onSend={() => void handleSend()}
             onActivateDailyCaptureShortcut={handleActivateDailyCaptureShortcut}
+            onActivateGroceryListShortcut={handleActivateGroceryListShortcut}
             onTriggerGoodMorningShortcut={handleTriggerGoodMorningShortcut}
             onCancel={() => void handleInterrupt()}
             running={busy}
@@ -1648,55 +1842,46 @@ export const ChatView = forwardRef<
             toolPins={toolPins}
             onToggleToolPin={handleToggleToolPin}
             composerQuickAction={
-              isDailyCaptureMessage(composerQuickActionId ?? undefined)
-                ? {
-                    label: DAILY_CAPTURE_LABEL,
-                    placeholder: "What do you want to capture in today's daily note?",
-                    onClear: () => setComposerQuickActionId(null),
-                    tagVariant: "daily-capture",
-                  }
-                : isGoodMorningComposerMode(composerQuickActionId)
-                  ? {
-                      label: GOOD_MORNING_LABEL,
-                      placeholder: goodMorningAwaitingFeel
-                        ? "How do you feel? How was your sleep?"
-                        : "Reply…",
-                      onClear: handleClearGoodMorningMode,
-                      tagVariant: "good-morning",
-                    }
+              isDailyCaptureComposerMode(composerQuickActionId)
+                ? { onClear: handleClearDailyCaptureMode }
+                : isGroceryListComposerMode(composerQuickActionId)
+                  ? { onClear: handleClearGroceryListMode }
+                  : isGoodMorningComposerMode(composerQuickActionId)
+                  ? { onClear: handleClearGoodMorningMode }
                   : isGoodNightComposerMode(composerQuickActionId)
-                    ? {
-                        label: GOOD_NIGHT_LABEL,
-                        placeholder: goodNightAwaitingReflection
-                          ? getGoodNightReflectionPlaceholder(
-                              goodNightReflectionAnswers.length,
-                            )
-                          : "Reply…",
-                        onClear: handleClearGoodNightMode,
-                        tagVariant: "good-night",
-                      }
+                    ? { onClear: handleClearGoodNightMode }
                     : isLetterComposerMode(composerQuickActionId)
-                      ? {
-                          label: LETTER_LABEL,
-                          placeholder: letterAwaitingConfirm
-                            ? LETTER_CONFIRM_PLACEHOLDER
-                            : "Reply…",
-                          onClear: handleClearLetterMode,
-                          tagVariant: "letter",
-                        }
-                    : undefined
+                      ? { onClear: handleClearLetterMode }
+                      : undefined
+            }
+            composerAutomationFlow={resolveActiveAutomationFlow(composerQuickActionId)}
+            dailyCaptureTime={
+              isDailyCaptureComposerMode(composerQuickActionId)
+                ? {
+                    value: dailyCaptureLogTime,
+                    onChange: setDailyCaptureLogTime,
+                    onUserEdit: () => {
+                      dailyCaptureTimeTouchedRef.current = true;
+                    },
+                    inputRef: dailyCaptureTimeTagRef,
+                  }
+                : undefined
+            }
+            groceryWeek={
+              isGroceryListComposerMode(composerQuickActionId)
+                ? {
+                    value: groceryWeekNumber,
+                    onChange: setGroceryWeekNumber,
+                    onUserEdit: () => {
+                      groceryWeekTouchedRef.current = true;
+                    },
+                    inputRef: groceryWeekTagRef,
+                  }
+                : undefined
             }
             onTriggerGoodNightShortcut={handleTriggerGoodNightShortcut}
             onTriggerLetterShortcut={handleTriggerLetterShortcut}
-            quickActions={
-              voiceModeEnabled
-                ? undefined
-                : {
-                    disabled: busy,
-                    morningReviewUsageVersion,
-                    onAction: handleQuickAction,
-                  }
-            }
+            onSlashCommandSelect={handleSlashCommandSelect}
           />
         </div>
       </div>

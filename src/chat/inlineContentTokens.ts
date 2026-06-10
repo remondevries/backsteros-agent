@@ -1,45 +1,67 @@
+import type { InlineContentPart } from "./inlineContentTokens";
+
 const INLINE_TOKEN_DETECT =
-  /\{\{(?:linear-issues-count:\d+|whoop-sleep-score:\d+|whoop-recovery-score:\d+|whoop-strain-score:\d+(?:\.\d+)?)\}\}|\[\d+ issues?\]\(backster:\/\/linear-issues\/\d+\)/;
+  /\{\{(?:linear-issues-count:\d+|linear-completed-count:\d+|linear-moved-count:\d+|linear-issue-link:[^}]+|whoop-sleep-score:\d+|whoop-recovery-score:\d+|whoop-strain-score:\d+(?:\.\d+)?|whoop-strain-target:\d+(?:\.\d+)?|whoop-sleep-duration:[^}]+|emphasis:[^}]+)\}\}|\[\d+ issues?\]\(backster:\/\/linear-issues\/\d+\)/;
 
 const INLINE_TOKEN_RE =
-  /\{\{(linear-issues-count|whoop-sleep-score|whoop-recovery-score|whoop-strain-score):([\d.]+)\}\}|\[(\d+) issues?\]\(backster:\/\/linear-issues\/(\d+)\)/g;
+  /\{\{(linear-issues-count|linear-completed-count|linear-moved-count|linear-issue-link|whoop-sleep-score|whoop-recovery-score|whoop-strain-score|whoop-strain-target|whoop-sleep-duration|emphasis):([^}]+)\}\}|\[(\d+) issues?\]\(backster:\/\/linear-issues\/(\d+)\)/g;
 
 export type InlineContentPart =
   | { type: "text"; value: string }
   | { type: "linear-issues-count"; count: number; raw: string }
+  | { type: "linear-completed-count"; count: number; raw: string }
+  | { type: "linear-moved-count"; count: number; raw: string }
+  | { type: "linear-issue-link"; label: string; url: string; raw: string }
   | { type: "whoop-sleep-score"; score: number; raw: string }
   | { type: "whoop-recovery-score"; score: number; raw: string }
-  | { type: "whoop-strain-score"; score: number; raw: string };
+  | { type: "whoop-strain-score"; score: number; raw: string }
+  | { type: "whoop-strain-target"; score: number; raw: string }
+  | { type: "whoop-sleep-duration"; duration: string; raw: string }
+  | { type: "emphasis"; text: string; raw: string };
 
 function parseTokenMatch(match: RegExpMatchArray): InlineContentPart {
   const tokenType = match[1];
-  if (tokenType === "linear-issues-count") {
+  const value = match[2];
+
+  if (tokenType === "linear-issues-count" || tokenType === "linear-completed-count" || tokenType === "linear-moved-count") {
     return {
-      type: "linear-issues-count",
-      count: Number(match[2]),
+      type: tokenType,
+      count: Number(value),
+      raw: match[0],
+    };
+  }
+  if (tokenType === "linear-issue-link") {
+    const separatorIndex = value.indexOf("|");
+    const encodedLabel = separatorIndex >= 0 ? value.slice(0, separatorIndex) : value;
+    const url = separatorIndex >= 0 ? value.slice(separatorIndex + 1) : "";
+    return {
+      type: "linear-issue-link",
+      label: encodedLabel.replace(/_/g, " ").trim(),
+      url: url.trim(),
       raw: match[0],
     };
   }
   if (tokenType === "whoop-sleep-score") {
-    return {
-      type: "whoop-sleep-score",
-      score: Number(match[2]),
-      raw: match[0],
-    };
+    return { type: "whoop-sleep-score", score: Number(value), raw: match[0] };
   }
   if (tokenType === "whoop-recovery-score") {
+    return { type: "whoop-recovery-score", score: Number(value), raw: match[0] };
+  }
+  if (tokenType === "whoop-strain-score") {
+    return { type: "whoop-strain-score", score: Number(value), raw: match[0] };
+  }
+  if (tokenType === "whoop-strain-target") {
+    return { type: "whoop-strain-target", score: Number(value), raw: match[0] };
+  }
+  if (tokenType === "whoop-sleep-duration") {
     return {
-      type: "whoop-recovery-score",
-      score: Number(match[2]),
+      type: "whoop-sleep-duration",
+      duration: value.replace(/_/g, " "),
       raw: match[0],
     };
   }
-  if (tokenType === "whoop-strain-score") {
-    return {
-      type: "whoop-strain-score",
-      score: Number(match[2]),
-      raw: match[0],
-    };
+  if (tokenType === "emphasis") {
+    return { type: "emphasis", text: value, raw: match[0] };
   }
 
   return {
