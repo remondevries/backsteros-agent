@@ -56,34 +56,38 @@ import {
   isMorningReviewQuickAction,
   resolveMorningReviewDueDate,
 } from "./morning-review-linear.ts";
-import { prefetchMorningReviewData } from "./morning-review-prefetch.ts";
-import { applyMorningReviewDailyNote } from "./daily-note-automation.ts";
+import {
+  isGoodMorningFeelQuickAction,
+} from "./good-morning.ts";
+import { isDailyCaptureQuickAction } from "./daily-capture.ts";
+import { dispatchAutomationHandler } from "./automation/registry.ts";
+import type { AutomationHandlerContext } from "./automation/types.ts";
 import {
   DAILY_NOTE_FOLDER,
   getTodayDailyNote,
   readDailyNoteStats,
 } from "./daily-note.ts";
 import {
-  isGoodMorningFeelQuickAction,
-} from "./good-morning.ts";
-import {
-  buildGoodMorningChatResponse,
-  filterUrgentLinearIssues,
-} from "./good-morning-response.ts";
-import { runGoodMorningFeelFlow } from "./good-morning-feel.ts";
-import {
   isGoodNightQuickAction,
   isGoodNightReflectionQuickAction,
-  runGoodNightActions,
 } from "./good-night.ts";
-import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
-import { buildGoodNightChatResponse } from "./good-night-response.ts";
+import {
+  findPdfAttachmentMeta,
+  isLetterConfirmQuickAction,
+  isLetterQuickAction,
+  runLetterConfirmFlow,
+  runLetterInitialFlow,
+} from "./letter.ts";
 import {
   runGoodMorningDashboardFlow,
   runGoodMorningFeelDashboardFlow,
   runGoodNightDashboardFlow,
   runGoodNightReflectionDashboardFlow,
 } from "./dashboard-flows.ts";
+import {
+  getExecutionMode,
+  isTestExecutionMode,
+} from "./execution-mode.ts";
 import { getMcpServersForSelection } from "./mcp.ts";
 import { isDestructiveShellCommand } from "./shell-policy.ts";
 import { getWorkspaceCustomTools } from "./workspace-tools.ts";
@@ -245,6 +249,15 @@ function scheduleLinearAvatarBackfill(runId: string, event: AgentEvent): void {
     });
 }
 
+function broadcastAssistantMessage(runId: string, text: string): void {
+  if (!text) return;
+  broadcast(runId, {
+    type: "message.delta",
+    runId,
+    text,
+  });
+}
+
 const app = new Hono();
 
 app.use(
@@ -383,18 +396,13 @@ app.post("/flows/good-morning/feel", async (c) => {
   }
 
   prepareWorkspace(notesPath, port, token);
-  const settings = loadSettings();
-  const model = getSelectedModelSelection(settings);
-  const agent = await createEphemeralAgent(notesPath, model);
 
   try {
-    const result = await runGoodMorningFeelDashboardFlow(notesPath, answer, agent);
+    const result = await runGoodMorningFeelDashboardFlow(notesPath, answer);
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Good morning feel failed";
     return c.json({ error: message }, 500);
-  } finally {
-    await disposeEphemeralAgent(agent);
   }
 });
 
@@ -426,18 +434,13 @@ app.post("/flows/good-night/reflection", async (c) => {
   }
 
   prepareWorkspace(notesPath, port, token);
-  const settings = loadSettings();
-  const model = getSelectedModelSelection(settings);
-  const agent = await createEphemeralAgent(notesPath, model);
 
   try {
-    const result = await runGoodNightReflectionDashboardFlow(notesPath, body.answers, agent);
+    const result = await runGoodNightReflectionDashboardFlow(notesPath, body.answers);
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Good night reflection failed";
     return c.json({ error: message }, 500);
-  } finally {
-    await disposeEphemeralAgent(agent);
   }
 });
 
@@ -463,8 +466,10 @@ app.get("/settings", async (c) => {
     modelMode,
     modelId,
     modelName,
+    executionMode: getExecutionMode(settings),
     issueLinkMode: settings.issueLinkMode ?? "external",
     defaultModelMode: "auto",
+    defaultExecutionMode: "live",
     defaultNotesPath: join(homedir(), "notes"),
     userProfilePath: getUserProfilePath(),
     agentProfilePath: getAgentProfilePath(),
@@ -476,19 +481,25 @@ app.put("/settings", async (c) => {
     notesPath?: string;
     vaultName?: string | null;
     modelMode?: string;
+    executionMode?: string;
     issueLinkMode?: string;
   };
   const notesPath = body.notesPath?.trim();
   const modelMode = body.modelMode?.trim();
+  const executionMode = body.executionMode?.trim();
   const hasVaultName = body.vaultName !== undefined;
   const hasIssueLinkMode = body.issueLinkMode !== undefined;
 
-  if (!notesPath && !modelMode && !hasVaultName && !hasIssueLinkMode) {
-    return c.json({ error: "notesPath, vaultName, modelMode, or issueLinkMode is required" }, 400);
+  if (!notesPath && !modelMode && !executionMode && !hasVaultName && !hasIssueLinkMode) {
+    return c.json({ error: "notesPath, vaultName, modelMode, executionMode, or issueLinkMode is required" }, 400);
   }
 
   if (modelMode && modelMode !== "auto" && modelMode !== "max") {
     return c.json({ error: "modelMode must be auto or max" }, 400);
+  }
+
+  if (executionMode && executionMode !== "live" && executionMode !== "test") {
+    return c.json({ error: "executionMode must be live or test" }, 400);
   }
 
   if (
@@ -519,6 +530,10 @@ app.put("/settings", async (c) => {
     }
   }
 
+  if (executionMode === "live" || executionMode === "test") {
+    settings.executionMode = executionMode;
+  }
+
   if (hasIssueLinkMode) {
     settings.issueLinkMode = body.issueLinkMode === "internal" ? "internal" : "external";
   }
@@ -542,6 +557,7 @@ app.put("/settings", async (c) => {
     modelMode: resolvedMode,
     modelId: getSelectedModelId(next),
     modelName,
+    executionMode: getExecutionMode(next),
     issueLinkMode: next.issueLinkMode ?? "external",
   });
 });
@@ -710,6 +726,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
     attachments?: Array<{ name?: string; mimeType?: string; data?: string }>;
     toolPins?: ToolPinSelection;
     quickActionId?: string;
+    captureTime?: string;
   };
   const text = body.text?.trim() ?? "";
   const attachments = (body.attachments ?? []).map((attachment) => ({
@@ -748,8 +765,11 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isGoodMorningFeel = isGoodMorningFeelQuickAction(body.quickActionId);
   const isGoodNightInitial = isGoodNightQuickAction(body.quickActionId);
   const isGoodNightReflection = isGoodNightReflectionQuickAction(body.quickActionId);
-  const isStructuredQuickAction = isMorningReview || isGoodNightInitial;
-  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection
+  const isLetterInitial = isLetterQuickAction(body.quickActionId);
+  const isLetterConfirm = isLetterConfirmQuickAction(body.quickActionId);
+  const isDailyCapture = isDailyCaptureQuickAction(body.quickActionId);
+  const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
+  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture
     ? {
         obsidian: false,
         linear: false,
@@ -852,15 +872,14 @@ app.post("/sessions/:sessionId/messages", async (c) => {
 
       let messageForAgent = userMessage;
 
-      if (isMorningReview) {
-        const prefetched = await prefetchMorningReviewData();
-
-        const logPrefetchStep = (
-          stepId: string,
-          kind: ToolCategory,
-          label: string,
-          status: "completed" | "error",
-        ) => {
+      const automationHandlerContext: AutomationHandlerContext = {
+        runId,
+        text,
+        notesPath,
+        timezone: loadUserTimezone(),
+        captureTime: body.captureTime?.trim() || undefined,
+        selectedModel: isTestExecutionMode() ? undefined : selectedModel,
+        logStep: (stepId, kind, label, status, toolName = "automation") => {
           broadcast(runId, {
             type: "activity.step",
             runId,
@@ -868,242 +887,37 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             kind,
             label,
             status,
-            toolName: "morning_review",
+            toolName,
           });
-        };
-
-        if (prefetched.errors.weather) {
-          logPrefetchStep(`morning-weather-${runId}`, "generic", `Weather fetch failed: ${prefetched.errors.weather}`, "error");
-        } else if (prefetched.weather) {
-          logPrefetchStep(`morning-weather-${runId}`, "generic", "Loaded today's weather", "completed");
-        }
-
-        if (prefetched.errors.whoop) {
-          logPrefetchStep(`morning-whoop-${runId}`, "whoop", `Whoop fetch failed: ${prefetched.errors.whoop}`, "error");
-        } else if (prefetched.whoop) {
-          logPrefetchStep(`morning-whoop-${runId}`, "whoop", "Loaded today's Whoop snapshot", "completed");
-        } else {
-          logPrefetchStep(`morning-whoop-${runId}`, "whoop", "No Whoop data for today", "completed");
-        }
-
-        if (prefetched.errors.linear) {
-          logPrefetchStep(`morning-linear-${runId}`, "linear", `Linear fetch failed: ${prefetched.errors.linear}`, "error");
-        } else {
-          logPrefetchStep(
-            `morning-linear-${runId}`,
-            "linear",
-            prefetched.linearIssues.length > 0
-              ? `Loaded ${prefetched.linearIssues.length} Linear issue(s) due today`
-              : "No Linear issues due today",
-            "completed",
-          );
-        }
-
-        if (prefetched.errors.calendar) {
-          logPrefetchStep(`morning-calendar-${runId}`, "calendar", `Calendar fetch failed: ${prefetched.errors.calendar}`, "error");
-        } else {
-          logPrefetchStep(
-            `morning-calendar-${runId}`,
-            "calendar",
-            prefetched.calendar.events.length > 0
-              ? `Loaded ${prefetched.calendar.events.length} calendar event(s) for today`
-              : "No calendar events today",
-            "completed",
-          );
-        }
-
-        try {
-          applyMorningReviewDailyNote(notesPath, {
-            whoop: prefetched.whoop,
-            weather: prefetched.weather,
-            timezone: loadUserTimezone(),
-          });
-          logPrefetchStep(
-            `morning-obsidian-${runId}`,
-            "notes",
-            "Updated today's daily note with wake time, sleep, weather, and recovery",
-            "completed",
-          );
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          logPrefetchStep(
-            `morning-obsidian-${runId}`,
-            "notes",
-            `Daily note update failed: ${message}`,
-            "error",
-          );
-        }
-
-        const urgentIssues = filterUrgentLinearIssues(prefetched.linearIssues);
-        if (urgentIssues.length > 0) {
-          const urgentEvent = {
-            type: "entities.created" as const,
-            runId,
-            entityType: "linear_issue" as const,
-            items: urgentIssues,
-          };
-          broadcast(runId, urgentEvent);
-          scheduleLinearAvatarBackfill(runId, urgentEvent);
-        }
-
-        const response = buildGoodMorningChatResponse({
-          firstName: loadUserFirstName(),
-          linearIssues: prefetched.linearIssues,
-          whoop: prefetched.whoop,
-        });
-
-        state.lastAssistantText = response;
-        broadcast(runId, {
-          type: "message.delta",
-          runId,
-          text: response,
-        });
-
-        completeRun(runId, state, "finished");
-        return;
-      }
-
-      if (isGoodNightInitial) {
-        const result = await runGoodNightActions(notesPath);
-
-        const logGoodNightStep = (
-          stepId: string,
-          kind: ToolCategory,
-          label: string,
-          status: "completed" | "error",
-        ) => {
+        },
+        broadcastAssistantMessage: (assistantText) => broadcastAssistantMessage(runId, assistantText),
+        setLastAssistantText: (assistantText) => {
+          state.lastAssistantText = assistantText;
+        },
+        completeFinished: () => completeRun(runId, state, "finished"),
+        completeFailed: (message) => {
           broadcast(runId, {
-            type: "activity.step",
+            type: "run.failed",
             runId,
-            stepId,
-            kind,
-            label,
-            status,
-            toolName: "good_night",
+            message,
           });
-        };
+          completeRun(runId, state, "error");
+        },
+        broadcast: (event) => broadcast(runId, event as AgentEvent),
+        scheduleLinearAvatarBackfill,
+      };
 
-        if (result.errors.whoop) {
-          logGoodNightStep(
-            `good-night-whoop-${runId}`,
-            "whoop",
-            `Whoop fetch failed: ${result.errors.whoop}`,
-            "error",
-          );
-        } else if (result.whoop) {
-          logGoodNightStep(
-            `good-night-whoop-${runId}`,
-            "whoop",
-            result.whoop.strainScore != null
-              ? `Loaded today's strain (${result.whoop.strainScore})`
-              : "Loaded today's Whoop snapshot",
-            "completed",
-          );
-        } else {
-          logGoodNightStep(`good-night-whoop-${runId}`, "whoop", "No Whoop data for today", "completed");
-        }
-
-        if (result.errors.obsidian) {
-          logGoodNightStep(
-            `good-night-obsidian-${runId}`,
-            "notes",
-            `Daily note update failed: ${result.errors.obsidian}`,
-            "error",
-          );
-        } else if (result.dailyNoteUpdate) {
-          const productivityLabel =
-            result.productivityScore != null
-              ? `, productivity ${result.productivityScore} (${result.completedIssues.count} issues completed)`
-              : "";
-          logGoodNightStep(
-            `good-night-obsidian-${runId}`,
-            "notes",
-            `Updated ${result.dailyNoteUpdate.path} with bedtime, strain, recovery, and productivity${productivityLabel}`,
-            "completed",
-          );
-        }
-
-        if (result.errors.linearCompleted) {
-          logGoodNightStep(
-            `good-night-linear-completed-${runId}`,
-            "linear",
-            `Completed issues fetch failed: ${result.errors.linearCompleted}`,
-            "error",
-          );
-        } else {
-          logGoodNightStep(
-            `good-night-linear-completed-${runId}`,
-            "linear",
-            `${result.completedIssues.count} Linear issue(s) completed today`,
-            "completed",
-          );
-        }
-
-        if (result.errors.linear) {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            `Linear rollover failed: ${result.errors.linear}`,
-            "error",
-          );
-        } else if (result.linear.moved.length > 0) {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            `Moved ${result.linear.moved.length} Linear issue(s) to ${result.linear.tomorrowDate}`,
-            "completed",
-          );
-        } else if (result.linear.failed.length > 0) {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            `Failed to move ${result.linear.failed.length} Linear issue(s) to tomorrow`,
-            "error",
-          );
-        } else {
-          logGoodNightStep(
-            `good-night-linear-${runId}`,
-            "linear",
-            "No Linear issues due today to move",
-            "completed",
-          );
-        }
-
-        if (result.completedIssues.issues.length > 0) {
-          const completedEvent = {
-            type: "entities.created" as const,
-            runId,
-            entityType: "linear_issue_completed" as const,
-            items: result.completedIssues.issues,
-          };
-          broadcast(runId, completedEvent);
-          scheduleLinearAvatarBackfill(runId, {
-            ...completedEvent,
-            entityType: "linear_issue",
-          });
-        }
-
-        const response = buildGoodNightChatResponse({
-          firstName: loadUserFirstName(),
-          movedIssueCount: result.linear.moved.length,
-          completedIssueCount: result.completedIssues.count,
-          productivityScore: result.productivityScore,
-          whoop: result.whoop,
-        });
-
-        state.lastAssistantText = response;
-        broadcast(runId, {
-          type: "message.delta",
-          runId,
-          text: response,
-        });
-
-        completeRun(runId, state, "finished");
+      if (await dispatchAutomationHandler(body.quickActionId, automationHandlerContext)) {
         return;
       }
 
-      if (isGoodNightReflection) {
-        const logReflectionStep = (
+      if (isLetterInitial) {
+        const pdf = findPdfAttachmentMeta(attachmentMeta, attachments);
+        if (!pdf) {
+          throw new Error("Attach a PDF letter before running /letter.");
+        }
+
+        const logLetterStep = (
           stepId: string,
           label: string,
           status: "completed" | "error" | "running",
@@ -1112,58 +926,29 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             type: "activity.step",
             runId,
             stepId,
-            kind: "generic",
+            kind: "notes",
             label,
             status,
-            toolName: "good_night_reflection",
+            toolName: "letter_intake",
           });
         };
 
-        const polishStepId = `good-night-reflection-polish-${runId}`;
-        logReflectionStep(polishStepId, "Polishing your evening reflection", "running");
+        logLetterStep(`letter-read-${runId}`, "Reading the PDF letter", "running");
 
         try {
-          const result = await runGoodNightReflectionFlow(notesPath, text, {
-            agent,
-            model: selectedModel,
-            timezone: loadUserTimezone(),
+          const result = await runLetterInitialFlow(notesPath, sessionId, pdf, {
+            model: isTestExecutionMode() ? undefined : selectedModel,
           });
 
-          logReflectionStep(polishStepId, "Polished evening reflection", "completed");
-
-          broadcast(runId, {
-            type: "tool.completed",
-            runId,
-            toolCallId: `good-night-reflection-daily-note-${runId}`,
-            toolName: "write_workspace_file",
-            category: "notes",
-            structured: {
-              type: "file_diff",
-              path: result.dailyNoteUpdate.path,
-              summary: `Updated ${result.dailyNoteUpdate.path} with evening reflection`,
-            },
-          });
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId: `good-night-reflection-note-${runId}`,
-            kind: "notes",
-            label: `Updated ${result.dailyNoteUpdate.path} with evening reflection`,
-            status: "completed",
-            toolName: "good_night_reflection",
-          });
+          logLetterStep(`letter-read-${runId}`, "Analyzed the PDF letter", "completed");
 
           state.lastAssistantText = result.response;
-          broadcast(runId, {
-            type: "message.delta",
-            runId,
-            text: result.response,
-          });
+          broadcastAssistantMessage(runId, result.response);
 
           completeRun(runId, state, "finished");
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Good night reflection failed";
-          logReflectionStep(polishStepId, message, "error");
+          const message = error instanceof Error ? error.message : "Letter intake failed";
+          logLetterStep(`letter-read-${runId}`, message, "error");
           broadcast(runId, {
             type: "run.failed",
             runId,
@@ -1174,8 +959,8 @@ app.post("/sessions/:sessionId/messages", async (c) => {
         return;
       }
 
-      if (isGoodMorningFeel) {
-        const logFeelStep = (
+      if (isLetterConfirm) {
+        const logLetterConfirmStep = (
           stepId: string,
           label: string,
           status: "completed" | "error" | "running",
@@ -1184,58 +969,42 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             type: "activity.step",
             runId,
             stepId,
-            kind: "generic",
+            kind: "notes",
             label,
             status,
-            toolName: "good_morning_feel",
+            toolName: "letter_confirm",
           });
         };
 
-        const polishStepId = `good-morning-feel-polish-${runId}`;
-        logFeelStep(polishStepId, "Polishing your feel line", "running");
+        logLetterConfirmStep(`letter-file-${runId}`, "Filing the letter in your vault", "running");
 
         try {
-          const result = await runGoodMorningFeelFlow(notesPath, text, {
-            agent,
-            model: selectedModel,
-            timezone: loadUserTimezone(),
+          const result = await runLetterConfirmFlow(notesPath, sessionId, text, {
+            model: isTestExecutionMode() ? undefined : selectedModel,
           });
 
-          logFeelStep(polishStepId, "Polished feel line", "completed");
+          logLetterConfirmStep(`letter-file-${runId}`, "Filed the letter in Letters/", "completed");
 
           broadcast(runId, {
             type: "tool.completed",
             runId,
-            toolCallId: `good-morning-feel-daily-note-${runId}`,
+            toolCallId: `letter-wrapper-${runId}`,
             toolName: "write_workspace_file",
             category: "notes",
             structured: {
               type: "file_diff",
-              path: result.dailyNoteUpdate.path,
-              summary: `Updated ${result.dailyNoteUpdate.lines.join(", ")}`,
+              path: result.filing.wrapperPath,
+              summary: `Created letter note ${result.filing.wrapperPath}`,
             },
-          });
-          broadcast(runId, {
-            type: "activity.step",
-            runId,
-            stepId: `good-morning-feel-note-${runId}`,
-            kind: "notes",
-            label: `Updated ${result.dailyNoteUpdate.path} with feel line`,
-            status: "completed",
-            toolName: "good_morning_feel",
           });
 
           state.lastAssistantText = result.response;
-          broadcast(runId, {
-            type: "message.delta",
-            runId,
-            text: result.response,
-          });
+          broadcastAssistantMessage(runId, result.response);
 
           completeRun(runId, state, "finished");
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Good morning feel failed";
-          logFeelStep(polishStepId, message, "error");
+          const message = error instanceof Error ? error.message : "Letter filing failed";
+          logLetterConfirmStep(`letter-file-${runId}`, message, "error");
           broadcast(runId, {
             type: "run.failed",
             runId,

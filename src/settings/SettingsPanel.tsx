@@ -10,6 +10,7 @@ import {
 import type { LinearIssueLinkMode } from "../chat/types";
 import { useTts } from "../hooks/useTts";
 import { getSettings, updateSettings } from "../lib/api";
+import { LinearProjectPicker } from "./LinearProjectPicker";
 import { setLinearIssueLinkMode } from "../lib/linear/linearLink";
 import { openLocalFile } from "../lib/openExternalUrl";
 import { resolveProfilePaths } from "../lib/profilePaths";
@@ -35,6 +36,7 @@ export function SettingsPanel({
   const [manualVaultName, setManualVaultName] = useState(vaultName ?? "");
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [issueLinkMode, setIssueLinkMode] = useState<LinearIssueLinkMode>("external");
+  const [groceryLinearProjectId, setGroceryLinearProjectId] = useState<string>("");
   const [userProfilePath, setUserProfilePath] = useState<string | null>(
     initialUserProfilePath ?? null,
   );
@@ -56,6 +58,9 @@ export function SettingsPanel({
       if (settings?.issueLinkMode) {
         setIssueLinkMode(settings.issueLinkMode);
         setLinearIssueLinkMode(settings.issueLinkMode);
+      }
+      if (settings?.groceryLinearProjectId) {
+        setGroceryLinearProjectId(settings.groceryLinearProjectId);
       }
       const paths = await resolveProfilePaths({
         userProfilePath: initialUserProfilePath ?? settings?.userProfilePath,
@@ -90,12 +95,14 @@ export function SettingsPanel({
         vaultName: manualVaultName.trim() || null,
         ...settingsFromComposerMode(composerMode),
         issueLinkMode,
+        groceryLinearProjectId: groceryLinearProjectId || null,
       });
       setComposerMode(
         composerModeFromSettings(result.executionMode, result.modelMode),
       );
       setIssueLinkMode(result.issueLinkMode);
       setLinearIssueLinkMode(result.issueLinkMode);
+      setGroceryLinearProjectId(result.groceryLinearProjectId ?? "");
       onUpdated(manualPath, result.vaultName ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
@@ -192,6 +199,21 @@ export function SettingsPanel({
       <p className="settings-hint settings-hint-spaced">
         Application URL uses the Linear desktop app via <code>linear://</code> links.
       </p>
+
+      <label className="settings-field-label" htmlFor="grocery-linear-project">
+        Grocery list project
+      </label>
+      <p className="settings-hint">
+        Weekly grocery items are added as checkboxes on a Linear issue in this project.
+      </p>
+      <div className="settings-row settings-row-project-picker">
+        <LinearProjectPicker
+          id="grocery-linear-project"
+          value={groceryLinearProjectId}
+          disabled={saving}
+          onChange={setGroceryLinearProjectId}
+        />
+      </div>
 
       <h2 className="settings-section-title">Composer</h2>
       <p>

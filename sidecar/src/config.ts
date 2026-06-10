@@ -58,6 +58,12 @@ export function getCursorApiKey(): string | undefined {
   return process.env.CURSOR_API_KEY;
 }
 
+export function getGeminiApiKey(): string | undefined {
+  return process.env.GEMINI_API_KEY?.trim() || undefined;
+}
+
+export const GEMINI_LOOKUP_MODEL = process.env.GEMINI_LOOKUP_MODEL?.trim() || "gemini-2.5-flash";
+
 export function getNotesDirOverride(): string | undefined {
   const value = process.env.NOTES_DIR?.trim();
   return value || undefined;

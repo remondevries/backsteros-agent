@@ -1,12 +1,15 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MorningReviewWeather } from "./morning-review-weather.ts";
+import { formatDailyCaptureLogEntry } from "./daily-capture.ts";
+import { loadUserTimezone } from "./context/profile.ts";
 import {
   defaultDailyNoteContent,
   ensureDailyNoteJournalStructure,
   formatDateInTimezone,
   formatMetricValue,
   getTodayDailyNote,
+  appendDayLogLine,
   upsertEveningReflectionSection,
   upsertFrontmatterFields,
   upsertMetricAfterInDayLog,
@@ -405,5 +408,48 @@ export function applyGoodNightReflectionDailyNote(
     updated: content !== baseContent,
     created: note.created,
     lines: ["## Evening reflection"],
+  };
+}
+
+export function applyDailyCaptureDailyNote(
+  notesPath: string,
+  text: string,
+  options: {
+    timezone?: string;
+    now?: Date;
+    logTime?: string;
+  } = {},
+): DailyNoteWriteResult {
+  const timezone = options.timezone ?? loadUserTimezone();
+  const now = options.now ?? new Date();
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error("Daily capture message is empty");
+  }
+
+  const note = getTodayDailyNote(notesPath, {
+    includeContent: true,
+    createIfMissing: true,
+    timezone,
+    now,
+  });
+
+  if (!note.exists) {
+    throw new Error(`Daily note not found at ${note.path}`);
+  }
+
+  let content = note.content ?? defaultDailyNoteContent(note.date);
+  const baseContent = content;
+  content = ensureDailyNoteJournalStructure(content, note.date);
+  const line = formatDailyCaptureLogEntry(trimmed, timezone, { now, logTime: options.logTime });
+  content = appendDayLogLine(content, line, note.date);
+
+  writeFileSync(join(notesPath, note.path), content, "utf8");
+
+  return {
+    path: note.path,
+    updated: content !== baseContent,
+    created: note.created,
+    lines: [line],
   };
 }

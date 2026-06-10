@@ -1,13 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AssistantMessageContent } from "./AssistantMessageContent";
+import { DotScrollLoader } from "./DotScrollLoader";
 import {
   contentHasInlineTokens,
   logicalContentLength,
   sliceContentForTyping,
 } from "./inlineContentTokens";
+import {
+  canLeaveLoadingPhase,
+  RESPONSE_CURSOR_MS,
+  type ResponsePresentationPhase,
+} from "./responsePresentation";
 
 const CHARS_PER_TICK = 2;
 const TICK_MS = 22;
+const LOADING_POLL_MS = 50;
 
 function stripUnclosedInlineMarkdown(slice: string): string {
   const fenceCount = (slice.match(/```/g) ?? []).length;
@@ -49,7 +56,6 @@ function stripUnclosedInlineMarkdown(slice: string): string {
     slice = slice.slice(0, slice.lastIndexOf("`"));
   }
 
-  // Single-asterisk italic: count * that are not part of **.
   let singleAsteriskCount = 0;
   for (let index = 0; index < slice.length; index += 1) {
     if (slice[index] !== "*") continue;
@@ -81,62 +87,96 @@ function visibleMarkdownSlice(text: string, length: number): string {
 export function TerminalTypingText({
   text,
   running,
+  startedAt,
   readingAloud = false,
-  liveStream = false,
-  typingAnimated = false,
   onTypingComplete,
   onOpenLinearDashboard,
   onOpenWhoopDashboard,
+  animate = true,
 }: {
   text: string;
   running: boolean;
+  startedAt?: number;
   readingAloud?: boolean;
-  liveStream?: boolean;
-  typingAnimated?: boolean;
+  animate?: boolean;
   onTypingComplete?: () => void;
   onOpenLinearDashboard?: () => void;
   onOpenWhoopDashboard?: () => void;
 }) {
+  const presentationStartedAtRef = useRef(startedAt ?? Date.now());
   const hasInlineTokens = contentHasInlineTokens(text);
   const targetLength = hasInlineTokens ? logicalContentLength(text) : text.length;
-  const shouldRevealProgressively = typingAnimated && !liveStream;
-
-  const [displayedLength, setDisplayedLength] = useState(() =>
-    shouldRevealProgressively ? 0 : targetLength,
-  );
+  const [phase, setPhase] = useState<ResponsePresentationPhase>(() => (animate ? "loading" : "typing"));
+  const [displayedLength, setDisplayedLength] = useState(() => (animate ? 0 : targetLength));
 
   useEffect(() => {
-    if (!shouldRevealProgressively) {
+    if (!animate) {
+      setPhase("typing");
       setDisplayedLength(targetLength);
-      return;
     }
+  }, [animate, targetLength]);
 
-    if (displayedLength >= targetLength) {
-      return;
-    }
+  useEffect(() => {
+    if (!animate || phase !== "loading") return;
+
+    const tryAdvance = () => {
+      const elapsedMs = Date.now() - presentationStartedAtRef.current;
+      if (canLeaveLoadingPhase(elapsedMs, text, running)) {
+        setPhase("cursor");
+      }
+    };
+
+    tryAdvance();
+    const timer = window.setInterval(tryAdvance, LOADING_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [animate, phase, text, running]);
+
+  useEffect(() => {
+    if (!animate || phase !== "cursor") return;
+
+    const timer = window.setTimeout(() => {
+      setDisplayedLength(0);
+      setPhase("typing");
+    }, RESPONSE_CURSOR_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
+  useEffect(() => {
+    if (!animate || phase !== "typing") return;
+    if (displayedLength >= targetLength) return;
 
     const timer = window.setInterval(() => {
       setDisplayedLength((current) => Math.min(current + CHARS_PER_TICK, targetLength));
     }, TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [text, displayedLength, shouldRevealProgressively, targetLength]);
+  }, [phase, text, displayedLength, targetLength]);
 
-  const displayed = hasInlineTokens
-    ? sliceContentForTyping(text, displayedLength)
-    : visibleMarkdownSlice(text, displayedLength);
-  const isThinking = running && text.length === 0;
+  const displayed =
+    phase === "typing"
+      ? hasInlineTokens
+        ? sliceContentForTyping(text, displayedLength)
+        : visibleMarkdownSlice(text, displayedLength)
+      : "";
   const caughtUp = displayedLength >= targetLength;
+  const showStreamingCursor = phase === "typing" && running && !caughtUp;
 
   useEffect(() => {
-    if (!running && caughtUp && text.length > 0) {
+    if (phase === "typing" && !running && caughtUp && text.length > 0) {
       onTypingComplete?.();
     }
-  }, [running, caughtUp, text.length, onTypingComplete]);
+  }, [phase, running, caughtUp, text.length, onTypingComplete]);
 
-  const showCursor = isThinking || !caughtUp || running;
+  if (phase === "loading") {
+    return (
+      <div className="assistant-text terminal-message terminal-message-loading">
+        <DotScrollLoader aria-label="Thinking" />
+      </div>
+    );
+  }
 
-  if (isThinking) {
+  if (phase === "cursor") {
     return (
       <div className="assistant-text terminal-message terminal-message-thinking">
         <span className="terminal-cursor" aria-hidden="true">
@@ -163,7 +203,7 @@ export function TerminalTypingText({
           onOpenWhoopDashboard={onOpenWhoopDashboard}
         />
       )}
-      {showCursor && (
+      {showStreamingCursor && (
         <span className="terminal-cursor" aria-hidden="true">
           ▌
         </span>

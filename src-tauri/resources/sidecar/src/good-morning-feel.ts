@@ -1,6 +1,7 @@
 import type { SDKAgent, ModelSelection } from "@cursor/sdk";
 import { createEphemeralAgent, disposeEphemeralAgent, sendPolishPrompt } from "./agent.ts";
 import { applyGoodMorningFeelDailyNote, type DailyNoteWriteResult } from "./daily-note-automation.ts";
+import { buildUpdateConfirmationToken } from "./update-confirmation.ts";
 import {
   formatDateInTimezone,
   readDailyNoteStats,
@@ -131,8 +132,8 @@ export function buildYesterdayEncouragement(rating: YesterdayDayRating["rating"]
   }
 }
 
-export function buildGoodMorningFeelResponse(rating: YesterdayDayRating["rating"]): string {
-  return `Thank you — enjoy the day!\n\n${buildYesterdayEncouragement(rating)}`;
+export function buildGoodMorningFeelResponse(): string {
+  return buildUpdateConfirmationToken("update", "daily note");
 }
 
 export function loadYesterdayDayRating(
@@ -223,11 +224,9 @@ export async function runGoodMorningFeelFlow(
     now,
   });
 
-  const yesterday = loadYesterdayDayRating(notesPath, timezone, now);
-
   return {
     polishedFeel,
     dailyNoteUpdate,
-    response: buildGoodMorningFeelResponse(yesterday.rating),
+    response: buildGoodMorningFeelResponse(),
   };
 }

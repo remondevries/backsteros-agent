@@ -72,38 +72,40 @@ export function RunUiPreviewPanel({ onClose }: { onClose: () => void }) {
     <div className="run-ui-preview-overlay" role="dialog" aria-modal="true" aria-label="Run UI preview">
       <div className="run-ui-preview-backdrop" onClick={onClose} aria-hidden="true" />
       <section className="run-ui-preview">
-        <div className="run-ui-preview-toolbar">
-        <div className="run-ui-preview-toolbar-main">
-          <span className="run-ui-preview-label">UI preview</span>
-          {FIXTURE_GROUPS.map((group) => (
-            <div key={group.title} className="run-ui-preview-group">
-              <span className="run-ui-preview-group-label">{group.title}</span>
-              <div className="run-ui-preview-scenarios">
-                {RUN_FIXTURES.filter((item) => item.id.startsWith(group.prefix)).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`run-ui-preview-scenario ${item.id === fixtureId ? "active" : ""}`}
-                    onClick={() => selectFixture(item.id)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+        <aside className="run-ui-preview-sidebar">
+          <div className="run-ui-preview-sidebar-header">
+            <span className="run-ui-preview-label">UI preview</span>
+            <button
+              type="button"
+              className="run-ui-preview-close"
+              onClick={onClose}
+              aria-label="Close UI preview"
+            >
+              ×
+            </button>
+          </div>
+          <nav className="run-ui-preview-nav" aria-label="Run UI preview scenarios">
+            {FIXTURE_GROUPS.map((group) => (
+              <div key={group.title} className="run-ui-preview-group">
+                <span className="run-ui-preview-group-label">{group.title}</span>
+                <div className="run-ui-preview-scenarios">
+                  {RUN_FIXTURES.filter((item) => item.id.startsWith(group.prefix)).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`run-ui-preview-scenario ${item.id === fixtureId ? "active" : ""}`}
+                      onClick={() => selectFixture(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="run-ui-preview-close"
-          onClick={onClose}
-          aria-label="Close UI preview"
-        >
-          ×
-        </button>
-      </div>
+            ))}
+          </nav>
+        </aside>
 
-      <div className="run-ui-preview-stage">
+        <div className="run-ui-preview-stage">
         <div className="chat-turn run-ui-preview-turn">
           <div className="chat-message user">
             <div className="bubble">{fixture.userMessage}</div>

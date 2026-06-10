@@ -12,6 +12,14 @@ function isModKey(event: KeyboardEvent): boolean {
   return event.metaKey || event.ctrlKey;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+}
+
 async function closeAppWindow() {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -54,6 +62,7 @@ export function useSessionTabShortcuts(
       }
 
       if (!event.shiftKey) return;
+      if (isEditableTarget(event.target)) return;
 
       if (key === "[" || event.key === "ArrowLeft") {
         event.preventDefault();

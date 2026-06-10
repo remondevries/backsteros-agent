@@ -8,6 +8,8 @@ import {
   buildInlineContentParts,
   contentHasInlineTokens,
 } from "./inlineContentTokens";
+import { EmphasisLabel, WhoopSleepDurationLabel } from "./EmphasisLabel";
+import { LinearIssueLinkLabel } from "./LinearIssueLinkLabel";
 import { LinearIssuesCountLabel } from "./LinearIssuesCountLabel";
 import { WhoopSleepScoreLabel } from "./WhoopSleepScoreLabel";
 import { WhoopRecoveryScoreLabel } from "./WhoopRecoveryScoreLabel";
@@ -56,12 +58,36 @@ function renderInlineParts(
       return <span key={`text-${index}`}>{part.value}</span>;
     }
 
-    if (part.type === "linear-issues-count") {
+    if (part.type === "linear-issues-count" || part.type === "linear-completed-count" || part.type === "linear-moved-count") {
       return (
         <LinearIssuesCountLabel
-          key={`linear-${index}-${part.count}`}
+          key={`${part.type}-${index}-${part.count}`}
           count={part.count}
           onClick={() => handlers.onOpenLinearDashboard?.()}
+        />
+      );
+    }
+
+    if (part.type === "linear-issue-link" && part.url) {
+      return (
+        <LinearIssueLinkLabel
+          key={`linear-issue-link-${index}-${part.url}`}
+          label={part.label}
+          url={part.url}
+        />
+      );
+    }
+
+    if (part.type === "emphasis") {
+      return <EmphasisLabel key={`emphasis-${index}-${part.text}`} text={part.text} />;
+    }
+
+    if (part.type === "whoop-sleep-duration") {
+      return (
+        <WhoopSleepDurationLabel
+          key={`whoop-sleep-duration-${index}-${part.duration}`}
+          duration={part.duration}
+          onClick={() => handlers.onOpenWhoopDashboard?.()}
         />
       );
     }
@@ -86,14 +112,24 @@ function renderInlineParts(
       );
     }
 
-    return (
-      <WhoopStrainScoreLabel
-        key={`whoop-strain-${index}-${part.score}`}
-        score={part.score}
-        onClick={() => handlers.onOpenWhoopDashboard?.()}
-      />
-    );
+    if (part.type === "whoop-strain-score" || part.type === "whoop-strain-target") {
+      return (
+        <WhoopStrainScoreLabel
+          key={`${part.type}-${index}-${part.score}`}
+          score={part.score}
+          onClick={() => handlers.onOpenWhoopDashboard?.()}
+        />
+      );
+    }
+
+    return null;
   });
+}
+
+const LINEAR_ISSUE_LINK_ONLY_RE = /^\{\{linear-issue-link:[^}]+\}\}$/;
+
+function isLinearIssueLinkOnlyLine(line: string): boolean {
+  return LINEAR_ISSUE_LINK_ONLY_RE.test(line.trim());
 }
 
 function InlineParagraph({
@@ -115,7 +151,15 @@ function InlineParagraph({
         }
 
         return (
-          <p key={`line-${lineIndex}`} className="assistant-inline-paragraph">
+          <p
+            key={`line-${lineIndex}`}
+            className={[
+              "assistant-inline-paragraph",
+              isLinearIssueLinkOnlyLine(line) ? "assistant-inline-paragraph--issue-link" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             {renderInlineParts(line, { onOpenLinearDashboard, onOpenWhoopDashboard })}
           </p>
         );

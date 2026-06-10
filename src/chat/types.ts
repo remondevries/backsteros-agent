@@ -255,7 +255,10 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   quickActionId?: string;
-  flowVariant?: "good-morning" | "good-night" | "letter";
+  flowVariant?: "good-morning" | "good-night" | "letter" | "daily-capture" | "grocery-list";
+  /** Links a flow follow-up assistant message to the run that triggered it. */
+  flowRunId?: string;
+  presentation?: "backster";
   attachments?: MessageAttachment[];
   contextChips?: Array<{ id: string; title: string; entityType: string }>;
 }
@@ -326,6 +329,7 @@ export interface AppSettings {
   executionMode?: ExecutionMode;
   defaultExecutionMode?: ExecutionMode;
   issueLinkMode?: LinearIssueLinkMode;
+  groceryLinearProjectId?: string | null;
   userProfilePath?: string;
   agentProfilePath?: string;
 }
@@ -347,6 +351,7 @@ export interface MessageAttachment {
   mimeType: string;
   vaultPath?: string;
   previewUrl?: string;
+  storageId?: string;
 }
 
 export interface AttachmentPreviewTarget {

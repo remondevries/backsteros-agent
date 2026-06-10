@@ -19,11 +19,11 @@ export function AppViewRibbon({
             type="button"
             className={`app-view-ribbon-item ${isActive ? "app-view-ribbon-item-active" : ""}`}
             aria-current={isActive ? "page" : undefined}
+            aria-label={view.label}
             title={view.label}
             onClick={() => onChange(view.id)}
           >
             <span className="app-view-ribbon-icon">{view.icon}</span>
-            <span className="app-view-ribbon-label">{view.label}</span>
           </button>
         );
       })}

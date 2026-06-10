@@ -4,5 +4,10 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>BacksterOS Agent uses the microphone for voice conversations with the agent.</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
 </dict>
 </plist>

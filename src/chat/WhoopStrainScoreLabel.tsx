@@ -1,3 +1,4 @@
+import { InlineDetailPill } from "./InlineDetailPill";
 import { WhoopIcon } from "./WhoopIcon";
 
 export function WhoopStrainScoreLabel({
@@ -10,19 +11,13 @@ export function WhoopStrainScoreLabel({
   const display = Number.isInteger(score) ? String(score) : score.toFixed(1);
 
   return (
-    <button
-      type="button"
-      className="whoop-strain-inline-label"
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClick();
-      }}
-      aria-label={`Whoop strain score ${display} — open Whoop dashboard`}
+    <InlineDetailPill
+      icon={<WhoopIcon size={18} variant="solid" />}
+      value={display}
+      scoreVariant="strain"
+      onClick={onClick}
+      ariaLabel={`Whoop strain score ${display} — open Whoop dashboard`}
       title="Open Whoop dashboard"
-    >
-      <WhoopIcon className="whoop-strain-inline-label-icon" size={12} variant="solid" />
-      <span className="whoop-strain-inline-label-score">{display}</span>
-    </button>
+    />
   );
 }

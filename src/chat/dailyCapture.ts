@@ -2,8 +2,21 @@ export const DAILY_CAPTURE_ACTION_ID = "daily-capture";
 
 export const DAILY_CAPTURE_LABEL = "Daily Capture";
 
+export const DAILY_CAPTURE_MESSAGE_LABEL = "Daily log";
+
+export const DAILY_CAPTURE_CONFIRMATION_MESSAGE =
+  "Thanks, I added this to your daily log.";
+
 export function isDailyCaptureMessage(quickActionId?: string): boolean {
   return quickActionId === DAILY_CAPTURE_ACTION_ID;
+}
+
+export function isDailyCaptureComposerMode(composerQuickActionId?: string | null): boolean {
+  return composerQuickActionId === DAILY_CAPTURE_ACTION_ID;
+}
+
+export function isDailyCaptureFlowMessage(quickActionId?: string): boolean {
+  return isDailyCaptureMessage(quickActionId);
 }
 
 export function shouldShowDailyCaptureChip(composerText: string): boolean {
@@ -27,25 +40,43 @@ export function formatDailyCaptureLogTime(date = new Date()): string {
   return `${hours}:${minutes}`;
 }
 
-export function formatDailyCaptureLogEntry(text: string, date = new Date()): string {
+export function isValidDailyCaptureLogTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim());
+}
+
+export function normalizeDailyCaptureLogTime(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (match) {
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
+
+  if (/^\d{3,4}$/.test(trimmed)) {
+    const padded = trimmed.padStart(4, "0");
+    const hours = Number(padded.slice(0, -2));
+    const minutes = Number(padded.slice(-2));
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
+
+  return null;
+}
+
+export function formatDailyCaptureLogEntry(text: string, logTime?: string): string {
   const body = text.trim();
   if (!body) return "";
-  return `- ${formatDailyCaptureLogTime(date)} — Daily capture: ${body}`;
+  const normalized = logTime ? normalizeDailyCaptureLogTime(logTime) : null;
+  const time = normalized ?? formatDailyCaptureLogTime();
+  return `- ${time} — ${body}`;
 }
 
-export function wrapDailyCaptureLogEntry(entry: string): string {
-  return [
-    "Append the following single line to today's daily note inside ## Day log.",
-    "If ## Day log is missing, create the morning journal structure first:",
-    "## Day log",
-    "- xx",
-    "Append capture bullets after the metric lines and before ## Evening reflection (if present).",
-    "Do not modify the line. Do not write outside ## Day log.",
-    "",
-    entry,
-  ].join("\n");
-}
-
-export function wrapDailyCaptureForAgent(text: string, date = new Date()): string {
-  return wrapDailyCaptureLogEntry(formatDailyCaptureLogEntry(text, date));
+export function parseDailyCaptureLogEntry(text: string): { logTime: string; body: string } | null {
+  const match = text.trim().match(/^-\s*((?:[01]\d|2[0-3]):[0-5]\d)\s*—\s*(.+)$/);
+  if (!match) return null;
+  return { logTime: match[1], body: match[2].trim() };
 }

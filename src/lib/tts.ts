@@ -573,8 +573,14 @@ function splitForSynthesis(text: string, maxLen = SYNTHESIS_MAX_CHARS): string[]
   return chunks.filter(Boolean);
 }
 
+export function shouldFlushStreamingSpeechDelta(cleaned: string): boolean {
+  if (cleaned.length >= STREAM_FLUSH_CHARS) return true;
+  // Require punctuation after a word character so list ordinals like "1." do not flush early.
+  return /[a-zA-Z][.!?][\s)"']*$/.test(cleaned);
+}
+
 function shouldFlushStreamingDelta(cleaned: string): boolean {
-  return cleaned.length >= STREAM_FLUSH_CHARS || /[.!?][\s)"']*$/.test(cleaned);
+  return shouldFlushStreamingSpeechDelta(cleaned);
 }
 
 function enqueueSpeechChunks(

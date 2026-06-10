@@ -65,11 +65,9 @@ describe("good morning feel helpers", () => {
     ).toBe("mixed");
   });
 
-  test("builds simple encouragement copy", () => {
+  test("builds simple feel confirmation copy", () => {
     expect(buildYesterdayEncouragement("good")).toContain("Yesterday was a good day");
-    expect(buildGoodMorningFeelResponse("good")).toBe(
-      "Thank you — enjoy the day!\n\nYesterday was a good day — let's do it again today.",
-    );
+    expect(buildGoodMorningFeelResponse()).toBe("{{update:update|daily note}}");
   });
 
   test("writes feel line after slept in today's note", () => {

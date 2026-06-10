@@ -84,7 +84,30 @@
   --letter-tag-bg-opacity: 18%;
   --letter-tag-border-opacity: 35%;
 
+  --grocery-list-tag-text: #fde68a;
+  --grocery-list-tag-accent: #eab308;
+  --grocery-list-tag-bg-opacity: 18%;
+  --grocery-list-tag-border-opacity: 35%;
+  --grocery-list-tag-clear-opacity: 0.75;
+
   --whoop-strain-accent: #4f81ee;
+
+  --inline-detail-pill-outline: var(--border-hover);
+  --inline-detail-pill-bg: transparent;
+  --inline-detail-pill-icon: var(--border-hover);
+  --inline-detail-pill-icon-hover: #ffffff;
+  --inline-detail-pill-value: #ffffff;
+
+  --backster-logo-gradient: #ffffff;
+  --backster-logo-solid: #000000;
+
+  --gemini-logo-primary: #ffffff;
+  --gemini-logo-secondary: #000000;
+
+  --update-confirmation-check-color: #4ade80;
+
+  --automation-composer-border: #4ade80;
+  --automation-composer-border-opacity: 35%;
 }
 
 @media (prefers-color-scheme: light) {
@@ -174,6 +197,29 @@
     --letter-tag-bg-opacity: 14%;
     --letter-tag-border-opacity: 42%;
 
+    --grocery-list-tag-text: #854d0e;
+    --grocery-list-tag-accent: #ca8a04;
+    --grocery-list-tag-bg-opacity: 14%;
+    --grocery-list-tag-border-opacity: 42%;
+    --grocery-list-tag-clear-opacity: 0.92;
+
     --whoop-strain-accent: #2563eb;
+
+    --inline-detail-pill-outline: var(--border-hover);
+    --inline-detail-pill-bg: transparent;
+    --inline-detail-pill-icon: var(--border-hover);
+    --inline-detail-pill-icon-hover: #1d1d1f;
+    --inline-detail-pill-value: #1d1d1f;
+
+    --backster-logo-gradient: #000000;
+    --backster-logo-solid: #ffffff;
+
+    --gemini-logo-primary: #000000;
+    --gemini-logo-secondary: #ffffff;
+
+    --update-confirmation-check-color: #16a34a;
+
+    --automation-composer-border: #16a34a;
+    --automation-composer-border-opacity: 42%;
   }
 }

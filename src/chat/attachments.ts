@@ -251,6 +251,7 @@ export function pendingAttachmentsToMessageAttachments(
     name: attachment.name,
     mimeType: attachment.mimeType,
     vaultPath: serverAttachments?.[index]?.vaultPath,
+    storageId: serverAttachments?.[index]?.storageId,
     previewUrl: attachment.previewUrl,
   }));
 }

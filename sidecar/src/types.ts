@@ -272,6 +272,7 @@ export interface AppSettings {
   /** When "test", automation flows use deterministic code paths instead of LLM calls. */
   executionMode?: "live" | "test" | null;
   issueLinkMode?: "external" | "internal";
+  groceryLinearProjectId?: string | null;
 }
 
 export interface SessionInfo {
@@ -300,6 +301,7 @@ export interface AttachmentInput {
   name: string;
   mimeType: string;
   data: string;
+  extractedText?: string;
 }
 
 export interface MessageAttachmentMeta {
@@ -307,4 +309,5 @@ export interface MessageAttachmentMeta {
   name: string;
   mimeType: string;
   vaultPath?: string;
+  storageId?: string;
 }
