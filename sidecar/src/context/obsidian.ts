@@ -44,7 +44,9 @@ const AREA_GUIDANCE: Record<ObsidianArea, string> = {
 - Link follow-ups to project or daily notes with [[wikilinks]].`,
   letters: `[Letters]
 - Letters live under Letters/.
-- Preserve tone, recipient context, and any existing letter structure when editing.`,
+- Each letter PDF has a sibling wrapper note (same basename, .md) with frontmatter: type: letter, creator, organization, date, status, assigned, project.
+- Wrapper notes embed the PDF with ![[filename.pdf]].
+- When filing a new letter, write the PDF to Letters/ and create or update the wrapper note with matching frontmatter.`,
   contacts: `[Contacts]
 - Contact notes live under Contacts/.
 - Update facts in place; avoid creating a second note for the same person.`,

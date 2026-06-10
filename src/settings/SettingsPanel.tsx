@@ -1,8 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
-import { ModelModeToggle } from "../chat/ModelModeToggle";
+import { ComposerModeToggle } from "../chat/ComposerModeToggle";
 import { TtsToggle } from "../chat/TtsToggle";
-import type { LinearIssueLinkMode, ModelMode } from "../chat/types";
+import {
+  composerModeFromSettings,
+  settingsFromComposerMode,
+  type ComposerMode,
+} from "../chat/composerMode";
+import type { LinearIssueLinkMode } from "../chat/types";
 import { useTts } from "../hooks/useTts";
 import { getSettings, updateSettings } from "../lib/api";
 import { setLinearIssueLinkMode } from "../lib/linear/linearLink";
@@ -13,7 +18,7 @@ export function SettingsPanel({
   notesPath,
   vaultName,
   defaultNotesPath,
-  initialModelMode = "auto",
+  initialModelMode: _initialModelMode = "auto",
   initialUserProfilePath,
   initialAgentProfilePath,
   onUpdated,
@@ -21,14 +26,14 @@ export function SettingsPanel({
   notesPath: string | null;
   vaultName?: string | null;
   defaultNotesPath: string;
-  initialModelMode?: ModelMode;
+  initialModelMode?: string;
   initialUserProfilePath?: string;
   initialAgentProfilePath?: string;
   onUpdated: (path: string, nextVaultName?: string | null) => void;
 }) {
   const [manualPath, setManualPath] = useState(notesPath ?? defaultNotesPath);
   const [manualVaultName, setManualVaultName] = useState(vaultName ?? "");
-  const [modelMode, setModelMode] = useState<ModelMode>(initialModelMode);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [issueLinkMode, setIssueLinkMode] = useState<LinearIssueLinkMode>("external");
   const [userProfilePath, setUserProfilePath] = useState<string | null>(
     initialUserProfilePath ?? null,
@@ -43,6 +48,11 @@ export function SettingsPanel({
   useEffect(() => {
     void (async () => {
       const settings = await getSettings().catch(() => null);
+      if (settings) {
+        setComposerMode(
+          composerModeFromSettings(settings.executionMode, settings.modelMode),
+        );
+      }
       if (settings?.issueLinkMode) {
         setIssueLinkMode(settings.issueLinkMode);
         setLinearIssueLinkMode(settings.issueLinkMode);
@@ -78,10 +88,12 @@ export function SettingsPanel({
       const result = await updateSettings({
         notesPath: manualPath,
         vaultName: manualVaultName.trim() || null,
-        modelMode,
+        ...settingsFromComposerMode(composerMode),
         issueLinkMode,
       });
-      setModelMode(result.modelMode);
+      setComposerMode(
+        composerModeFromSettings(result.executionMode, result.modelMode),
+      );
       setIssueLinkMode(result.issueLinkMode);
       setLinearIssueLinkMode(result.issueLinkMode);
       onUpdated(manualPath, result.vaultName ?? null);
@@ -181,15 +193,21 @@ export function SettingsPanel({
         Application URL uses the Linear desktop app via <code>linear://</code> links.
       </p>
 
-      <h2 className="settings-section-title">Model</h2>
-      <p>Auto uses the fast model. Max uses the latest Opus model.</p>
+      <h2 className="settings-section-title">Composer</h2>
+      <p>
+        Test runs automation playbooks with deterministic local responses. Auto uses the fast model.
+        Max uses the latest Opus model.
+      </p>
       <div className="settings-row settings-row-model">
-        <ModelModeToggle
-          mode={modelMode}
-          onChange={setModelMode}
+        <ComposerModeToggle
+          mode={composerMode}
+          onChange={setComposerMode}
           disabled={saving}
         />
       </div>
+      <p className="settings-hint settings-hint-spaced">
+        You can also set <code>BACKSTER_EXECUTION_MODE=test</code> for one-off runs.
+      </p>
 
       <h2 className="settings-section-title">Accessibility</h2>
       <p>Read assistant responses aloud when they finish.</p>

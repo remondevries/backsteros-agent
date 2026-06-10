@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   agentIdByNotesPath: {},
   modelId: null,
   modelMode: "auto",
+  executionMode: "live",
   issueLinkMode: "external",
 };
 

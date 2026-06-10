@@ -1,5 +1,6 @@
-import type { SDKAgent, ModelSelection } from "@cursor/sdk";
+import type { ModelSelection } from "@cursor/sdk";
 import { createEphemeralAgent, disposeEphemeralAgent, sendPolishPrompt } from "./agent.ts";
+import { isTestExecutionMode } from "./execution-mode.ts";
 import { applyGoodMorningFeelDailyNote, type DailyNoteWriteResult } from "./daily-note-automation.ts";
 import {
   formatDateInTimezone,
@@ -190,11 +191,10 @@ export async function runGoodMorningFeelFlow(
   notesPath: string,
   rawAnswerInput: string,
   options: {
-    agent: SDKAgent;
-    model: ModelSelection;
+    model?: ModelSelection;
     timezone?: string;
     now?: Date;
-  },
+  } = {},
 ): Promise<GoodMorningFeelFlowResult> {
   const timezone = options.timezone ?? loadUserTimezone();
   const now = options.now ?? new Date();
@@ -205,13 +205,15 @@ export async function runGoodMorningFeelFlow(
   }
 
   let polishedFeel = polishFeelLocally(rawAnswer);
-  try {
-    const candidate = await polishFeelWithAgent(notesPath, rawAnswer, options.model);
-    if (isUsablePolishedFeel(candidate)) {
-      polishedFeel = candidate;
+  if (!isTestExecutionMode() && options.model) {
+    try {
+      const candidate = await polishFeelWithAgent(notesPath, rawAnswer, options.model);
+      if (isUsablePolishedFeel(candidate)) {
+        polishedFeel = candidate;
+      }
+    } catch {
+      // Keep local polish fallback.
     }
-  } catch {
-    // Keep local polish fallback.
   }
 
   if (!isUsablePolishedFeel(polishedFeel)) {

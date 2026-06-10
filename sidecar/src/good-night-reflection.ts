@@ -1,5 +1,6 @@
-import type { SDKAgent, ModelSelection } from "@cursor/sdk";
+import type { ModelSelection } from "@cursor/sdk";
 import { createEphemeralAgent, disposeEphemeralAgent, sendPolishPrompt } from "./agent.ts";
+import { isTestExecutionMode } from "./execution-mode.ts";
 import { loadUserFirstName, loadUserTimezone } from "./context/profile.ts";
 import {
   applyGoodNightReflectionDailyNote,
@@ -234,26 +235,27 @@ export async function runGoodNightReflectionFlow(
   notesPath: string,
   payloadText: string,
   options: {
-    agent: SDKAgent;
-    model: ModelSelection;
+    model?: ModelSelection;
     timezone?: string;
     now?: Date;
-  },
+  } = {},
 ): Promise<GoodNightReflectionFlowResult> {
   const payload = parseGoodNightReflectionPayload(payloadText);
   const timezone = options.timezone ?? loadUserTimezone();
   const now = options.now ?? new Date();
 
   let reflectionMarkdown = buildEveningReflectionMarkdownLocally(payload.answers);
-  try {
-    reflectionMarkdown = await polishReflectionWithAgent(
-      notesPath,
-      payload.answers,
-      options.model,
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not rewrite evening reflection: ${message}`);
+  if (!isTestExecutionMode() && options.model) {
+    try {
+      reflectionMarkdown = await polishReflectionWithAgent(
+        notesPath,
+        payload.answers,
+        options.model,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not rewrite evening reflection: ${message}`);
+    }
   }
 
   const dailyNoteUpdate = applyGoodNightReflectionDailyNote(notesPath, reflectionMarkdown, {

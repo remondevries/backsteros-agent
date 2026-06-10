@@ -16,7 +16,12 @@ import { ContextChip } from "./ContextChip";
 import { VoiceTurnBubble, type VoiceTurnPhase } from "./VoiceTurnBubble";
 import { parseChatCommand } from "./chatCommands";
 import { isValidLinearContextChip } from "./linearIssue";
-import { modelDisplayNameForMode } from "./modelMode";
+import {
+  composerModeDisplayName,
+  composerModeFromSettings,
+  settingsFromComposerMode,
+  type ComposerMode,
+} from "./composerMode";
 import { MessageActions } from "./MessageActions";
 import { formatMessageTimestamp } from "./formatMessageTimestamp";
 import { useRunUiPreviewShortcut } from "./dev/RunUiPreviewPanel";
@@ -58,6 +63,19 @@ import {
   parseGoodNightShortcut,
   serializeGoodNightReflectionAnswers,
 } from "./goodNight";
+import {
+  isLetterComposerMode,
+  isLetterConfirmMessage,
+  isLetterFlowMessage,
+  isLetterMessage,
+  LETTER_ACTION_ID,
+  LETTER_CONFIRM_ACTION_ID,
+  LETTER_CONFIRM_PLACEHOLDER,
+  LETTER_LABEL,
+  LETTER_MESSAGE,
+  parseLetterShortcut,
+  shouldSendComposerAttachments,
+} from "./letter";
 import { mergeStructuredPayload } from "./runEntities";
 import {
   cycleToolPin,
@@ -71,7 +89,6 @@ import type {
   AgentEvent,
   AttachmentPreviewTarget,
   ChatMessage,
-  ModelMode,
   PendingAttachment,
   RunViewModel,
 } from "./types";
@@ -297,9 +314,11 @@ export const ChatView = forwardRef<
   const [goodNightAwaitingReflection, setGoodNightAwaitingReflection] = useState(false);
   const [goodNightReflectionAnswers, setGoodNightReflectionAnswers] = useState<string[]>([]);
   const [goodNightReflectionThinking, setGoodNightReflectionThinking] = useState(false);
+  const [letterAwaitingConfirm, setLetterAwaitingConfirm] = useState(false);
   const [morningReviewUsageVersion, setMorningReviewUsageVersion] = useState(0);
   const goodMorningFeelActivatedRef = useRef(new Set<string>());
   const goodNightReflectionActivatedRef = useRef(new Set<string>());
+  const letterConfirmActivatedRef = useRef(new Set<string>());
   const goodNightReflectionTimerRef = useRef<number | null>(null);
   const reflectionPayloadRef = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -308,9 +327,11 @@ export const ChatView = forwardRef<
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<AttachmentPreviewTarget | null>(null);
-  const [modelMode, setModelMode] = useState<ModelMode>("auto");
-  const [modelName, setModelName] = useState(() => modelDisplayNameForMode("auto"));
-  const [savingModel, setSavingModel] = useState(false);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
+  const [composerModeLabel, setComposerModeLabel] = useState(() =>
+    composerModeDisplayName("auto"),
+  );
+  const [savingComposerMode, setSavingComposerMode] = useState(false);
   const [uiPreviewOpen, setUiPreviewOpen] = useState(false);
   const [committedTools, setCommittedTools] = useState<ToolSelection | null>(null);
   const [toolPins, setToolPins] = useState<ToolPinSelection>(EMPTY_TOOL_PINS);
@@ -495,8 +516,17 @@ export const ChatView = forwardRef<
     void (async () => {
       try {
         const settings = await getSettings();
-        setModelMode(settings.modelMode);
-        setModelName(settings.modelName ?? modelDisplayNameForMode(settings.modelMode));
+        const nextComposerMode = composerModeFromSettings(
+          settings.executionMode,
+          settings.modelMode,
+        );
+        setComposerMode(nextComposerMode);
+        setComposerModeLabel(
+          composerModeDisplayName(
+            nextComposerMode,
+            nextComposerMode === "test" ? undefined : settings.modelName,
+          ),
+        );
       } catch {
         // Model toggle falls back to auto when settings are unavailable.
       }
@@ -732,6 +762,23 @@ export const ChatView = forwardRef<
 
   useEffect(() => {
     for (const message of messages) {
+      if (!isLetterMessage(message.quickActionId) || !message.runId) continue;
+      if (letterConfirmActivatedRef.current.has(message.runId)) continue;
+
+      const run = runs[message.runId];
+      if (run?.status !== "finished") continue;
+
+      letterConfirmActivatedRef.current.add(message.runId);
+      setComposerQuickActionId(LETTER_ACTION_ID);
+      setLetterAwaitingConfirm(true);
+      scheduleComposerFocus(() => {
+        composerRef.current?.focus();
+      });
+    }
+  }, [messages, runs]);
+
+  useEffect(() => {
+    for (const message of messages) {
       if (!isGoodNightMessage(message.quickActionId) || !message.runId) continue;
       if (goodNightReflectionActivatedRef.current.has(message.runId)) continue;
 
@@ -835,8 +882,10 @@ export const ChatView = forwardRef<
       setGoodNightAwaitingReflection(false);
       setGoodNightReflectionAnswers([]);
       setGoodNightReflectionThinking(false);
+      setLetterAwaitingConfirm(false);
       goodMorningFeelActivatedRef.current.clear();
       goodNightReflectionActivatedRef.current.clear();
+      letterConfirmActivatedRef.current.clear();
       if (goodNightReflectionTimerRef.current != null) {
         window.clearTimeout(goodNightReflectionTimerRef.current);
         goodNightReflectionTimerRef.current = null;
@@ -916,6 +965,16 @@ export const ChatView = forwardRef<
       return;
     }
 
+    if (parseLetterShortcut(rawText)) {
+      if (!messageText) {
+        setInput("");
+        setComposerQuickActionId(null);
+      }
+      setLetterAwaitingConfirm(false);
+      await handleSendRef.current(LETTER_MESSAGE, LETTER_ACTION_ID);
+      return;
+    }
+
     const dcShortcut = parseDailyCaptureShortcut(rawText);
 
     if (dcShortcut?.kind === "activate") {
@@ -930,6 +989,7 @@ export const ChatView = forwardRef<
     const text = dcShortcut?.kind === "send" ? dcShortcut.body : rawText;
     const inGoodMorningMode = isGoodMorningComposerMode(composerQuickActionId);
     const inGoodNightMode = isGoodNightComposerMode(composerQuickActionId);
+    const inLetterMode = isLetterComposerMode(composerQuickActionId);
     const isVoiceSend = messageText !== undefined;
 
     if (
@@ -977,6 +1037,8 @@ export const ChatView = forwardRef<
         : quickActionId ??
       (dcShortcut?.kind === "send"
         ? DAILY_CAPTURE_ACTION_ID
+        : inLetterMode && letterAwaitingConfirm
+          ? LETTER_CONFIRM_ACTION_ID
         : inGoodMorningMode && goodMorningAwaitingFeel
           ? GOOD_MORNING_FEEL_ACTION_ID
           : composerQuickActionId) ??
@@ -989,6 +1051,15 @@ export const ChatView = forwardRef<
       !goodMorningAwaitingFeel &&
       !isGoodMorningMessage(quickActionId) &&
       !parseGoodMorningShortcut(rawText)
+    ) {
+      return;
+    }
+
+    if (
+      inLetterMode &&
+      !letterAwaitingConfirm &&
+      !isLetterMessage(quickActionId) &&
+      !parseLetterShortcut(rawText)
     ) {
       return;
     }
@@ -1020,17 +1091,24 @@ export const ChatView = forwardRef<
 
     void stopSpeaking();
 
-    const attachmentsToSend = messageText ? [] : [...pendingAttachments];
+    const attachmentsToSend = shouldSendComposerAttachments(messageText, quickActionId)
+      ? [...pendingAttachments]
+      : messageText
+        ? []
+        : [...pendingAttachments];
     setBusy(true);
     setError(null);
     setCommittedTools(resolveToolSelection(agentText, toolPins));
     if (!messageText) {
       setInput("");
       setPendingAttachments([]);
-      if (isDailyCapture || isGoodMorningFeel) {
+      if (isDailyCapture || isGoodMorningFeel || isLetterConfirmMessage(effectiveQuickActionId)) {
         setComposerQuickActionId(null);
         if (isGoodMorningFeel) {
           setGoodMorningAwaitingFeel(false);
+        }
+        if (isLetterConfirmMessage(effectiveQuickActionId)) {
+          setLetterAwaitingConfirm(false);
         }
       }
     }
@@ -1045,6 +1123,8 @@ export const ChatView = forwardRef<
           ? "good-night"
           : isGoodNightMessage(effectiveQuickActionId)
             ? "good-night"
+            : isLetterFlowMessage(effectiveQuickActionId)
+              ? "letter"
             : undefined;
 
     const userMessage: ChatMessage = {
@@ -1202,6 +1282,10 @@ export const ChatView = forwardRef<
       void handleTriggerGoodNightShortcut();
       return;
     }
+    if (/^\/letter\s$/i.test(next)) {
+      void handleTriggerLetterShortcut();
+      return;
+    }
     setInput(next);
   }
 
@@ -1209,6 +1293,7 @@ export const ChatView = forwardRef<
     if (busy) return;
     if (isGoodMorningComposerMode(composerQuickActionId)) return;
     if (isGoodNightComposerMode(composerQuickActionId)) return;
+    if (isLetterComposerMode(composerQuickActionId)) return;
     if (action.behavior === "send") {
       setComposerQuickActionId(null);
       void handleSendRef.current(action.message, action.id);
@@ -1224,7 +1309,8 @@ export const ChatView = forwardRef<
       busy ||
       isDailyCaptureMessage(composerQuickActionId ?? undefined) ||
       isGoodMorningComposerMode(composerQuickActionId) ||
-      isGoodNightComposerMode(composerQuickActionId)
+      isGoodNightComposerMode(composerQuickActionId) ||
+      isLetterComposerMode(composerQuickActionId)
     ) {
       return;
     }
@@ -1247,6 +1333,11 @@ export const ChatView = forwardRef<
     }
   }
 
+  function handleClearLetterMode() {
+    setComposerQuickActionId(null);
+    setLetterAwaitingConfirm(false);
+  }
+
   function handleTriggerGoodMorningShortcut() {
     if (busy || isGoodMorningComposerMode(composerQuickActionId)) return;
     setComposerQuickActionId(null);
@@ -1264,25 +1355,51 @@ export const ChatView = forwardRef<
     void handleSendRef.current(GOOD_NIGHT_MESSAGE, GOOD_NIGHT_ACTION_ID);
   }
 
-  async function handleModelModeChange(nextMode: ModelMode) {
-    if (nextMode === modelMode || savingModel) return;
+  function handleTriggerLetterShortcut() {
+    if (busy || isLetterComposerMode(composerQuickActionId)) return;
+    const hasPdf = pendingAttachmentsRef.current.some(
+      (attachment) =>
+        attachment.mimeType === "application/pdf" ||
+        attachment.name.toLowerCase().endsWith(".pdf"),
+    );
+    if (!hasPdf) {
+      setError("Attach a PDF letter before running /letter.");
+      return;
+    }
+    setComposerQuickActionId(null);
+    setLetterAwaitingConfirm(false);
+    setInput("");
+    void handleSendRef.current(LETTER_MESSAGE, LETTER_ACTION_ID);
+  }
 
-    const previousMode = modelMode;
-    const previousName = modelName;
-    setModelMode(nextMode);
-    setModelName(modelDisplayNameForMode(nextMode));
-    setSavingModel(true);
+  async function handleComposerModeChange(nextMode: ComposerMode) {
+    if (nextMode === composerMode || savingComposerMode) return;
+
+    const previousMode = composerMode;
+    const previousLabel = composerModeLabel;
+    setComposerMode(nextMode);
+    setComposerModeLabel(composerModeDisplayName(nextMode));
+    setSavingComposerMode(true);
     setError(null);
     try {
-      const result = await updateSettings({ modelMode: nextMode });
-      setModelMode(result.modelMode);
-      setModelName(result.modelName);
+      const result = await updateSettings(settingsFromComposerMode(nextMode));
+      const resolvedMode = composerModeFromSettings(
+        result.executionMode,
+        result.modelMode,
+      );
+      setComposerMode(resolvedMode);
+      setComposerModeLabel(
+        composerModeDisplayName(
+          resolvedMode,
+          resolvedMode === "test" ? undefined : result.modelName,
+        ),
+      );
     } catch (err) {
-      setModelMode(previousMode);
-      setModelName(previousName);
-      setError(err instanceof Error ? err.message : "Failed to update model");
+      setComposerMode(previousMode);
+      setComposerModeLabel(previousLabel);
+      setError(err instanceof Error ? err.message : "Failed to update composer mode");
     } finally {
-      setSavingModel(false);
+      setSavingComposerMode(false);
       focusComposer();
     }
   }
@@ -1335,6 +1452,10 @@ export const ChatView = forwardRef<
             message.role === "user" &&
             (isGoodNightFlowMessage(message.quickActionId) ||
               message.flowVariant === "good-night");
+          const isLetterFlow =
+            message.role === "user" &&
+            (isLetterFlowMessage(message.quickActionId) ||
+              message.flowVariant === "letter");
 
           return (
             <div key={message.id} className="chat-turn">
@@ -1356,12 +1477,18 @@ export const ChatView = forwardRef<
                         {DAILY_CAPTURE_LABEL}
                       </span>
                     )}
+                    {isLetterFlow && (
+                      <span className="chat-quick-action-tag chat-quick-action-tag-letter">
+                        {LETTER_LABEL}
+                      </span>
+                    )}
                     <div
                       className={`bubble ${
                         message.quickActionId &&
                         !isDailyCaptureMessage(message.quickActionId) &&
                         !isGoodMorningFlow &&
-                        !isGoodNightFlow
+                        !isGoodNightFlow &&
+                        !isLetterFlow
                           ? "bubble-quick-action"
                           : ""
                       }`}
@@ -1370,10 +1497,13 @@ export const ChatView = forwardRef<
                         ? MORNING_REVIEW_MESSAGE
                         : isGoodNightMessage(message.quickActionId)
                           ? GOOD_NIGHT_MESSAGE
+                          : isLetterMessage(message.quickActionId)
+                            ? LETTER_MESSAGE
                           : message.text}
                     </div>
                     {!isGoodMorningMessage(message.quickActionId) &&
-                      !isGoodNightMessage(message.quickActionId) && (
+                      !isGoodNightMessage(message.quickActionId) &&
+                      !isLetterFlow && (
                       <MessageActions text={message.text} />
                     )}
                   </>
@@ -1482,10 +1612,10 @@ export const ChatView = forwardRef<
               setPreviewTarget(toAttachmentPreviewTarget(attachment))
             }
             isDragging={isDragging}
-            modelMode={modelMode}
-            modelName={modelName}
-            onModelModeChange={(mode) => void handleModelModeChange(mode)}
-            savingModel={savingModel}
+            composerMode={composerMode}
+            composerModeLabel={composerModeLabel}
+            onComposerModeChange={(mode) => void handleComposerModeChange(mode)}
+            savingComposerMode={savingComposerMode}
             uiPreview={
               import.meta.env.DEV
                 ? { open: uiPreviewOpen, onToggle: toggleUiPreview }
@@ -1545,9 +1675,19 @@ export const ChatView = forwardRef<
                         onClear: handleClearGoodNightMode,
                         tagVariant: "good-night",
                       }
+                    : isLetterComposerMode(composerQuickActionId)
+                      ? {
+                          label: LETTER_LABEL,
+                          placeholder: letterAwaitingConfirm
+                            ? LETTER_CONFIRM_PLACEHOLDER
+                            : "Reply…",
+                          onClear: handleClearLetterMode,
+                          tagVariant: "letter",
+                        }
                     : undefined
             }
             onTriggerGoodNightShortcut={handleTriggerGoodNightShortcut}
+            onTriggerLetterShortcut={handleTriggerLetterShortcut}
             quickActions={
               voiceModeEnabled
                 ? undefined

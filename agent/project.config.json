@@ -1,0 +1,226 @@
+{
+  "_comment": "Single project setup file for the agent workflow. Fill when copying to a new repo. Do not duplicate IDs or paths elsewhere.",
+  "projectName": "Backster OS",
+  "repo": "https://github.com/remondevries/obsidian-backsteros",
+  "designSystem": {
+    "enabled": false,
+    "profile": "brownfield-code-first",
+    "authority": {
+      "tokens": "code",
+      "primitives": "code",
+      "tier1Components": "code",
+      "fullComponents": "code",
+      "screens": "code",
+      "runtime": "code"
+    },
+    "paths": {
+      "_comment": "Draft roots for agents. Preview app runtime paths live in component-tool.config.mjs at repo root.",
+      "iconCatalog": "src/ui/icons/iconCatalog.ts",
+      "tokenSource": "src/ui/styles/foundation/tokens.css",
+      "designDraftsRoot": "agent/designs",
+      "designComponentsRoot": "agent/designs/components",
+      "designViewsRoot": "agent/designs/views"
+    },
+    "drafts": {
+      "playbook": "agent/designs/designs.mdc",
+      "tasksCommand": "bun run designs:tasks",
+      "syncCommand": "bun run designs:sync",
+      "commentFields": ["status", "description", "implements", "css", "variant"],
+      "statusValues": {
+        "in development": "Designing — ignore for sync queue; implement design→production on explicit request",
+        "backlog": "Code is ahead — agent updates design TSX from production",
+        "deployed": "Design and code agree — no sync work"
+      },
+      "postSyncStatus": "deployed"
+    },
+    "catalog": {
+      "_comment": "Design preview sidebar filters — paths relative to src/ui/components/. Policy: agent/designs/designs.mdc",
+      "forbiddenPaths": [
+        "daily/DailyJournalFooter.tsx",
+        "letter/ProjectHubLetterRow.tsx",
+        "project/ProjectHubNoteRow.tsx",
+        "workouts/DeleteWorkoutConfirmDialog.tsx",
+        "workouts/DeleteExerciseGroupConfirmDialog.tsx",
+        "workouts/FinishWorkoutConfirmDialog.tsx",
+        "workouts/ExerciseMatchDialog.tsx",
+        "workouts/ExerciseCatalogResolveDialog.tsx",
+        "letter/LetterNoteFullscreenDialog.tsx",
+        "letter/LetterNoteMobileFullscreenDialog.tsx",
+        "financials/import/ImportCsvDialog.tsx"
+      ],
+      "hiddenPaths": [
+        "empty-state/VaultHubEmptyState.tsx",
+        "contact/ContactWorkspace.tsx",
+        "organization/OrganizationWorkspace.tsx",
+        "project/ProjectWorkspace.tsx",
+        "hub/HubProjectsList.tsx",
+        "project/ProjectMeetings.tsx",
+        "modal/ModalShell.tsx",
+        "mobile/MobileBottomNav.tsx",
+        "workouts/WorkoutQuickEntryOverlayHost.tsx",
+        "financials/FinancialsSidebarTotals.tsx",
+        "workouts/WorkoutsSidebarTotals.tsx",
+        "dropdown/DropdownAvatar.tsx",
+        "dropdown/DropdownEmptyAvatar.tsx",
+        "dropdown/DropdownTriggerCaret.tsx",
+        "hub/HubTabsNewButton.tsx",
+        "hub/HubTabsViewBoardButton.tsx",
+        "hub/HubListTabScroll.tsx",
+        "hub/HubWorkspaceEditorShell.tsx",
+        "financials/FinancialsAccountDropdownCheckIcon.tsx",
+        "financials/FinancialsAllAccountsIcon.tsx",
+        "financials/FinancialsTableRowChevron.tsx",
+        "financials/TransactionsTableWeekHeader.tsx",
+        "linear/LinearProjectListRows.tsx",
+        "linear/LinearTeamListRows.tsx",
+        "linear/LinearOverviewSkeleton.tsx",
+        "linear/chips/LinearChipShell.tsx",
+        "linear/LinearUpdateAuthorAvatar.tsx",
+        "linear/LinearUpdateHealthIcon.tsx",
+        "linear/CollapsibleGroup.tsx",
+        "knowledgeBase/KnowledgeBaseDragHandle.tsx",
+        "knowledgeBase/KbTreeRowGutter.tsx",
+        "knowledgeBase/KnowledgeBaseTreeRowAction.tsx",
+        "knowledgeBase/KnowledgeBaseTreeRowDrillButton.tsx",
+        "knowledgeBase/KnowledgeBaseTreeRowTrailing.tsx",
+        "contact/profileImageIcons.tsx",
+        "daily/dailyLinearInboxArt.tsx",
+        "meeting/MeetingHubPlusIcon.tsx",
+        "meeting/MeetingMetaAddTriggerIcon.tsx",
+        "project/ProjectLinearRadarIcon.tsx",
+        "daily/metricsShared.tsx",
+        "letter/ContactAssignSelectLight.tsx",
+        "linear/LinearProjectSelectLight.tsx",
+        "linear/LinearTeamSelectLight.tsx",
+        "meeting/MeetingLinearOrganizationSelectLight.tsx",
+        "meeting/VaultMeetingProjectHubSelectLight.tsx",
+        "financials/import/ColumnMapper.tsx",
+        "financials/import/ImportPreview.tsx"
+      ]
+    },
+    "expected": {
+      "registeredIcons": 53,
+      "standaloneIcons": 17
+    }
+  },
+  "linear": {
+    "defaultProject": "backsterosAgent",
+    "team": {
+      "id": "fe9d5770-d3f1-4d9b-b624-68cff62c0b9e",
+      "key": "BOS",
+      "name": "BacksterOS"
+    },
+    "projects": {
+      "backsterosAgent": {
+        "id": "1a657cc7-8352-4ceb-95ee-27d76b26f016",
+        "name": "BacksterOS Agent"
+      }
+    },
+    "labels": {
+      "agentCloud": {
+        "id": "e38ab56f-0154-447c-ac4d-68dd38d7b842",
+        "name": "cloud",
+        "group": "agent"
+      },
+      "agentReview": {
+        "id": "b8886b40-c9ce-46e0-b2ba-1c1c85b99103",
+        "name": "review",
+        "group": "agent"
+      },
+      "agentLocal": {
+        "id": "949b5b87-b577-4313-8da7-086f396bfd4e",
+        "name": "local",
+        "group": "agent"
+      }
+    },
+    "states": {
+      "backlog": {
+        "id": "224bd93e-ca80-448c-a64a-08f69db2c870",
+        "name": "Backlog",
+        "type": "backlog"
+      },
+      "triage": {
+        "id": "c1a2f47a-60d5-4124-9920-3cc8d113a4e4",
+        "name": "Triage",
+        "type": "triage"
+      },
+      "readyToStart": {
+        "id": "71537d61-efaf-4459-9d36-8c66e13906e6",
+        "name": "Ready to Start",
+        "type": "unstarted"
+      },
+      "inProgress": {
+        "id": "d771cc96-5182-4c7e-9a1a-46bc93483900",
+        "name": "In Progress",
+        "type": "started"
+      },
+      "inReview": {
+        "id": "fbd55357-78d9-4a42-852e-45e9f69d4fad",
+        "name": "In Review",
+        "type": "started"
+      },
+      "onHold": {
+        "id": "a4d95856-1481-4482-90d8-3f444cd5543f",
+        "name": "On Hold",
+        "type": "started"
+      },
+      "done": {
+        "id": "2c552a8d-da97-4bc7-8863-c3508506c058",
+        "name": "Done",
+        "type": "completed"
+      },
+      "canceled": {
+        "id": "5075aa4d-5156-44f3-8e5c-88a82ac37072",
+        "name": "Canceled",
+        "type": "canceled"
+      },
+      "duplicate": {
+        "id": "421d44a8-f278-4cdb-8796-ffb9624f5e44",
+        "name": "Duplicate",
+        "type": "duplicate"
+      }
+    },
+    "defaults": {
+      "priority": 3,
+      "assigneeId": "eac047ba-fd17-4eab-b97e-016ecb854693"
+    }
+  },
+  "scope": {
+    "paths": {
+      "localOnly": [
+        "src-tauri/**",
+        "src/App.tsx",
+        "src/hooks/**"
+      ],
+      "caution": [
+        "src/chat/**",
+        "src/linear/**",
+        "src/obsidian/**",
+        "src/whoop/**",
+        "src/settings/**",
+        "src/ui/**"
+      ],
+      "cloudSafe": [
+        "sidecar/**",
+        "src-tauri/resources/sidecar/**",
+        "src/lib/**",
+        "src-tauri/capabilities/**",
+        "scripts/**",
+        "docs/**",
+        ".github/**",
+        ".cursor/**",
+        "suffix:.test.ts",
+        "AGENTS.md",
+        "README.md",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json",
+        "vite.config.ts",
+        "vite.dev.config.ts",
+        "postcss.config.js",
+        "tailwind.config.js"
+      ]
+    }
+  }
+}
+

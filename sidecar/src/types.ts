@@ -269,6 +269,8 @@ export interface AppSettings {
   agentIdByNotesPath: Record<string, string>;
   modelId: string | null;
   modelMode: "auto" | "max" | null;
+  /** When "test", automation flows use deterministic code paths instead of LLM calls. */
+  executionMode?: "live" | "test" | null;
   issueLinkMode?: "external" | "internal";
 }
 

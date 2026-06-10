@@ -1,0 +1,78 @@
+---
+description: Agent router — workflow index and hard stops (Backster OS)
+alwaysApply: true
+---
+
+# Agent kit (Backster OS)
+
+> **Template:** When copying the kit, rewrite the Obsidian runtime line below for your project.
+
+**Single config:** [`agent/project.config.json`](agent/project.config.json) — Linear UUIDs, scope paths, design policy. Design preview runtime: [`component-tool.config.mjs`](component-tool.config.mjs). **Never hardcode IDs or paths elsewhere.**
+
+Kit index: [`agent/README.md`](agent/README.md) · Commands: [`AGENTS.md`](AGENTS.md)
+
+---
+
+## Workflow router
+
+Before using a workflow, **read its folder** (full playbooks live there, not in this file).
+
+| Task | Read first |
+|------|------------|
+| **Linear** — create, update, hand off issues | **`linear-workflow`** skill + [`agent/project.config.json`](agent/project.config.json) · verification: [`agent/linear/verification.md`](agent/linear/verification.md) |
+| **Preflight** — cloud vs local scope before PRs | [`agent/preflight/preflight.md`](agent/preflight/preflight.md) |
+| **Environments** — local vs remote (cloud) setup | [`agent/environments/environments.md`](agent/environments/environments.md) |
+| **Design** — components, views, sync, preview | [`agent/designs/designs.mdc`](agent/designs/designs.mdc) |
+
+Future integrations (slack, github, …) get a row here and a folder under `agent/`.
+
+---
+
+## Hard stops — Linear
+
+1. Read `agent/project.config.json` before any Linear MCP create/update.
+2. **Description** = original task only. **Open with summary prose — never start with `## Summary` or any heading.** Progress, PR links, handoff → **comments only** — never rewrite the description.
+3. **Never mark Done.** Max state: **In Review** (`linear.states.inReview.id`). Only the human assignee closes issues.
+4. New issues: exactly **one** agent label — `cloud`, `review`, or `local` (default: **review**). Paths: `linear.labels.agentCloud|agentReview|agentLocal.id`.
+5. Do not change team, project, labels, priority, or cancel issues without user approval.
+6. PR links go in **comments**, not the description.
+7. **Git branch:** Before creating a branch or PR, Linear MCP **`get_issue`** → use **`gitBranchName`** exactly (e.g. `feature/bos-70`). Never invent branch names — wrong names break Linear↔GitHub linking.
+8. **Handoff tone:** Linear comments and PR text should read like a teammate — use **Before merging**, not "Human should verify" or "Still needs to be verified". Full template: **`linear-workflow`** skill.
+9. **No Cursor attribution** in PR descriptions, commit messages, or Linear comments — never add "Made with Cursor", "Made-with: Cursor", co-authored-by Cursor, or similar footers.
+
+---
+
+## Hard stops — Preflight
+
+This repo is a **Tauri desktop app**. Cloud agents cannot run the Tauri desktop environment, reload the app, or verify window-specific behavior / desktop shortcuts / gestures.
+
+1. Read the Linear issue **agent** label before starting.
+2. Label **`local`** + **cloud agent** → **STOP.** Comment on the issue; work must run locally.
+3. Before cloud PR work, run:
+
+Run cloud-safe checks first:
+
+- `bun test`
+- `bun run build` (optional)
+
+Add `--issue-body "..."` from the Linear issue when available.
+
+| Exit | Action |
+|------|--------|
+| 0 | Proceed |
+| 1 | **STOP** — no PR; comment; suggest local session or split task |
+| 2 | Caution — ask user or ensure `review`/`cloud` label |
+
+Path tiers: `agent/project.config.json` → `scope.paths.*` only. Prefer logic in `src/lib/**` with tests; wire Tauri runtime integration locally.
+
+---
+
+## Hard stops — Design sync (design TSX ↔ production)
+
+Design workflows are **not set up** in this repo yet.
+
+When asked to **sync designs**, **sync all designs**, **review Designs**, or **implement from a design draft**:
+
+1. Ask the user where the design drafts/runtime live for this repo.
+2. Treat any design execution as **local-only** until the design playbooks and commands exist (STOP if you would otherwise run `bun run designs:sync`).
+

@@ -148,8 +148,12 @@ export function getModelDisplayName(
   }
 
   if (/composer/i.test(modelId)) {
-    const version = modelId.match(/composer-([\d.]+)/i)?.[1];
-    return version ? `Composer ${version}` : "Composer 2.5";
+    const version = normalized.match(/composer-([0-9]+(?:[-.][0-9]+)*)/i)?.[1];
+    if (version) {
+      // Cursor model IDs sometimes encode versions as `composer-2-5` instead of `composer-2.5`.
+      return `Composer ${version.replace(/-/g, ".")}`;
+    }
+    return "Composer 2.5";
   }
 
   return modelId;

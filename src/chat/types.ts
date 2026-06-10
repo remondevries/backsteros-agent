@@ -255,7 +255,7 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   quickActionId?: string;
-  flowVariant?: "good-morning" | "good-night";
+  flowVariant?: "good-morning" | "good-night" | "letter";
   attachments?: MessageAttachment[];
   contextChips?: Array<{ id: string; title: string; entityType: string }>;
 }
@@ -310,6 +310,8 @@ export type RunFixtureId =
 
 export type ModelMode = "auto" | "max";
 
+export type ExecutionMode = "live" | "test";
+
 export type LinearIssueLinkMode = "external" | "internal";
 
 export interface AppSettings {
@@ -321,6 +323,8 @@ export interface AppSettings {
   modelId: string;
   modelName?: string;
   defaultModelMode: ModelMode;
+  executionMode?: ExecutionMode;
+  defaultExecutionMode?: ExecutionMode;
   issueLinkMode?: LinearIssueLinkMode;
   userProfilePath?: string;
   agentProfilePath?: string;
