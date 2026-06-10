@@ -235,18 +235,20 @@ export function applyMorningReviewDailyNote(
 
   content = ensureDailyNoteJournalStructure(content, note.date);
 
-  const dayLogMetrics: Record<string, string> = {
-    woke: `around ${formatLocalTimeLabel(input.timezone, now)}`,
-    slept: formatSleptDuration(input.whoop),
-  };
-
-  if (input.weather) {
-    dayLogMetrics.weather = formatWeatherMetric(input.weather);
-  }
+  // Insertion order defines how the metrics appear in the markdown day log.
+  // We write `bedtime` first to reflect the previous night's sleep window.
+  const dayLogMetrics: Record<string, string> = {};
 
   const bedtime = formatBedtimeFromWhoop(input.whoop, input.timezone);
   if (bedtime) {
     dayLogMetrics.bedtime = bedtime;
+  }
+
+  dayLogMetrics.woke = `around ${formatLocalTimeLabel(input.timezone, now)}`;
+  dayLogMetrics.slept = formatSleptDuration(input.whoop);
+
+  if (input.weather) {
+    dayLogMetrics.weather = formatWeatherMetric(input.weather);
   }
 
   for (const [metric, value] of Object.entries(dayLogMetrics)) {

@@ -29,6 +29,7 @@
   --tab-bg-active: var(--bg-surface);
   --tab-border-active: var(--border-subtle);
   --model-mode-auto-bg: var(--bg-surface-3);
+  --model-mode-test-bg: var(--accent);
   --model-mode-max-bg: #f97316;
   --hover-overlay: rgba(255, 255, 255, 0.08);
   --linear-priority-active: #9aa0a6;
@@ -78,6 +79,11 @@
   --good-morning-tag-border-opacity: 35%;
   --good-morning-tag-clear-opacity: 0.75;
 
+  --letter-tag-text: #8fd4ff;
+  --letter-tag-accent: #3a8fbf;
+  --letter-tag-bg-opacity: 18%;
+  --letter-tag-border-opacity: 35%;
+
   --whoop-strain-accent: #4f81ee;
 }
 
@@ -113,6 +119,7 @@
     --tab-bg-active: var(--bg-surface);
     --tab-border-active: var(--border-subtle);
     --model-mode-auto-bg: var(--bg-surface-3);
+    --model-mode-test-bg: var(--accent);
     --model-mode-max-bg: #f97316;
     --hover-overlay: rgba(0, 0, 0, 0.06);
     --linear-priority-active: #6b7280;
@@ -161,6 +168,11 @@
     --good-morning-tag-bg-opacity: 14%;
     --good-morning-tag-border-opacity: 42%;
     --good-morning-tag-clear-opacity: 0.92;
+
+    --letter-tag-text: #0b5f8a;
+    --letter-tag-accent: #3a8fbf;
+    --letter-tag-bg-opacity: 14%;
+    --letter-tag-border-opacity: 42%;
 
     --whoop-strain-accent: #2563eb;
   }

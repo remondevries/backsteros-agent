@@ -79,11 +79,22 @@ import {
 import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
 import { buildGoodNightChatResponse } from "./good-night-response.ts";
 import {
+  findPdfAttachmentMeta,
+  isLetterConfirmQuickAction,
+  isLetterQuickAction,
+  runLetterConfirmFlow,
+  runLetterInitialFlow,
+} from "./letter.ts";
+import {
   runGoodMorningDashboardFlow,
   runGoodMorningFeelDashboardFlow,
   runGoodNightDashboardFlow,
   runGoodNightReflectionDashboardFlow,
 } from "./dashboard-flows.ts";
+import {
+  getExecutionMode,
+  isTestExecutionMode,
+} from "./execution-mode.ts";
 import { getMcpServersForSelection } from "./mcp.ts";
 import { isDestructiveShellCommand } from "./shell-policy.ts";
 import { getWorkspaceCustomTools } from "./workspace-tools.ts";
@@ -245,6 +256,46 @@ function scheduleLinearAvatarBackfill(runId: string, event: AgentEvent): void {
     });
 }
 
+function splitTextIntoChunks(text: string, chunkSize = 36): string[] {
+  if (!text) return [];
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length; i += chunkSize) {
+    chunks.push(text.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+async function broadcastAssistantTextInChunks(
+  runId: string,
+  text: string,
+  {
+    initialDelayMs = 220,
+    interChunkDelayMs = 80,
+    chunkSize = 36,
+  }: {
+    initialDelayMs?: number;
+    interChunkDelayMs?: number;
+    chunkSize?: number;
+  } = {},
+): Promise<void> {
+  const chunks = splitTextIntoChunks(text, chunkSize);
+  if (chunks.length === 0) return;
+
+  // Intentionally delay the first delta so the client can render the "thinking"
+  // cursor while `run.status === running && run.text.length === 0`.
+  await Bun.sleep(initialDelayMs);
+  for (let index = 0; index < chunks.length; index += 1) {
+    broadcast(runId, {
+      type: "message.delta",
+      runId,
+      text: chunks[index]!,
+    });
+    if (index < chunks.length - 1) {
+      await Bun.sleep(interChunkDelayMs);
+    }
+  }
+}
+
 const app = new Hono();
 
 app.use(
@@ -383,18 +434,13 @@ app.post("/flows/good-morning/feel", async (c) => {
   }
 
   prepareWorkspace(notesPath, port, token);
-  const settings = loadSettings();
-  const model = getSelectedModelSelection(settings);
-  const agent = await createEphemeralAgent(notesPath, model);
 
   try {
-    const result = await runGoodMorningFeelDashboardFlow(notesPath, answer, agent);
+    const result = await runGoodMorningFeelDashboardFlow(notesPath, answer);
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Good morning feel failed";
     return c.json({ error: message }, 500);
-  } finally {
-    await disposeEphemeralAgent(agent);
   }
 });
 
@@ -426,18 +472,13 @@ app.post("/flows/good-night/reflection", async (c) => {
   }
 
   prepareWorkspace(notesPath, port, token);
-  const settings = loadSettings();
-  const model = getSelectedModelSelection(settings);
-  const agent = await createEphemeralAgent(notesPath, model);
 
   try {
-    const result = await runGoodNightReflectionDashboardFlow(notesPath, body.answers, agent);
+    const result = await runGoodNightReflectionDashboardFlow(notesPath, body.answers);
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Good night reflection failed";
     return c.json({ error: message }, 500);
-  } finally {
-    await disposeEphemeralAgent(agent);
   }
 });
 
@@ -463,8 +504,10 @@ app.get("/settings", async (c) => {
     modelMode,
     modelId,
     modelName,
+    executionMode: getExecutionMode(settings),
     issueLinkMode: settings.issueLinkMode ?? "external",
     defaultModelMode: "auto",
+    defaultExecutionMode: "live",
     defaultNotesPath: join(homedir(), "notes"),
     userProfilePath: getUserProfilePath(),
     agentProfilePath: getAgentProfilePath(),
@@ -476,19 +519,25 @@ app.put("/settings", async (c) => {
     notesPath?: string;
     vaultName?: string | null;
     modelMode?: string;
+    executionMode?: string;
     issueLinkMode?: string;
   };
   const notesPath = body.notesPath?.trim();
   const modelMode = body.modelMode?.trim();
+  const executionMode = body.executionMode?.trim();
   const hasVaultName = body.vaultName !== undefined;
   const hasIssueLinkMode = body.issueLinkMode !== undefined;
 
-  if (!notesPath && !modelMode && !hasVaultName && !hasIssueLinkMode) {
-    return c.json({ error: "notesPath, vaultName, modelMode, or issueLinkMode is required" }, 400);
+  if (!notesPath && !modelMode && !executionMode && !hasVaultName && !hasIssueLinkMode) {
+    return c.json({ error: "notesPath, vaultName, modelMode, executionMode, or issueLinkMode is required" }, 400);
   }
 
   if (modelMode && modelMode !== "auto" && modelMode !== "max") {
     return c.json({ error: "modelMode must be auto or max" }, 400);
+  }
+
+  if (executionMode && executionMode !== "live" && executionMode !== "test") {
+    return c.json({ error: "executionMode must be live or test" }, 400);
   }
 
   if (
@@ -519,6 +568,10 @@ app.put("/settings", async (c) => {
     }
   }
 
+  if (executionMode === "live" || executionMode === "test") {
+    settings.executionMode = executionMode;
+  }
+
   if (hasIssueLinkMode) {
     settings.issueLinkMode = body.issueLinkMode === "internal" ? "internal" : "external";
   }
@@ -542,6 +595,7 @@ app.put("/settings", async (c) => {
     modelMode: resolvedMode,
     modelId: getSelectedModelId(next),
     modelName,
+    executionMode: getExecutionMode(next),
     issueLinkMode: next.issueLinkMode ?? "external",
   });
 });
@@ -748,8 +802,10 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isGoodMorningFeel = isGoodMorningFeelQuickAction(body.quickActionId);
   const isGoodNightInitial = isGoodNightQuickAction(body.quickActionId);
   const isGoodNightReflection = isGoodNightReflectionQuickAction(body.quickActionId);
-  const isStructuredQuickAction = isMorningReview || isGoodNightInitial;
-  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection
+  const isLetterInitial = isLetterQuickAction(body.quickActionId);
+  const isLetterConfirm = isLetterConfirmQuickAction(body.quickActionId);
+  const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
+  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm
     ? {
         obsidian: false,
         linear: false,
@@ -953,11 +1009,15 @@ app.post("/sessions/:sessionId/messages", async (c) => {
         });
 
         state.lastAssistantText = response;
-        broadcast(runId, {
-          type: "message.delta",
-          runId,
-          text: response,
-        });
+        if (isTestExecutionMode()) {
+          await broadcastAssistantTextInChunks(runId, response);
+        } else {
+          broadcast(runId, {
+            type: "message.delta",
+            runId,
+            text: response,
+          });
+        }
 
         completeRun(runId, state, "finished");
         return;
@@ -1092,11 +1152,15 @@ app.post("/sessions/:sessionId/messages", async (c) => {
         });
 
         state.lastAssistantText = response;
-        broadcast(runId, {
-          type: "message.delta",
-          runId,
-          text: response,
-        });
+        if (isTestExecutionMode()) {
+          await broadcastAssistantTextInChunks(runId, response);
+        } else {
+          broadcast(runId, {
+            type: "message.delta",
+            runId,
+            text: response,
+          });
+        }
 
         completeRun(runId, state, "finished");
         return;
@@ -1124,8 +1188,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
 
         try {
           const result = await runGoodNightReflectionFlow(notesPath, text, {
-            agent,
-            model: selectedModel,
+            model: isTestExecutionMode() ? undefined : selectedModel,
             timezone: loadUserTimezone(),
           });
 
@@ -1154,11 +1217,15 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           });
 
           state.lastAssistantText = result.response;
-          broadcast(runId, {
-            type: "message.delta",
-            runId,
-            text: result.response,
-          });
+          if (isTestExecutionMode()) {
+            await broadcastAssistantTextInChunks(runId, result.response);
+          } else {
+            broadcast(runId, {
+              type: "message.delta",
+              runId,
+              text: result.response,
+            });
+          }
 
           completeRun(runId, state, "finished");
         } catch (error) {
@@ -1196,8 +1263,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
 
         try {
           const result = await runGoodMorningFeelFlow(notesPath, text, {
-            agent,
-            model: selectedModel,
+            model: isTestExecutionMode() ? undefined : selectedModel,
             timezone: loadUserTimezone(),
           });
 
@@ -1226,16 +1292,140 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           });
 
           state.lastAssistantText = result.response;
-          broadcast(runId, {
-            type: "message.delta",
-            runId,
-            text: result.response,
-          });
+          if (isTestExecutionMode()) {
+            await broadcastAssistantTextInChunks(runId, result.response);
+          } else {
+            broadcast(runId, {
+              type: "message.delta",
+              runId,
+              text: result.response,
+            });
+          }
 
           completeRun(runId, state, "finished");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Good morning feel failed";
           logFeelStep(polishStepId, message, "error");
+          broadcast(runId, {
+            type: "run.failed",
+            runId,
+            message,
+          });
+          completeRun(runId, state, "error");
+        }
+        return;
+      }
+
+      if (isLetterInitial) {
+        const pdf = findPdfAttachmentMeta(attachmentMeta, attachments);
+        if (!pdf) {
+          throw new Error("Attach a PDF letter before running /letter.");
+        }
+
+        const logLetterStep = (
+          stepId: string,
+          label: string,
+          status: "completed" | "error" | "running",
+        ) => {
+          broadcast(runId, {
+            type: "activity.step",
+            runId,
+            stepId,
+            kind: "notes",
+            label,
+            status,
+            toolName: "letter_intake",
+          });
+        };
+
+        logLetterStep(`letter-read-${runId}`, "Reading the PDF letter", "running");
+
+        try {
+          const result = await runLetterInitialFlow(notesPath, sessionId, pdf, {
+            model: isTestExecutionMode() ? undefined : selectedModel,
+          });
+
+          logLetterStep(`letter-read-${runId}`, "Analyzed the PDF letter", "completed");
+
+          state.lastAssistantText = result.response;
+          if (isTestExecutionMode()) {
+            await broadcastAssistantTextInChunks(runId, result.response);
+          } else {
+            broadcast(runId, {
+              type: "message.delta",
+              runId,
+              text: result.response,
+            });
+          }
+
+          completeRun(runId, state, "finished");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Letter intake failed";
+          logLetterStep(`letter-read-${runId}`, message, "error");
+          broadcast(runId, {
+            type: "run.failed",
+            runId,
+            message,
+          });
+          completeRun(runId, state, "error");
+        }
+        return;
+      }
+
+      if (isLetterConfirm) {
+        const logLetterConfirmStep = (
+          stepId: string,
+          label: string,
+          status: "completed" | "error" | "running",
+        ) => {
+          broadcast(runId, {
+            type: "activity.step",
+            runId,
+            stepId,
+            kind: "notes",
+            label,
+            status,
+            toolName: "letter_confirm",
+          });
+        };
+
+        logLetterConfirmStep(`letter-file-${runId}`, "Filing the letter in your vault", "running");
+
+        try {
+          const result = await runLetterConfirmFlow(notesPath, sessionId, text, {
+            model: isTestExecutionMode() ? undefined : selectedModel,
+          });
+
+          logLetterConfirmStep(`letter-file-${runId}`, "Filed the letter in Letters/", "completed");
+
+          broadcast(runId, {
+            type: "tool.completed",
+            runId,
+            toolCallId: `letter-wrapper-${runId}`,
+            toolName: "write_workspace_file",
+            category: "notes",
+            structured: {
+              type: "file_diff",
+              path: result.filing.wrapperPath,
+              summary: `Created letter note ${result.filing.wrapperPath}`,
+            },
+          });
+
+          state.lastAssistantText = result.response;
+          if (isTestExecutionMode()) {
+            await broadcastAssistantTextInChunks(runId, result.response);
+          } else {
+            broadcast(runId, {
+              type: "message.delta",
+              runId,
+              text: result.response,
+            });
+          }
+
+          completeRun(runId, state, "finished");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Letter filing failed";
+          logLetterConfirmStep(`letter-file-${runId}`, message, "error");
           broadcast(runId, {
             type: "run.failed",
             runId,

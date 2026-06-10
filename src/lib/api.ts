@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AttachmentWireInput,
   ChatMessage,
+  ExecutionMode,
   LinearIssueEntity,
   LinearIssueLinkMode,
   MarkdownFileEntity,
@@ -237,6 +238,7 @@ export async function updateSettings(updates: {
   notesPath?: string;
   vaultName?: string | null;
   modelMode?: ModelMode;
+  executionMode?: ExecutionMode;
   issueLinkMode?: LinearIssueLinkMode;
 }) {
   return request<{
@@ -246,6 +248,7 @@ export async function updateSettings(updates: {
     modelMode: ModelMode;
     modelId: string;
     modelName: string;
+    executionMode: ExecutionMode;
     issueLinkMode: LinearIssueLinkMode;
   }>("/settings", {
     method: "PUT",

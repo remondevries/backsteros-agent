@@ -3,14 +3,15 @@ import { RunUiPreviewPanel } from "./dev/RunUiPreviewPanel";
 import { AttachmentChip } from "./AttachmentChip";
 import { filesFromClipboard } from "./attachments";
 import { ComposerToolIndicators } from "./ComposerToolIndicators";
-import { ModelModeToggle } from "./ModelModeToggle";
+import { ComposerModeToggle } from "./ComposerModeToggle";
 import { QuickActionsBar } from "./QuickActionsBar";
 import type { QuickAction } from "./quickActions";
-import { modelDisplayNameForMode } from "./modelMode";
+import { composerModeDisplayName } from "./composerMode";
+import type { ComposerMode } from "./composerMode";
 import { TextVoiceToggle, type InputMode } from "./TextVoiceToggle";
 import { TtsToggle } from "./TtsToggle";
 import type { ToolPinSelection, ToolSelection } from "./tool-routing";
-import type { ModelMode, PendingAttachment } from "./types";
+import type { PendingAttachment } from "./types";
 
 export type ComposerHandle = {
   focus: () => void;
@@ -70,10 +71,10 @@ export const Composer = forwardRef<
     onRemoveAttachment: (id: string) => void;
     onOpenAttachment?: (attachment: PendingAttachment) => void;
     isDragging?: boolean;
-    modelMode?: ModelMode;
-    modelName?: string;
-    onModelModeChange?: (mode: ModelMode) => void;
-    savingModel?: boolean;
+    composerMode?: ComposerMode;
+    composerModeLabel?: string;
+    onComposerModeChange?: (mode: ComposerMode) => void;
+    savingComposerMode?: boolean;
     uiPreview?: {
       open: boolean;
       onToggle: () => void;
@@ -101,11 +102,12 @@ export const Composer = forwardRef<
       label: string;
       placeholder?: string;
       onClear: () => void;
-      tagVariant?: "daily-capture" | "good-morning" | "good-night";
+      tagVariant?: "daily-capture" | "good-morning" | "good-night" | "letter";
     };
     onActivateDailyCaptureShortcut?: () => void;
     onTriggerGoodMorningShortcut?: () => void;
     onTriggerGoodNightShortcut?: () => void;
+    onTriggerLetterShortcut?: () => void;
     onEscapeBlur?: () => void;
     onComposerFocus?: () => void;
   }
@@ -122,10 +124,10 @@ export const Composer = forwardRef<
     onRemoveAttachment,
     onOpenAttachment,
     isDragging,
-    modelMode,
-    modelName,
-    onModelModeChange,
-    savingModel,
+    composerMode,
+    composerModeLabel,
+    onComposerModeChange,
+    savingComposerMode,
     uiPreview,
     tts,
     textVoice,
@@ -138,6 +140,7 @@ export const Composer = forwardRef<
     onActivateDailyCaptureShortcut,
     onTriggerGoodMorningShortcut,
     onTriggerGoodNightShortcut,
+    onTriggerLetterShortcut,
     onEscapeBlur,
     onComposerFocus,
   },
@@ -212,7 +215,7 @@ export const Composer = forwardRef<
 
   const activeTools = toolIndicators ?? { obsidian: false, linear: false, calendar: false, whoop: false };
   const showFooter = Boolean(
-    textVoice?.supported || (modelMode && onModelModeChange) || uiPreview,
+    textVoice?.supported || (composerMode && onComposerModeChange) || uiPreview,
   );
   const showReadAloudToggle = Boolean(tts?.supported && !textVoice?.supported);
 
@@ -223,8 +226,9 @@ export const Composer = forwardRef<
     onAddAttachments(files);
   }
 
-  const resolvedModelName =
-    modelName ?? (modelMode ? modelDisplayNameForMode(modelMode) : "");
+  const resolvedComposerModeLabel =
+    composerModeLabel ??
+    (composerMode ? composerModeDisplayName(composerMode) : "");
 
   return (
     <div
@@ -350,6 +354,15 @@ export const Composer = forwardRef<
                     onTriggerGoodNightShortcut();
                     return;
                   }
+                  if (
+                    event.key === " " &&
+                    onTriggerLetterShortcut &&
+                    /^\/letter$/i.test(value)
+                  ) {
+                    event.preventDefault();
+                    onTriggerLetterShortcut();
+                    return;
+                  }
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     onSend();
@@ -415,15 +428,15 @@ export const Composer = forwardRef<
           }}
         >
           <div className="composer-footer-start">
-            {modelMode && onModelModeChange && (
-              <ModelModeToggle
-                mode={modelMode}
-                onChange={onModelModeChange}
-                disabled={disabled || savingModel}
+            {composerMode && onComposerModeChange && (
+              <ComposerModeToggle
+                mode={composerMode}
+                onChange={onComposerModeChange}
+                disabled={disabled || savingComposerMode}
               />
             )}
-            {modelMode && (
-              <span className="composer-model-name">{resolvedModelName}</span>
+            {composerMode && (
+              <span className="composer-model-name">{resolvedComposerModeLabel}</span>
             )}
           </div>
           <div className="composer-footer-end">
