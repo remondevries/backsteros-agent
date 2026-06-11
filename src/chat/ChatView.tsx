@@ -48,6 +48,7 @@ import {
   isGoodMorningFeelMessage,
   isGoodMorningFlowMessage,
   isGoodMorningMessage,
+  isGoodMorningWakeMessage,
   markMorningReviewUsedToday,
   MORNING_REVIEW_MESSAGE,
   parseGoodMorningShortcut,
@@ -1274,6 +1275,7 @@ export const ChatView = forwardRef<
     const isDailyCapture = isDailyCaptureMessage(effectiveQuickActionId);
     const isGroceryList = isGroceryListMessage(effectiveQuickActionId);
     const isDeleteFile = isDeleteFileMessage(effectiveQuickActionId);
+    const isGoodMorningWake = isGoodMorningWakeMessage(effectiveQuickActionId);
     const isGoodMorningFeel = isGoodMorningFeelMessage(effectiveQuickActionId);
     const isGoodNightReflection = isGoodNightReflectionMessage(effectiveQuickActionId);
 
@@ -1368,6 +1370,7 @@ export const ChatView = forwardRef<
       if (
         isDailyCapture ||
         isGroceryList ||
+        isGoodMorningWake ||
         isGoodMorningFeel ||
         isGoodNightReflection
       ) {
@@ -1378,7 +1381,7 @@ export const ChatView = forwardRef<
         if (isGroceryList) {
           resetGroceryWeekNumber();
         }
-        if (isGoodMorningFeel) {
+        if (isGoodMorningWake || isGoodMorningFeel) {
           automation.resetAwaitingFollowUp("good-morning");
         }
         if (isGoodNightReflection) {

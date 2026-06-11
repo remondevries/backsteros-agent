@@ -5,6 +5,7 @@ import { getSelectedModelSelection } from "./models.ts";
 import { loadSettings } from "./store.ts";
 import { isTestExecutionMode } from "./execution-mode.ts";
 import { runGoodMorningFeelFlow } from "./good-morning-feel.ts";
+import { runGoodMorningWakeFlow } from "./good-morning-wake.ts";
 import { runGoodNightActions } from "./good-night.ts";
 import { buildGoodNightChatResponse } from "./good-night-response.ts";
 import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
@@ -39,6 +40,12 @@ export async function runGoodMorningDashboardFlow(notesPath: string) {
   }
 
   return { prefetched, dailyNoteUpdate };
+}
+
+export async function runGoodMorningWakeDashboardFlow(notesPath: string, answer: string) {
+  return runGoodMorningWakeFlow(notesPath, answer, {
+    timezone: loadUserTimezone(),
+  });
 }
 
 export async function runGoodMorningFeelDashboardFlow(

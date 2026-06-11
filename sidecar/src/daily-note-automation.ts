@@ -13,6 +13,7 @@ import {
   upsertEveningReflectionSection,
   upsertFrontmatterFields,
   upsertMetricAfterInDayLog,
+  upsertMetricBeforeInDayLog,
   upsertMetricInDayLog,
 } from "./daily-note.ts";
 import type { WhoopSnapshotEntity } from "./types.ts";
@@ -247,7 +248,6 @@ export function applyMorningReviewDailyNote(
     dayLogMetrics.bedtime = bedtime;
   }
 
-  dayLogMetrics.woke = `around ${formatLocalTimeLabel(input.timezone, now)}`;
   dayLogMetrics.slept = formatSleptDuration(input.whoop);
 
   if (input.weather) {
@@ -266,6 +266,54 @@ export function applyMorningReviewDailyNote(
     updated: content !== baseContent,
     created: note.created,
     lines,
+  };
+}
+
+export function applyGoodMorningWakeDailyNote(
+  notesPath: string,
+  wakeTime: string,
+  options: {
+    timezone?: string;
+    now?: Date;
+    createIfMissing?: boolean;
+  } = {},
+): DailyNoteWriteResult {
+  const createIfMissing = options.createIfMissing ?? true;
+  const trimmedWakeTime = wakeTime.trim();
+  if (!trimmedWakeTime) {
+    throw new Error("Wake time is empty");
+  }
+
+  const note = getTodayDailyNote(notesPath, {
+    includeContent: true,
+    createIfMissing,
+    timezone: options.timezone,
+    now: options.now,
+  });
+
+  if (!note.exists) {
+    throw new Error(`Daily note not found at ${note.path}`);
+  }
+
+  let content = note.content ?? defaultDailyNoteContent(note.date);
+  const baseContent = content;
+  content = ensureDailyNoteJournalStructure(content, note.date);
+
+  if (/^bedtime:\s/m.test(content)) {
+    content = upsertMetricAfterInDayLog(content, "woke", trimmedWakeTime, "bedtime", note.date);
+  } else if (/^slept:\s/m.test(content)) {
+    content = upsertMetricBeforeInDayLog(content, "woke", trimmedWakeTime, "slept", note.date);
+  } else {
+    content = upsertMetricInDayLog(content, "woke", trimmedWakeTime, note.date);
+  }
+
+  writeFileSync(join(notesPath, note.path), content, "utf8");
+
+  return {
+    path: note.path,
+    updated: content !== baseContent,
+    created: note.created,
+    lines: [`woke: ${trimmedWakeTime}`],
   };
 }
 

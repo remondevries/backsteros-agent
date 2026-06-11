@@ -97,7 +97,7 @@ export function buildGoodMorningChatResponse(input: GoodMorningChatResponseInput
       `I have updated your journal with a recovery score of ${whoopRecoveryScoreToken(recovery)}.`,
     );
   } else {
-    lines.push("I have updated your journal with this morning's wake time and weather.");
+    lines.push("I have updated your journal with sleep and weather.");
   }
 
   return lines.join("\n\n");

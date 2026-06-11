@@ -61,6 +61,7 @@ import {
 } from "./morning-review-linear.ts";
 import {
   isGoodMorningFeelQuickAction,
+  isGoodMorningWakeQuickAction,
 } from "./good-morning.ts";
 import { isDailyCaptureQuickAction } from "./daily-capture.ts";
 import { isGroceryListQuickAction } from "./grocery-list.ts";
@@ -97,6 +98,7 @@ import { getLetterFilingOptions } from "./letter-options.ts";
 import {
   runGoodMorningDashboardFlow,
   runGoodMorningFeelDashboardFlow,
+  runGoodMorningWakeDashboardFlow,
   runGoodNightDashboardFlow,
   runGoodNightReflectionDashboardFlow,
 } from "./dashboard-flows.ts";
@@ -584,6 +586,29 @@ app.post("/flows/good-morning", async (c) => {
   }
 });
 
+app.post("/flows/good-morning/wake", async (c) => {
+  const body = (await c.req.json()) as { answer?: string };
+  const answer = body.answer?.trim();
+  if (!answer) {
+    return c.json({ error: "answer is required" }, 400);
+  }
+
+  const notesPath = resolveNotesPath();
+  if (!existsSync(notesPath)) {
+    return c.json({ error: "Notes path does not exist" }, 400);
+  }
+
+  prepareWorkspace(notesPath, port, token);
+
+  try {
+    const result = await runGoodMorningWakeDashboardFlow(notesPath, answer);
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Good morning wake time failed";
+    return c.json({ error: message }, 500);
+  }
+});
+
 app.post("/flows/good-morning/feel", async (c) => {
   const body = (await c.req.json()) as { answer?: string };
   const answer = body.answer?.trim();
@@ -1005,6 +1030,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const agent = await ensureAgentForSession(sessionId, notesPath);
 
   const isMorningReview = isMorningReviewQuickAction(body.quickActionId);
+  const isGoodMorningWake = isGoodMorningWakeQuickAction(body.quickActionId);
   const isGoodMorningFeel = isGoodMorningFeelQuickAction(body.quickActionId);
   const isGoodNightInitial = isGoodNightQuickAction(body.quickActionId);
   const isGoodNightReflection = isGoodNightReflectionQuickAction(body.quickActionId);
@@ -1014,7 +1040,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isGroceryList = isGroceryListQuickAction(body.quickActionId);
   const isDeleteFile = isDeleteFileQuickAction(body.quickActionId);
   const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
-  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList || isDeleteFile
+  const effectiveToolSelection = isGoodMorningWake || isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList || isDeleteFile
     ? {
         obsidian: false,
         linear: false,
