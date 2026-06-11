@@ -20,6 +20,22 @@ export function extractUrls(text: string): string[] {
   return urls.slice(0, 20);
 }
 
+export function resolveLookupSearchModeForRequest(
+  searchMode: LookupSearchMode,
+  promptText: string,
+  hasAttachments: boolean,
+): LookupSearchMode {
+  if (
+    searchMode === "web" &&
+    hasAttachments &&
+    extractUrls(promptText).length === 0
+  ) {
+    return "docs";
+  }
+
+  return searchMode;
+}
+
 export function buildLookupTools(
   searchMode: LookupSearchMode,
   ...texts: string[]
