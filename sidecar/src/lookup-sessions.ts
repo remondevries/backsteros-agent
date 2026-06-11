@@ -114,6 +114,10 @@ function now(): number {
   return Date.now();
 }
 
+export function listLookupSessionSummaries(): LookupSessionTabMeta[] {
+  return readIndex().tabs;
+}
+
 export function listLookupSessions(): LookupSessionListItem[] {
   const index = readIndex();
   return index.tabs
@@ -276,6 +280,10 @@ function buildUserHistoryParts(message: PersistedChatMessage): GeminiContentPart
   }
 
   return [{ text: textParts.join("\n\n") }];
+}
+
+export function loadLookupSessionState(sessionId: string): LookupSessionRecord | null {
+  return readSessionRecord(sessionId);
 }
 
 export function loadLookupHistory(sessionId: string): GeminiHistoryTurn[] {

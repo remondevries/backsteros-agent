@@ -22,7 +22,14 @@ export function isLetterFlowMessage(quickActionId?: string): boolean {
 }
 
 export function isLetterComposerMode(composerQuickActionId?: string | null): boolean {
-  return composerQuickActionId === LETTER_ACTION_ID;
+  return (
+    composerQuickActionId === LETTER_ACTION_ID ||
+    composerQuickActionId === LETTER_CONFIRM_ACTION_ID
+  );
+}
+
+export function isLetterConfirmComposerMode(composerQuickActionId?: string | null): boolean {
+  return composerQuickActionId === LETTER_CONFIRM_ACTION_ID;
 }
 
 export function parseLetterShortcut(text: string): boolean {

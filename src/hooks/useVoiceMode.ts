@@ -43,7 +43,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (target.isContentEditable) return true;
   const tag = target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return Boolean(target.closest(".session-tab-rename-input, .attachment-modal-backdrop"));
+  return Boolean(target.closest(".session-tab-rename-input, .attachment-modal-backdrop, .letter-modal-backdrop"));
 }
 
 function isSpaceKey(event: KeyboardEvent): boolean {

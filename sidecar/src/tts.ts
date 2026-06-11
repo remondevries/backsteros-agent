@@ -98,7 +98,3 @@ export function isTtsAvailable(): boolean {
   // is always available as a capability.
   return true;
 }
-
-void warmupSpeech(DEFAULT_VOICE_ID).catch(() => {
-  // Warmup is best-effort; first speak will retry initialization.
-});

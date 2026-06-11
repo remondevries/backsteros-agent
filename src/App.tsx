@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppViewRibbon } from "./app/AppViewRibbon";
 import { CommandPanel } from "./app/CommandPanel";
 import type { AppView } from "./app/appViews";
@@ -14,9 +14,6 @@ import { useSystemTheme } from "./hooks/useSystemTheme";
 import { LookupView, type LookupViewHandle } from "./lookup/LookupView";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import { VaultProvider } from "./chat/VaultContext";
-import { LinearDashboard } from "./linear/LinearDashboard";
-import { ObsidianDashboard } from "./obsidian/ObsidianDashboard";
-import { WhoopDashboard } from "./whoop/WhoopDashboard";
 import {
   connectGoogleCalendar,
   formatSidecarReachabilityError,
@@ -29,6 +26,16 @@ import {
 import { isTauriRuntime } from "./lib/tauriRuntime";
 import { setLinearIssueLinkMode } from "./lib/linear/linearLink";
 import { openExternalUrl } from "./lib/openExternalUrl";
+
+const WhoopDashboard = lazy(() =>
+  import("./whoop/WhoopDashboard").then((module) => ({ default: module.WhoopDashboard })),
+);
+const LinearDashboard = lazy(() =>
+  import("./linear/LinearDashboard").then((module) => ({ default: module.LinearDashboard })),
+);
+const ObsidianDashboard = lazy(() =>
+  import("./obsidian/ObsidianDashboard").then((module) => ({ default: module.ObsidianDashboard })),
+);
 
 async function loadTauriConnection() {
   try {
@@ -99,6 +106,7 @@ export default function App() {
   const {
     tabs,
     activeSessionId,
+    mountedSessionIds,
     loading: tabsLoading,
     selectTab,
     newTab,
@@ -115,6 +123,7 @@ export default function App() {
   const {
     tabs: lookupTabs,
     activeSessionId: activeLookupSessionId,
+    mountedSessionIds: mountedLookupSessionIds,
     loading: lookupTabsLoading,
     selectTab: selectLookupTab,
     newTab: newLookupTab,
@@ -124,6 +133,15 @@ export default function App() {
     renameTab: renameLookupTab,
     saveTabState: saveLookupTabState,
   } = useLookupSessionTabs(lookupEnabled);
+
+  const mountedChatSessionIds = useMemo(
+    () => new Set(mountedSessionIds),
+    [mountedSessionIds],
+  );
+  const mountedLookupSessionIdSet = useMemo(
+    () => new Set(mountedLookupSessionIds),
+    [mountedLookupSessionIds],
+  );
 
   useSystemTheme();
 
@@ -168,7 +186,7 @@ export default function App() {
         healthTimeoutMs: usingTauri || isTauriRuntime() ? 2_000 : 8_000,
       });
 
-      const health = await getHealth();
+      const [health, settings] = await Promise.all([getHealth(), getSettings()]);
       if (!health.hasApiKey) {
         setHealthError("Set CURSOR_API_KEY in ~/.backsteros-agent/.env");
         return;
@@ -208,7 +226,6 @@ export default function App() {
         setWhoopWarning(null);
       }
 
-      const settings = await getSettings();
       setNotesPath(settings.notesPath);
       setVaultName(settings.vaultName ?? null);
       setDefaultNotesPath(settings.defaultNotesPath);
@@ -529,7 +546,9 @@ export default function App() {
                 {tabsLoading && tabs.length === 0 ? (
                   <div className="app-shell loading">Loading sessions…</div>
                 ) : (
-                  tabs.map((tab) => (
+                  tabs
+                    .filter((tab) => mountedChatSessionIds.has(tab.sessionId))
+                    .map((tab) => (
                     <div
                       key={tab.sessionId}
                       className={`chat-view-pane ${tab.sessionId === activeSessionId ? "chat-view-pane-active" : ""}`}
@@ -561,7 +580,9 @@ export default function App() {
                 {lookupTabsLoading && lookupTabs.length === 0 ? (
                   <div className="app-shell loading">Loading lookup sessions…</div>
                 ) : (
-                  lookupTabs.map((tab) => (
+                  lookupTabs
+                    .filter((tab) => mountedLookupSessionIdSet.has(tab.sessionId))
+                    .map((tab) => (
                     <div
                       key={tab.sessionId}
                       className={`chat-view-pane ${tab.sessionId === activeLookupSessionId ? "chat-view-pane-active" : ""}`}
@@ -585,17 +606,29 @@ export default function App() {
                 )}
               </div>
 
-              <div className="app-view-pane" hidden={appView !== "whoop"}>
-                <WhoopDashboard />
-              </div>
+              {appView === "whoop" ? (
+                <div className="app-view-pane">
+                  <Suspense fallback={<div className="app-shell loading">Loading Whoop…</div>}>
+                    <WhoopDashboard />
+                  </Suspense>
+                </div>
+              ) : null}
 
-              <div className="app-view-pane" hidden={appView !== "linear"}>
-                <LinearDashboard />
-              </div>
+              {appView === "linear" ? (
+                <div className="app-view-pane">
+                  <Suspense fallback={<div className="app-shell loading">Loading Linear…</div>}>
+                    <LinearDashboard />
+                  </Suspense>
+                </div>
+              ) : null}
 
-              <div className="app-view-pane" hidden={appView !== "obsidian"}>
-                <ObsidianDashboard />
-              </div>
+              {appView === "obsidian" ? (
+                <div className="app-view-pane">
+                  <Suspense fallback={<div className="app-shell loading">Loading vault…</div>}>
+                    <ObsidianDashboard />
+                  </Suspense>
+                </div>
+              ) : null}
             </div>
           </div>
         </VaultProvider>

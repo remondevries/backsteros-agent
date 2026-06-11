@@ -43,6 +43,7 @@ import {
   getModelMode,
   getSelectedModelId,
   resolveSelectedModelName,
+  resolveSelectedModelNameFresh,
   getSelectedModelSelection,
   refreshMaxModelCache,
 } from "./models.ts";
@@ -50,6 +51,7 @@ import {
   createRunLifecycleEvents,
   createRunState,
   mapSdkMessageToEvents,
+  reconcileAssistantTextFromRun,
 } from "./events.ts";
 import { resolveLinearIssueAvatars } from "./linearAvatars.ts";
 import {
@@ -62,7 +64,14 @@ import {
 } from "./good-morning.ts";
 import { isDailyCaptureQuickAction } from "./daily-capture.ts";
 import { isGroceryListQuickAction } from "./grocery-list.ts";
+import {
+  clearPendingDeleteFile,
+  isDeleteFileQuickAction,
+  peekPendingDeleteFile,
+  respondToPendingDeleteFile,
+} from "./delete-file.ts";
 import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
+import { fetchLinearTeams } from "./linear/teams.ts";
 import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
 import { dispatchAutomationHandler } from "./automation/registry.ts";
 import type { AutomationHandlerContext } from "./automation/types.ts";
@@ -79,9 +88,12 @@ import {
   findPdfAttachmentMeta,
   isLetterConfirmQuickAction,
   isLetterQuickAction,
+  clearPendingLetter,
+  peekPendingLetter,
   runLetterConfirmFlow,
   runLetterInitialFlow,
 } from "./letter.ts";
+import { getLetterFilingOptions } from "./letter-options.ts";
 import {
   runGoodMorningDashboardFlow,
   runGoodMorningFeelDashboardFlow,
@@ -110,7 +122,8 @@ import {
   deleteSessionRecord,
   getActiveSessionId,
   getSessionNotesPath,
-  listSessions,
+  listSessionSummaries,
+  loadSessionState,
   migrateLegacySessionIfNeeded,
   saveSessionState,
   sessionExists,
@@ -123,7 +136,8 @@ import {
   DEFAULT_LOOKUP_SESSION_TITLE,
   deleteLookupSessionRecord,
   getActiveLookupSessionId,
-  listLookupSessions,
+  listLookupSessionSummaries,
+  loadLookupSessionState,
   lookupSessionExists,
   saveLookupSessionState,
   setActiveLookupSession,
@@ -145,21 +159,7 @@ import {
   prepareWorkspace,
   revertLastChanges,
 } from "./workspace.ts";
-import {
-  DEFAULT_VOICE_ID,
-  isTtsAvailable,
-  listTtsVoices,
-  stopSpeech,
-  synthesizeSpeech,
-  warmupSpeech,
-} from "./tts.ts";
-import {
-  getSttModelId,
-  isSttAvailable,
-  isSttReady,
-  transcribeAudio,
-  warmupStt,
-} from "./stt.ts";
+import { loadTtsModule, loadSttModule } from "./speech-modules.ts";
 
 const token = getSidecarToken();
 const port = getSidecarPort();
@@ -377,6 +377,20 @@ app.get("/linear/projects", async (c) => {
   }
 });
 
+app.get("/linear/teams", async (c) => {
+  if (!getLinearApiKey()) {
+    return c.json({ error: "LINEAR_API_KEY is not configured", teams: [] }, 400);
+  }
+
+  try {
+    const teams = await fetchLinearTeams();
+    return c.json({ teams });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear teams";
+    return c.json({ error: message, teams: [] }, 500);
+  }
+});
+
 app.get("/linear/projects/:projectId", async (c) => {
   if (!getLinearApiKey()) {
     return c.json({ error: "LINEAR_API_KEY is not configured" }, 400);
@@ -466,6 +480,92 @@ app.get("/vault/daily-note/today", async (c) => {
     const note = getTodayDailyNote(notesPath, { includeContent: false, createIfMissing: false });
     return c.json({ note, stats: null, recentNotes: [], error: message }, 500);
   }
+});
+
+app.get("/letter/filing-options", (c) => {
+  const notesPath = resolveNotesPath();
+  if (!existsSync(notesPath)) {
+    return c.json({ error: "Notes path does not exist" }, 400);
+  }
+
+  return c.json(getLetterFilingOptions(notesPath));
+});
+
+app.get("/letter/pending/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!sessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const pending = peekPendingLetter(sessionId);
+  if (!pending) {
+    return c.json({ pending: null });
+  }
+
+  return c.json({
+    pending: {
+      proposal: pending.proposal,
+      originalName: pending.originalName,
+    },
+  });
+});
+
+app.delete("/letter/pending/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!sessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  clearPendingLetter(sessionId);
+  return c.json({ ok: true });
+});
+
+app.get("/delete-file/pending/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!sessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const pending = peekPendingDeleteFile(sessionId);
+  return c.json({
+    pending: pending ? { path: pending.path } : null,
+  });
+});
+
+app.delete("/delete-file/pending/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  if (!sessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  clearPendingDeleteFile(sessionId);
+  return c.json({ ok: true });
+});
+
+app.post("/delete-file/respond", async (c) => {
+  const body = (await c.req.json()) as {
+    sessionId?: string;
+    action?: "confirm" | "return";
+  };
+  const sessionId = body.sessionId?.trim();
+  const action = body.action;
+  if (!sessionId) {
+    return c.json({ error: "sessionId is required" }, 400);
+  }
+  if (action !== "confirm" && action !== "return") {
+    return c.json({ error: "action must be confirm or return" }, 400);
+  }
+  if (!sessionExists(sessionId)) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const notesPath = resolveNotesPath();
+  if (!existsSync(notesPath)) {
+    return c.json({ error: "Notes path does not exist" }, 400);
+  }
+
+  const result = respondToPendingDeleteFile(notesPath, sessionId, action);
+  return c.json(result);
 });
 
 app.post("/flows/good-morning", async (c) => {
@@ -559,7 +659,7 @@ app.get("/settings", async (c) => {
   const settings = loadSettings();
   const modelMode = getModelMode(settings);
   const modelId = getSelectedModelId(settings);
-  const modelName = await resolveSelectedModelName(settings);
+  const modelName = resolveSelectedModelName(settings);
   return c.json({
     notesPath: settings.notesPath,
     vaultName: settings.vaultName ?? null,
@@ -670,7 +770,7 @@ app.put("/settings", async (c) => {
 
   const next = loadSettings();
   const resolvedMode = getModelMode(next);
-  const modelName = await resolveSelectedModelName(next);
+  const modelName = await resolveSelectedModelNameFresh(next);
 
   return c.json({
     notesPath: next.notesPath,
@@ -710,12 +810,31 @@ app.get("/sessions", (c) => {
   const notesPath = resolveNotesPath();
   migrateLegacySessionIfNeeded(notesPath);
 
-  const sessions = listSessions();
+  const sessions = listSessionSummaries();
   const activeSessionId = getActiveSessionId() ?? sessions[0]?.sessionId ?? null;
 
   return c.json({
     activeSessionId,
     sessions,
+  });
+});
+
+app.get("/sessions/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  const record = loadSessionState(sessionId);
+  if (!record) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  return c.json({
+    sessionId: record.sessionId,
+    agentId: record.agentId,
+    notesPath: record.notesPath,
+    title: record.title,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    messages: record.messages,
+    runs: record.runs,
   });
 });
 
@@ -893,8 +1012,9 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isLetterConfirm = isLetterConfirmQuickAction(body.quickActionId);
   const isDailyCapture = isDailyCaptureQuickAction(body.quickActionId);
   const isGroceryList = isGroceryListQuickAction(body.quickActionId);
+  const isDeleteFile = isDeleteFileQuickAction(body.quickActionId);
   const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
-  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList
+  const effectiveToolSelection = isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList || isDeleteFile
     ? {
         obsidian: false,
         linear: false,
@@ -999,6 +1119,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
 
       const automationHandlerContext: AutomationHandlerContext = {
         runId,
+        sessionId,
         text,
         notesPath,
         timezone: loadUserTimezone(),
@@ -1109,6 +1230,21 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             model: isTestExecutionMode() ? undefined : selectedModel,
           });
 
+          if (result.action === "clarify") {
+            logLetterConfirmStep(
+              `letter-file-${runId}`,
+              "Need more letter filing details",
+              "completed",
+            );
+            const clarifyResponse =
+              result.response?.trim() ||
+              "I couldn't process that reply. Please try again with the project name or say none to skip.";
+            state.lastAssistantText = clarifyResponse;
+            broadcastAssistantMessage(runId, clarifyResponse);
+            completeRun(runId, state, "finished");
+            return;
+          }
+
           logLetterConfirmStep(`letter-file-${runId}`, "Filed the letter in Letters/", "completed");
 
           broadcast(runId, {
@@ -1202,6 +1338,11 @@ app.post("/sessions/:sessionId/messages", async (c) => {
             ? "cancelled"
             : "error";
 
+      const fallbackText = reconcileAssistantTextFromRun(state, result);
+      if (fallbackText) {
+        broadcastAssistantMessage(runId, fallbackText);
+      }
+
       completeRun(runId, state, status);
     } catch (error) {
       if (isRunCancelled(runId)) {
@@ -1231,9 +1372,26 @@ app.post("/sessions/:sessionId/messages", async (c) => {
 });
 
 app.get("/lookup/sessions", (c) => {
-  const sessions = listLookupSessions();
+  const sessions = listLookupSessionSummaries();
   const activeSessionId = getActiveLookupSessionId() ?? sessions[0]?.sessionId ?? null;
   return c.json({ activeSessionId, sessions });
+});
+
+app.get("/lookup/sessions/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  const record = loadLookupSessionState(sessionId);
+  if (!record) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  return c.json({
+    sessionId: record.sessionId,
+    title: record.title,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    messages: record.messages,
+    runs: record.runs,
+  });
 });
 
 app.post("/lookup/sessions", (c) => {
@@ -1711,15 +1869,17 @@ app.post("/approvals/request", async (c) => {
   return c.json({ approvalId: request.id });
 });
 
-app.get("/tts/voices", (c) => {
-  if (!isTtsAvailable()) {
+app.get("/tts/voices", async (c) => {
+  const tts = await loadTtsModule();
+  if (!tts.isTtsAvailable()) {
     return c.json({ error: "TTS is not available. Run npm run download:tts." }, 503);
   }
-  return c.json({ voices: listTtsVoices() });
+  return c.json({ voices: tts.listTtsVoices() });
 });
 
 app.post("/tts/speak", async (c) => {
-  if (!isTtsAvailable()) {
+  const tts = await loadTtsModule();
+  if (!tts.isTtsAvailable()) {
     return c.json({ error: "TTS is not available. Run npm run download:tts." }, 503);
   }
 
@@ -1729,14 +1889,14 @@ app.post("/tts/speak", async (c) => {
     return c.json({ error: "text is required" }, 400);
   }
 
-  const voices = listTtsVoices();
-  const voiceId = body.voiceId ?? DEFAULT_VOICE_ID;
+  const voices = tts.listTtsVoices();
+  const voiceId = body.voiceId ?? tts.DEFAULT_VOICE_ID;
   if (!voices.some((voice) => voice.id === voiceId)) {
     return c.json({ error: `Unknown voice: ${voiceId}` }, 400);
   }
 
   try {
-    const audio = await synthesizeSpeech(text, voiceId);
+    const audio = await tts.synthesizeSpeech(text, voiceId);
     return new Response(audio, {
       headers: {
         "Content-Type": "audio/wav",
@@ -1749,21 +1909,23 @@ app.post("/tts/speak", async (c) => {
   }
 });
 
-app.post("/tts/stop", (c) => {
-  stopSpeech();
+app.post("/tts/stop", async (c) => {
+  const tts = await loadTtsModule();
+  tts.stopSpeech();
   return c.json({ ok: true });
 });
 
 app.post("/tts/warmup", async (c) => {
-  if (!isTtsAvailable()) {
+  const tts = await loadTtsModule();
+  if (!tts.isTtsAvailable()) {
     return c.json({ error: "TTS is not available. Run npm run download:tts." }, 503);
   }
 
   const body = await c.req.json<{ voiceId?: string }>().catch(() => ({ voiceId: undefined }));
-  const voiceId = body.voiceId ?? DEFAULT_VOICE_ID;
+  const voiceId = body.voiceId ?? tts.DEFAULT_VOICE_ID;
 
   try {
-    await warmupSpeech(voiceId);
+    await tts.warmupSpeech(voiceId);
     return c.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "TTS warmup failed";
@@ -1771,25 +1933,27 @@ app.post("/tts/warmup", async (c) => {
   }
 });
 
-app.get("/stt/status", (c) => {
-  if (!isSttAvailable()) {
+app.get("/stt/status", async (c) => {
+  const stt = await loadSttModule();
+  if (!stt.isSttAvailable()) {
     return c.json({ error: "STT is not available. Run npm run download:stt." }, 503);
   }
 
   return c.json({
     available: true,
-    ready: isSttReady(),
-    modelId: getSttModelId(),
+    ready: stt.isSttReady(),
+    modelId: stt.getSttModelId(),
   });
 });
 
 app.post("/stt/warmup", async (c) => {
-  if (!isSttAvailable()) {
+  const stt = await loadSttModule();
+  if (!stt.isSttAvailable()) {
     return c.json({ error: "STT is not available. Run npm run download:stt." }, 503);
   }
 
   try {
-    await warmupStt();
+    await stt.warmupStt();
     return c.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "STT warmup failed";
@@ -1798,7 +1962,8 @@ app.post("/stt/warmup", async (c) => {
 });
 
 app.post("/stt/transcribe", async (c) => {
-  if (!isSttAvailable()) {
+  const stt = await loadSttModule();
+  if (!stt.isSttAvailable()) {
     return c.json({ error: "STT is not available. Run npm run download:stt." }, 503);
   }
 
@@ -1818,7 +1983,7 @@ app.post("/stt/transcribe", async (c) => {
 
   try {
     const pcm = new Float32Array(buffer);
-    const text = await transcribeAudio(pcm);
+    const text = await stt.transcribeAudio(pcm);
     return c.json({ text });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Speech transcription failed";
@@ -1829,12 +1994,8 @@ app.post("/stt/transcribe", async (c) => {
 const ready: ReadyMessage = { type: "ready", port, token };
 console.log(JSON.stringify(ready));
 
-const bootSettings = loadSettings();
 ensureAgentProfile();
 ensureUserProfile();
-if (bootSettings.notesPath) {
-  prepareWorkspace(bootSettings.notesPath, port, token);
-}
 
 void refreshMaxModelCache().catch(() => {
   // Fall back to MAX_MODEL_ID_FALLBACK when the model list is unavailable.

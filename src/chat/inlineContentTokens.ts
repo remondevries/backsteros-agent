@@ -1,10 +1,10 @@
 import type { InlineContentPart } from "./inlineContentTokens";
 
 const INLINE_TOKEN_DETECT =
-  /\{\{(?:linear-issues-count:\d+|linear-completed-count:\d+|linear-moved-count:\d+|linear-issue-link:[^}]+|whoop-sleep-score:\d+|whoop-recovery-score:\d+|whoop-strain-score:\d+(?:\.\d+)?|whoop-strain-target:\d+(?:\.\d+)?|whoop-sleep-duration:[^}]+|emphasis:[^}]+)\}\}|\[\d+ issues?\]\(backster:\/\/linear-issues\/\d+\)/;
+  /\{\{(?:linear-issues-count:\d+|linear-completed-count:\d+|linear-moved-count:\d+|linear-issue-link:[^}]+|vault-note-link:[^}]+|whoop-sleep-score:\d+|whoop-recovery-score:\d+|whoop-strain-score:\d+(?:\.\d+)?|whoop-strain-target:\d+(?:\.\d+)?|whoop-sleep-duration:[^}]+|emphasis:[^}]+)\}\}|\[\d+ issues?\]\(backster:\/\/linear-issues\/\d+\)/;
 
 const INLINE_TOKEN_RE =
-  /\{\{(linear-issues-count|linear-completed-count|linear-moved-count|linear-issue-link|whoop-sleep-score|whoop-recovery-score|whoop-strain-score|whoop-strain-target|whoop-sleep-duration|emphasis):([^}]+)\}\}|\[(\d+) issues?\]\(backster:\/\/linear-issues\/(\d+)\)/g;
+  /\{\{(linear-issues-count|linear-completed-count|linear-moved-count|linear-issue-link|vault-note-link|whoop-sleep-score|whoop-recovery-score|whoop-strain-score|whoop-strain-target|whoop-sleep-duration|emphasis):([^}]+)\}\}|\[(\d+) issues?\]\(backster:\/\/linear-issues\/(\d+)\)/g;
 
 export type InlineContentPart =
   | { type: "text"; value: string }
@@ -12,6 +12,7 @@ export type InlineContentPart =
   | { type: "linear-completed-count"; count: number; raw: string }
   | { type: "linear-moved-count"; count: number; raw: string }
   | { type: "linear-issue-link"; label: string; url: string; raw: string }
+  | { type: "vault-note-link"; label: string; path: string; raw: string }
   | { type: "whoop-sleep-score"; score: number; raw: string }
   | { type: "whoop-recovery-score"; score: number; raw: string }
   | { type: "whoop-strain-score"; score: number; raw: string }
@@ -38,6 +39,17 @@ function parseTokenMatch(match: RegExpMatchArray): InlineContentPart {
       type: "linear-issue-link",
       label: encodedLabel.replace(/_/g, " ").trim(),
       url: url.trim(),
+      raw: match[0],
+    };
+  }
+  if (tokenType === "vault-note-link") {
+    const separatorIndex = value.indexOf("|");
+    const encodedLabel = separatorIndex >= 0 ? value.slice(0, separatorIndex) : value;
+    const path = separatorIndex >= 0 ? value.slice(separatorIndex + 1) : "";
+    return {
+      type: "vault-note-link",
+      label: encodedLabel.replace(/_/g, " ").trim(),
+      path: path.trim(),
       raw: match[0],
     };
   }

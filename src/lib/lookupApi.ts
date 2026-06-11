@@ -45,18 +45,21 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 120_000)
   }
 }
 
-export interface LookupSessionRecordResponse {
+export interface LookupSessionSummaryResponse {
   sessionId: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface LookupSessionRecordResponse extends LookupSessionSummaryResponse {
   messages: ChatMessage[];
   runs: Record<string, RunViewModel>;
 }
 
 export interface LookupSessionListResponse {
   activeSessionId: string | null;
-  sessions: LookupSessionRecordResponse[];
+  sessions: LookupSessionSummaryResponse[];
 }
 
 export interface DeleteLookupSessionResponse {
@@ -66,6 +69,12 @@ export interface DeleteLookupSessionResponse {
 
 export async function listLookupSessions() {
   return request<LookupSessionListResponse>("/lookup/sessions");
+}
+
+export async function getLookupSessionState(sessionId: string) {
+  return request<LookupSessionRecordResponse>(
+    `/lookup/sessions/${encodeURIComponent(sessionId)}`,
+  );
 }
 
 export async function createLookupSession() {

@@ -11,6 +11,7 @@ export const LETTER_STATUS_ORDER = ["Inbox", "In Progress", "On Hold", "Archived
 export type LetterStatus = (typeof LETTER_STATUS_ORDER)[number];
 
 export interface LetterFilingMetadata {
+  assigned?: string;
   creator: string;
   organization: string;
   date: string;
@@ -56,6 +57,7 @@ function sanitizeFileName(name: string): string {
 export function resolveLetterStatus(status: string | undefined): LetterStatus {
   const value = status?.trim() ?? "";
   if (!value) return "Inbox";
+  if (value.toLowerCase() === "archive") return "Archived";
   for (const option of LETTER_STATUS_ORDER) {
     if (option.toLowerCase() === value.toLowerCase()) return option;
   }
@@ -64,6 +66,19 @@ export function resolveLetterStatus(status: string | undefined): LetterStatus {
 
 export function yamlQuotedString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function yamlNoteValue(note: string): string {
+  if (
+    !note.includes("\n") &&
+    !note.includes(":") &&
+    !note.includes("#") &&
+    !note.startsWith('"') &&
+    !note.startsWith("'")
+  ) {
+    return note;
+  }
+  return yamlQuotedString(note);
 }
 
 function loadAssignedName(): string {
@@ -79,32 +94,29 @@ function buildEmbed(attachmentName: string): string {
 export function buildLetterWrapperContent(
   pdfFileName: string,
   metadata: LetterFilingMetadata,
-  assigned = loadAssignedName(),
 ): string {
   const status = resolveLetterStatus(metadata.status);
   const date = metadata.date.trim();
   const project = metadata.project?.trim() ?? "";
-  const creator = metadata.creator.trim();
   const organization = metadata.organization.trim();
   const note = metadata.note?.trim() ?? "";
+  const assigned = metadata.assigned?.trim() || loadAssignedName();
 
   const lines = [
     "---",
     "type: letter",
     `assigned: ${yamlQuotedString(assigned)}`,
-    `organization: ${organization ? yamlQuotedString(organization) : '""'}`,
-    `status: ${status}`,
     `date: ${date ? yamlQuotedString(date) : '""'}`,
-    `creator: ${creator ? yamlQuotedString(creator) : '""'}`,
+    `organization: ${organization ? yamlQuotedString(organization) : '""'}`,
     `project: ${project ? yamlQuotedString(project) : '""'}`,
-    "---",
-    "",
-    buildEmbed(pdfFileName),
+    `status: ${yamlQuotedString(status)}`,
   ];
 
   if (note) {
-    lines.push("", note);
+    lines.push(`note: ${yamlNoteValue(note)}`);
   }
+
+  lines.push("---", "", buildEmbed(pdfFileName));
 
   return lines.join("\n");
 }

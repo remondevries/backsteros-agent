@@ -12,6 +12,7 @@ import type {
   SidecarConnection,
   WhoopSnapshotEntity,
 } from "../chat/types";
+import type { LetterAnalysisSummary, LetterFilingOptions } from "../chat/letterFiling";
 
 let connection: SidecarConnection = {
   baseUrl: import.meta.env.DEV ? "/api" : "http://127.0.0.1:3847",
@@ -155,6 +156,44 @@ export async function fetchLinearToday() {
     issues: LinearIssueEntity[];
     error?: string;
   }>("/linear/today");
+}
+
+export async function fetchLetterFilingOptions() {
+  return request<LetterFilingOptions>("/letter/filing-options");
+}
+
+export async function fetchLetterPending(sessionId: string) {
+  return request<{
+    pending: { proposal: unknown; originalName: string } | null;
+  }>(`/letter/pending/${encodeURIComponent(sessionId)}`);
+}
+
+export async function clearLetterPending(sessionId: string) {
+  return request<{ ok: boolean }>(`/letter/pending/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchDeleteFilePending(sessionId: string) {
+  return request<{
+    pending: { path: string } | null;
+  }>(`/delete-file/pending/${encodeURIComponent(sessionId)}`);
+}
+
+export async function clearDeleteFilePending(sessionId: string) {
+  return request<{ ok: boolean }>(`/delete-file/pending/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function respondDeleteFile(
+  sessionId: string,
+  action: "confirm" | "return",
+) {
+  return request<{ response: string; deleted?: string[] }>("/delete-file/respond", {
+    method: "POST",
+    body: JSON.stringify({ sessionId, action }),
+  });
 }
 
 export async function fetchVaultDailyNoteToday() {
@@ -312,18 +351,21 @@ export async function updateSettings(updates: {
   });
 }
 
-export interface SessionListResponse {
-  activeSessionId: string | null;
-  sessions: SessionRecordResponse[];
-}
-
-export interface SessionRecordResponse {
+export interface SessionSummaryResponse {
   sessionId: string;
-  agentId: string;
-  notesPath: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface SessionListResponse {
+  activeSessionId: string | null;
+  sessions: SessionSummaryResponse[];
+}
+
+export interface SessionRecordResponse extends SessionSummaryResponse {
+  agentId: string;
+  notesPath: string;
   messages: ChatMessage[];
   runs: Record<string, RunViewModel>;
 }
@@ -335,6 +377,12 @@ export interface DeleteSessionResponse {
 
 export async function listSessions() {
   return request<SessionListResponse>("/sessions");
+}
+
+export async function getSessionState(sessionId: string) {
+  return request<SessionRecordResponse>(
+    `/sessions/${encodeURIComponent(sessionId)}`,
+  );
 }
 
 export async function createSession() {

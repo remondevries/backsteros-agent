@@ -108,6 +108,7 @@
 
   --automation-composer-border: #4ade80;
   --automation-composer-border-opacity: 35%;
+  --delete-file-composer-border: #f87171;
 }
 
 @media (prefers-color-scheme: light) {
@@ -221,5 +222,6 @@
 
     --automation-composer-border: #16a34a;
     --automation-composer-border-opacity: 42%;
+    --delete-file-composer-border: #dc2626;
   }
 }

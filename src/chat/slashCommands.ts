@@ -1,5 +1,6 @@
 import { DAILY_CAPTURE_LABEL } from "./dailyCapture";
 import { GROCERY_LIST_LABEL } from "./groceryList";
+import { DELETE_FILE_LABEL } from "./deleteFile";
 import { GOOD_NIGHT_LABEL } from "./goodNight";
 import { LETTER_LABEL } from "./letter";
 import {
@@ -15,6 +16,7 @@ export type SlashCommandId =
   | "grocery-list"
   | "good-night"
   | "letter"
+  | "delete-file"
   | "clear";
 
 export type SlashCommandDefinition = {
@@ -61,6 +63,13 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     label: LETTER_LABEL,
     description: "File an attached PDF letter to your vault",
     triggers: ["letter"],
+    contexts: ["chat"],
+  },
+  {
+    id: "delete-file",
+    label: DELETE_FILE_LABEL,
+    description: "Delete a note or file from your vault",
+    triggers: ["d", "delete"],
     contexts: ["chat"],
   },
   {

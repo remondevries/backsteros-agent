@@ -66,6 +66,7 @@ export function categorizeTool(toolName: string, args?: unknown): ToolCategory {
     innerTool.includes("write_workspace") ||
     innerTool.includes("append_workspace") ||
     innerTool.includes("today_daily_note") ||
+    innerTool.includes("world_time") ||
     innerTool.includes("run_workspace_shell")
   ) {
     return "notes";
@@ -190,6 +191,18 @@ export function getToolLabel(
     }
     if (inner === "today_daily_note") {
       return status === "running" ? "Opening today's daily note…" : "Loaded today's daily note";
+    }
+    if (inner === "world_time") {
+      const locations = Array.isArray(argsObj.locations)
+        ? argsObj.locations.map((entry) => String(entry)).filter(Boolean)
+        : [];
+      const preview =
+        locations.length === 0
+          ? "local time"
+          : locations.length === 1
+            ? locations[0]
+            : `${locations.length} locations`;
+      return status === "running" ? `Looking up ${preview}…` : `Looked up ${preview}`;
     }
     if (inner === "run_workspace_shell") {
       const command = argsObj.command;

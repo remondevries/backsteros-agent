@@ -1,13 +1,14 @@
 import type { ChatMessage } from "../types";
 
-export type AutomationFlowId = "good-morning" | "good-night" | "daily-capture" | "grocery-list" | "letter";
+export type AutomationFlowId = "good-morning" | "good-night" | "daily-capture" | "grocery-list" | "letter" | "delete-file";
 
 export type AutomationFlowVariant =
   | "good-morning"
   | "good-night"
   | "letter"
   | "daily-capture"
-  | "grocery-list";
+  | "grocery-list"
+  | "delete-file";
 
 export type InitialRunStep = {
   kind: "initialRun";

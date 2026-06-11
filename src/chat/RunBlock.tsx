@@ -10,7 +10,10 @@ import { WhoopSnapshotBrand } from "./WhoopSnapshotCard";
 import { MessageActions } from "./MessageActions";
 import { TerminalTypingText } from "./TerminalTypingText";
 import { UpdateConfirmationPresentation } from "./UpdateConfirmationPresentation";
+import { DeleteFileConfirmActions } from "./DeleteFileConfirmCard";
+import { RunDeferredContent } from "./RunDeferredContent";
 import { parseUpdateConfirmationToken, formatUpdateConfirmationMessage } from "./updateConfirmation";
+import { parseDeleteFileConfirmToken } from "./deleteFileConfirm";
 import { ToolResultCard } from "./ToolResultCard";
 import type { RunViewModel } from "./types";
 
@@ -26,6 +29,9 @@ export function RunBlock({
   onOpenLinearDashboard,
   onOpenWhoopDashboard,
   onPresentationComplete,
+  onDeleteFileConfirm,
+  onDeleteFileReturn,
+  deleteConfirmResolved,
 }: {
   run: RunViewModel;
   onToggle: () => void;
@@ -38,20 +44,26 @@ export function RunBlock({
   onOpenLinearDashboard?: () => void;
   onOpenWhoopDashboard?: () => void;
   onPresentationComplete?: () => void;
+  onDeleteFileConfirm?: (runId: string) => void;
+  onDeleteFileReturn?: (runId: string) => void;
+  deleteConfirmResolved?: Record<string, { confirmed: boolean }>;
 }) {
   const running = run.status === "running";
-  const [typingComplete, setTypingComplete] = useState(false);
+  const [typingComplete, setTypingComplete] = useState(!animate);
   const readingAloud = useRunPlaybackActive(voiceModeEnabled ? run.runId : "");
   const updateConfirmation = parseUpdateConfirmationToken(run.text);
+  const deleteFileConfirm = parseDeleteFileConfirmToken(run.text);
+  const deleteConfirmState = deleteConfirmResolved?.[run.runId];
+  const runDisplayText = deleteFileConfirm ? deleteFileConfirm.message : run.text;
   const runActionText = updateConfirmation
     ? formatUpdateConfirmationMessage(updateConfirmation)
-    : run.text;
+    : runDisplayText;
 
   useEffect(() => {
-    if (running) {
+    if (running && animate) {
       setTypingComplete(false);
     }
-  }, [running]);
+  }, [animate, running]);
 
   const hasFileDiff = run.entities.some((entity) => entity.type === "file_diff");
   const hasWhoopSnapshots = run.entities.some(
@@ -67,7 +79,9 @@ export function RunBlock({
   const hasPendingApproval = run.approvals.some((approval) => !approval.resolved);
   const hideTextForApproval = hasPendingApproval && run.text.trim().length > 0;
   const showTextBlock =
-    (running || run.text.length > 0) && !hideRedundantText && !hideTextForApproval;
+    (running || runDisplayText.length > 0) &&
+    !hideRedundantText &&
+    !hideTextForApproval;
   const hasTableEntities = run.entities.some(
     (entity) =>
       entity.type === "linear_issues" ||
@@ -85,8 +99,16 @@ export function RunBlock({
     ((hasTableEntities && tableEntityBrands.length > 0) || showWhoopBrandForFileDiff);
   const textBelowBrand = showBacksterBrand || showGeminiBrand || textAboveEntities;
 
-  const delayTableEntitiesUntilTypingComplete = showTextBlock && hasTableEntities;
-  const showTableEntities = !delayTableEntitiesUntilTypingComplete || typingComplete;
+  const waitForTextPresentation = showTextBlock && animate;
+  const deferredReady = !waitForTextPresentation || typingComplete;
+  const hasDeferredContent =
+    run.entities.some(
+      (entity) =>
+        !(entity.type === "file_diff" && updateConfirmation) &&
+        !(entity.type === "whoop_snapshots" && hasFileDiff),
+    ) ||
+    (deleteFileConfirm != null && !deleteConfirmState) ||
+    run.approvals.length > 0;
 
   useEffect(() => {
     if (!animate || running || !onPresentationComplete) return;
@@ -129,7 +151,7 @@ export function RunBlock({
       <div className="run-text-block">
         <TerminalTypingText
           key={run.runId}
-          text={run.text}
+          text={runDisplayText}
           running={running}
           startedAt={run.startedAt}
           readingAloud={readingAloud}
@@ -166,58 +188,59 @@ export function RunBlock({
 
       {textBelowBrand && textBlock}
 
-      {run.entities.map((entity, index) => {
-        if (entity.type === "file_diff" && updateConfirmation) {
-          return null;
-        }
-
-        if (entity.type === "whoop_snapshots" && hasFileDiff) {
-          return null;
-        }
-
-        if (
-          !showTableEntities &&
-          (entity.type === "linear_issues" ||
-            entity.type === "linear_issues_completed" ||
-            entity.type === "calendar_events" ||
-            entity.type === "markdown_files")
-        ) {
-          return null;
-        }
-
-        const whoopSnapshot =
-          entity.type === "file_diff" ? whoopSnapshotForFileDiff : undefined;
-
-        return (
-          <EntityListCard
-            key={`${run.runId}-entity-${index}`}
-            payload={entity}
-            whoopSnapshot={whoopSnapshot}
-            showUrgentIssuesHeader={sourceBrand === "backster" && entity.type === "linear_issues"}
-            showCompletedIssuesHeader={
-              sourceBrand === "backster" && entity.type === "linear_issues_completed"
+      {hasDeferredContent ? (
+        <RunDeferredContent ready={deferredReady} animate={animate}>
+          {run.entities.map((entity, index) => {
+            if (entity.type === "file_diff" && updateConfirmation) {
+              return null;
             }
+
+            if (entity.type === "whoop_snapshots" && hasFileDiff) {
+              return null;
+            }
+
+            const whoopSnapshot =
+              entity.type === "file_diff" ? whoopSnapshotForFileDiff : undefined;
+
+            return (
+              <EntityListCard
+                key={`${run.runId}-entity-${index}`}
+                payload={entity}
+                whoopSnapshot={whoopSnapshot}
+                showUrgentIssuesHeader={sourceBrand === "backster" && entity.type === "linear_issues"}
+                showCompletedIssuesHeader={
+                  sourceBrand === "backster" && entity.type === "linear_issues_completed"
+                }
+              />
+            );
+          })}
+
+        {deleteFileConfirm && !deleteConfirmState ? (
+          <DeleteFileConfirmActions
+            onConfirm={() => onDeleteFileConfirm?.(run.runId)}
+            onReturn={() => onDeleteFileReturn?.(run.runId)}
           />
-        );
-      })}
+        ) : null}
+
+        {run.approvals.map((approval) => (
+          <ApprovalCard
+            key={approval.approvalId}
+            summary={approval.summary}
+            action={approval.action}
+            path={approval.path}
+            description={
+              !approval.resolved && run.text.trim() ? run.text : undefined
+            }
+            resolved={approval.resolved}
+            approved={approval.approved}
+            onApprove={() => onApprove(approval.approvalId)}
+            onReject={() => onReject(approval.approvalId)}
+          />
+        ))}
+        </RunDeferredContent>
+      ) : null}
 
       {!textBelowBrand && textBlock}
-
-      {run.approvals.map((approval) => (
-        <ApprovalCard
-          key={approval.approvalId}
-          summary={approval.summary}
-          action={approval.action}
-          path={approval.path}
-          description={
-            !approval.resolved && run.text.trim() ? run.text : undefined
-          }
-          resolved={approval.resolved}
-          approved={approval.approved}
-          onApprove={() => onApprove(approval.approvalId)}
-          onReject={() => onReject(approval.approvalId)}
-        />
-      ))}
 
       {!run.entities.length && run.status === "finished" && !run.text && (
         <ToolResultCard toolName="run" result={{ status: run.status }} />

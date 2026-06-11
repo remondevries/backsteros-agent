@@ -6,6 +6,18 @@ import type { AutomationFlowId } from "./automation/types";
 import { DAILY_CAPTURE_LABEL, isDailyCaptureMessage } from "./dailyCapture";
 import { GROCERY_LIST_LABEL, isGroceryListMessage } from "./groceryList";
 import { GOOD_MORNING_LABEL, isGoodMorningComposerMode } from "./morningReview";
+import {
+  LETTER_CONFIRM_ACTION_ID,
+  LETTER_LABEL,
+  isLetterComposerMode,
+  isLetterConfirmMessage,
+  isLetterMessage,
+} from "./letter";
+import {
+  DELETE_FILE_LABEL,
+  isDeleteFileComposerMode,
+  isDeleteFileMessage,
+} from "./deleteFile";
 import { GOOD_NIGHT_LABEL, isGoodNightComposerMode } from "./goodNight";
 
 export type { AutomationFlowId };
@@ -28,6 +40,12 @@ export function resolveActiveAutomationFlow(
   if (isGoodNightComposerMode(composerQuickActionId)) {
     return "good-night";
   }
+  if (isLetterComposerMode(composerQuickActionId)) {
+    return "letter";
+  }
+  if (isDeleteFileComposerMode(composerQuickActionId)) {
+    return "delete-file";
+  }
   return null;
 }
 
@@ -47,5 +65,7 @@ export function automationFlowDisplayName(flowId: AutomationFlowId): string {
       return GOOD_NIGHT_LABEL;
     case "letter":
       return "Letter";
+    case "delete-file":
+      return DELETE_FILE_LABEL;
   }
 }

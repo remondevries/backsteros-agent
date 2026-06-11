@@ -35,6 +35,34 @@ for (const file of ["package.json", "bun.lock", "tsconfig.json"]) {
 }
 
 cpSync(join(sidecarDir, "src"), join(targetDir, "src"), { recursive: true });
+
+const toolsDir = join(sidecarDir, "tools");
+const targetToolsDir = join(targetDir, "tools");
+if (existsSync(toolsDir)) {
+  rmSync(targetToolsDir, { recursive: true, force: true });
+  mkdirSync(targetToolsDir, { recursive: true });
+
+  for (const file of ["macos-pdf-ocr.swift"]) {
+    const source = join(toolsDir, file);
+    if (existsSync(source)) {
+      cpSync(source, join(targetToolsDir, file));
+    }
+  }
+
+  if (process.platform === "darwin" && existsSync(join(toolsDir, "macos-pdf-ocr.swift"))) {
+    const binaryPath = join(targetToolsDir, "macos-pdf-ocr");
+    const compile = Bun.spawnSync(
+      ["swiftc", "-O", join(toolsDir, "macos-pdf-ocr.swift"), "-o", binaryPath],
+      { cwd: sidecarDir, stdout: "inherit", stderr: "inherit" },
+    );
+    if (compile.exitCode !== 0) {
+      console.warn("macOS PDF OCR binary compile failed — sidecar will fall back to `swift` at runtime");
+    } else {
+      console.log(`Compiled macOS PDF OCR binary to ${binaryPath}`);
+    }
+  }
+}
+
 cpSync(join(sidecarDir, "node_modules"), join(targetDir, "node_modules"), {
   recursive: true,
 });

@@ -10,6 +10,7 @@ export type ActivityStepLogger = (
 
 export type AutomationHandlerContext = {
   runId: string;
+  sessionId?: string;
   text: string;
   notesPath: string;
   timezone: string;
