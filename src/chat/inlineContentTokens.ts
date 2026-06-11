@@ -1,5 +1,3 @@
-import type { InlineContentPart } from "./inlineContentTokens";
-
 const INLINE_TOKEN_DETECT =
   /\{\{(?:linear-issues-count:\d+|linear-completed-count:\d+|linear-moved-count:\d+|linear-issue-link:[^}]+|vault-note-link:[^}]+|whoop-sleep-score:\d+|whoop-recovery-score:\d+|whoop-strain-score:\d+(?:\.\d+)?|whoop-strain-target:\d+(?:\.\d+)?|whoop-sleep-duration:[^}]+|emphasis:[^}]+)\}\}|\[\d+ issues?\]\(backster:\/\/linear-issues\/\d+\)/;
 

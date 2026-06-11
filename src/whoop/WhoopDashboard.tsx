@@ -3,38 +3,45 @@ import { AppDashboardShell } from "../app/AppDashboardShell";
 import { WhoopIcon } from "../chat/WhoopIcon";
 import { formatWhoopSnapshotDate, WhoopSnapshotCard } from "../chat/WhoopSnapshotCard";
 import type { WhoopSnapshotEntity } from "../chat/types";
-import { fetchWhoopToday, getHealth, getWhoopSetup } from "../lib/api";
+import {
+  DASHBOARD_CACHE_TTL_MS,
+  fetchWhoopToday,
+  getWhoopSetup,
+  peekCached,
+  REQUEST_CACHE_KEYS,
+} from "../lib/api";
 import { openExternalUrl } from "../lib/openExternalUrl";
+import { useDashboardRefreshShortcut } from "../hooks/useDashboardRefreshShortcut";
 
-export function WhoopDashboard() {
-  const [loading, setLoading] = useState(true);
+type WhoopTodayResult = Awaited<ReturnType<typeof fetchWhoopToday>>;
+
+function readCachedWhoopToday(): WhoopTodayResult | null {
+  return peekCached<WhoopTodayResult>(REQUEST_CACHE_KEYS.whoopToday, DASHBOARD_CACHE_TTL_MS);
+}
+
+export function WhoopDashboard({ isActive = true }: { isActive?: boolean }) {
+  const initialCache = readCachedWhoopToday();
+  const [loading, setLoading] = useState(() => initialCache == null);
   const [refreshing, setRefreshing] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [snapshot, setSnapshot] = useState<WhoopSnapshotEntity | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(() => initialCache?.authenticated ?? false);
+  const [snapshot, setSnapshot] = useState<WhoopSnapshotEntity | null>(
+    () => initialCache?.snapshot ?? null,
+  );
+  const [error, setError] = useState<string | null>(() => initialCache?.error ?? null);
 
   const loadSnapshot = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
-    } else {
+    } else if (readCachedWhoopToday() == null) {
       setLoading(true);
     }
     setError(null);
 
     try {
-      const health = await getHealth();
-      setAuthenticated(health.hasWhoopAuth);
-
-      if (!health.hasWhoopAuth) {
-        setSnapshot(null);
-        return;
-      }
-
-      const result = await fetchWhoopToday();
+      const result = await fetchWhoopToday({ force: isRefresh });
+      setAuthenticated(result.authenticated);
       setSnapshot(result.snapshot);
-      if (result.error) {
-        setError(result.error);
-      }
+      setError(result.error ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load Whoop data");
       setSnapshot(null);
@@ -43,6 +50,12 @@ export function WhoopDashboard() {
       setRefreshing(false);
     }
   }, []);
+
+  const refreshSnapshot = useCallback(() => {
+    void loadSnapshot(true);
+  }, [loadSnapshot]);
+
+  useDashboardRefreshShortcut({ isActive, onRefresh: refreshSnapshot });
 
   useEffect(() => {
     void loadSnapshot();
@@ -75,7 +88,7 @@ export function WhoopDashboard() {
       subtitle={dateLabel}
       loading={loading}
       refreshing={refreshing}
-      onRefresh={() => void loadSnapshot(true)}
+      onRefresh={refreshSnapshot}
     >
       {loading ? (
         <p className="app-dashboard-empty">Loading today&apos;s Whoop data…</p>

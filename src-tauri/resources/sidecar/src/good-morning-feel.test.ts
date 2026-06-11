@@ -13,6 +13,7 @@ import {
   polishFeelLocally,
   rateYesterdayDay,
   accumulateAssistantText,
+  runGoodMorningFeelFlow,
 } from "./good-morning-feel.ts";
 import { readDailyNoteStats } from "./daily-note.ts";
 
@@ -30,6 +31,10 @@ describe("good morning feel helpers", () => {
   test("accumulates assistant stream chunks", () => {
     expect(accumulateAssistantText("I feel", " pretty good")).toBe("I feel pretty good");
     expect(accumulateAssistantText("I feel pretty", "I feel pretty good.")).toBe("I feel pretty good.");
+  });
+
+  test("dedupes overlapped stream chunks", () => {
+    expect(accumulateAssistantText("I feel pre", "pretty good.")).toBe("I feel pretty good.");
   });
 
   test("local feel polish fallback", () => {
@@ -95,6 +100,39 @@ describe("good morning feel helpers", () => {
       const stats = readDailyNoteStats(notesPath, "2026-06-08");
       expect(stats).toBeNull();
     } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("runGoodMorningFeelFlow uses local polish in test execution mode", async () => {
+    const previousEnv = process.env.BACKSTER_EXECUTION_MODE;
+    process.env.BACKSTER_EXECUTION_MODE = "test";
+
+    const dataDir = mkdtempSync(join(tmpdir(), "backster-feel-test-mode-"));
+    const notesPath = join(dataDir, "vault");
+    mkdirSync(join(notesPath, "Daily"), { recursive: true });
+
+    try {
+      writeFileSync(
+        join(notesPath, "Daily/2026-06-09.md"),
+        `---\ndate: "2026-06-09"\n---\n## Day log\nslept: 7h\n---\n`,
+        "utf8",
+      );
+
+      const result = await runGoodMorningFeelFlow(notesPath, "i feel rested and ready", {
+        timezone: "UTC",
+        now: new Date("2026-06-09T08:00:00Z"),
+      });
+
+      expect(result.polishedFeel).toBe("I feel rested and ready.");
+      expect(result.dailyNoteUpdate.lines[0]).toBe("feel: I feel rested and ready.");
+      expect(result.response).toBe("{{update:update|daily note}}");
+    } finally {
+      if (previousEnv === undefined) {
+        delete process.env.BACKSTER_EXECUTION_MODE;
+      } else {
+        process.env.BACKSTER_EXECUTION_MODE = previousEnv;
+      }
       rmSync(dataDir, { recursive: true, force: true });
     }
   });

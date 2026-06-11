@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ensureVaultAgentKnowledge } from "./vault-agent-knowledge.ts";
 
 export function ensureGitRepo(notesPath: string): void {
   if (!existsSync(join(notesPath, ".git"))) {
@@ -46,31 +47,8 @@ export function revertLastChanges(notesPath: string): boolean {
   return result.status === 0;
 }
 
-const WORKSPACE_AGENTS_TEMPLATE = `# BacksterOS Agent Notes Workspace
-
-BacksterOS Agent injects workspace rules per message when note tools are active.
-Use this file for your personal vault conventions, naming patterns, and long-lived preferences.
-
-## Folder structure
-- \`Daily/\` — daily notes
-- \`Projects/\` — project notes
-- \`Inbox/\` — quick captures
-- \`Meetings/\` — meeting notes
-- \`Letters/\` — letters
-- \`Contacts/\` — people
-- \`Organizations/\` — companies and orgs
-- \`specs/\` — specs and plans
-- \`archive/\` — read-only archived notes
-
-## Your conventions
-Add anything Backster should always respect for this vault below.
-`;
-
 export function ensureWorkspaceRules(notesPath: string): void {
-  const agentsPath = join(notesPath, "AGENTS.md");
-  if (!existsSync(agentsPath)) {
-    writeFileSync(agentsPath, WORKSPACE_AGENTS_TEMPLATE, "utf8");
-  }
+  ensureVaultAgentKnowledge(notesPath);
 }
 
 const preparedWorkspaces = new Set<string>();

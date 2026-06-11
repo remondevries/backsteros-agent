@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "kill:sidecar": "lsof -ti :3847 | xargs kill -9 2>/dev/null || true",
-    "dev:sidecar": "npm run kill:sidecar && cd sidecar && bun --watch run src/server.ts",
-    "dev:all": "npm run kill:sidecar && concurrently -k -n sidecar,vite -c blue,green \"cd sidecar && bun --watch run src/server.ts\" \"node scripts/wait-for-sidecar.mjs && npm run dev\"",
+    "dev:sidecar": "npm run kill:sidecar && cd sidecar && SIDECAR_PORT=3847 SIDECAR_TOKEN=dev-token-change-me bun --watch run src/server.ts",
+    "dev:all": "npm run kill:sidecar && concurrently -k -n sidecar,vite -c blue,green \"cd sidecar && SIDECAR_PORT=3847 SIDECAR_TOKEN=dev-token-change-me bun --watch run src/server.ts\" \"node scripts/wait-for-sidecar.mjs && npm run dev\"",
     "build": "npm run copy:vad-assets && tsc -b && vite build",
     "build:sidecar": "cd sidecar && bun run build.ts",
     "download:tts": "cd sidecar && bun run download-tts.ts",

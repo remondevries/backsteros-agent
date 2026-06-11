@@ -177,36 +177,43 @@ fn spawn_sidecar_process(sidecar_dir: &Path, token: &str, port: u16) -> Result<C
 }
 
 pub fn start_sidecar(app: &AppHandle) -> tauri::Result<()> {
-    let state = app.state::<SidecarState>();
-
     if cfg!(debug_assertions) {
         log::info!("Dev mode: expecting sidecar from beforeDevCommand on port {}", DEFAULT_PORT);
         return Ok(());
     }
 
+    restart_sidecar(app).map_err(|error| {
+        tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, error))
+    })
+}
+
+pub fn restart_sidecar(app: &AppHandle) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        return Ok(());
+    }
+
+    let state = app.state::<SidecarState>();
+    if let Some(mut child) = state.child.lock().expect("sidecar child lock").take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
     let sidecar_dir = app
         .path()
         .resolve("resources/sidecar", BaseDirectory::Resource)
-        .map_err(|error| {
-            tauri::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Missing bundled sidecar resources: {error}"),
-            ))
-        })?;
+        .map_err(|error| format!("Missing bundled sidecar resources: {error}"))?;
 
-    let mut child = spawn_sidecar_process(&sidecar_dir, &state.token, state.port).map_err(|error| {
-        tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, error))
-    })?;
+    let mut child = spawn_sidecar_process(&sidecar_dir, &state.token, state.port)?;
 
     if !wait_for_port(state.port) {
         let _ = child.kill();
-        return Err(tauri::Error::Io(std::io::Error::new(
-            std::io::ErrorKind::TimedOut,
-            "Agent server did not start in time. Install Bun from https://bun.sh and restart.",
-        )));
+        return Err(
+            "Agent server did not restart in time. Install Bun from https://bun.sh and restart."
+                .to_string(),
+        );
     }
 
     *state.child.lock().expect("sidecar child lock") = Some(child);
-    log::info!("Sidecar ready at http://127.0.0.1:{}", state.port);
+    log::info!("Sidecar restarted at http://127.0.0.1:{}", state.port);
     Ok(())
 }

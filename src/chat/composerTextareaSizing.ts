@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
 
 export const COMPOSER_TEXTAREA_MAX_ROWS = 8;
 
@@ -30,6 +30,8 @@ export function useComposerTextareaResize(
   textareaRef: RefObject<HTMLTextAreaElement | null>,
   value: string,
 ): () => void {
+  const resizeFrameRef = useRef<number | null>(null);
+
   const syncComposerTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -38,7 +40,21 @@ export function useComposerTextareaResize(
   }, [textareaRef]);
 
   useLayoutEffect(() => {
-    syncComposerTextareaHeight();
+    if (resizeFrameRef.current != null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+    }
+
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      resizeFrameRef.current = null;
+      syncComposerTextareaHeight();
+    });
+
+    return () => {
+      if (resizeFrameRef.current != null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+    };
   }, [value, syncComposerTextareaHeight]);
 
   return syncComposerTextareaHeight;

@@ -6,40 +6,39 @@ import { linearItemKey } from "../chat/linearIssue";
 import { formatLinearDaySummary } from "../chat/morningReview";
 import type { LinearIssueEntity } from "../chat/types";
 import { AppDashboardShell } from "../app/AppDashboardShell";
-import { fetchLinearToday, getHealth } from "../lib/api";
+import { DASHBOARD_CACHE_TTL_MS, fetchLinearToday, peekCached, REQUEST_CACHE_KEYS } from "../lib/api";
 import { groupLinearIssuesByStatus } from "./groupLinearIssuesByStatus";
+import { useDashboardRefreshShortcut } from "../hooks/useDashboardRefreshShortcut";
 
-export function LinearDashboard() {
-  const [loading, setLoading] = useState(true);
+type LinearTodayResult = Awaited<ReturnType<typeof fetchLinearToday>>;
+
+function readCachedLinearToday(): LinearTodayResult | null {
+  return peekCached<LinearTodayResult>(REQUEST_CACHE_KEYS.linearToday, DASHBOARD_CACHE_TTL_MS);
+}
+
+export function LinearDashboard({ isActive = true }: { isActive?: boolean }) {
+  const initialCache = readCachedLinearToday();
+  const [loading, setLoading] = useState(() => initialCache == null);
   const [refreshing, setRefreshing] = useState(false);
-  const [configured, setConfigured] = useState(false);
-  const [dueDate, setDueDate] = useState("");
-  const [issues, setIssues] = useState<LinearIssueEntity[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [configured, setConfigured] = useState(() => initialCache?.configured ?? false);
+  const [dueDate, setDueDate] = useState(() => initialCache?.dueDate ?? "");
+  const [issues, setIssues] = useState<LinearIssueEntity[]>(() => initialCache?.issues ?? []);
+  const [error, setError] = useState<string | null>(() => initialCache?.error ?? null);
 
   const loadLinear = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
-    } else {
+    } else if (readCachedLinearToday() == null) {
       setLoading(true);
     }
     setError(null);
 
     try {
-      const health = await getHealth();
-      setConfigured(health.hasLinearApiKey);
-
-      if (!health.hasLinearApiKey) {
-        setIssues([]);
-        return;
-      }
-
-      const result = await fetchLinearToday();
+      const result = await fetchLinearToday({ force: isRefresh });
+      setConfigured(result.configured);
       setDueDate(result.dueDate);
       setIssues(result.issues);
-      if (result.error) {
-        setError(result.error);
-      }
+      setError(result.error ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load Linear issues");
       setIssues([]);
@@ -48,6 +47,12 @@ export function LinearDashboard() {
       setRefreshing(false);
     }
   }, []);
+
+  const refreshLinear = useCallback(() => {
+    void loadLinear(true);
+  }, [loadLinear]);
+
+  useDashboardRefreshShortcut({ isActive, onRefresh: refreshLinear });
 
   useEffect(() => {
     void loadLinear();
@@ -63,7 +68,7 @@ export function LinearDashboard() {
       subtitle={dueDate ? `Due ${dueDate}` : "Today"}
       loading={loading}
       refreshing={refreshing}
-      onRefresh={() => void loadLinear(true)}
+      onRefresh={refreshLinear}
     >
       {loading ? (
         <p className="app-dashboard-empty">Loading Linear issues…</p>

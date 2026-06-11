@@ -1,5 +1,5 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AttachmentChip } from "./AttachmentChip";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { ChatTurn } from "./ChatTurn";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import {
   createPendingAttachment,
@@ -12,18 +12,14 @@ import {
   validateAttachment,
 } from "./attachments";
 import { Composer, type ComposerHandle } from "./Composer";
-import { ContextChip } from "./ContextChip";
 import { VoiceTurnBubble, type VoiceTurnPhase } from "./VoiceTurnBubble";
 import { parseChatCommand } from "./chatCommands";
-import { isValidLinearContextChip } from "./linearIssue";
 import {
   composerModeDisplayName,
   composerModeFromSettings,
   settingsFromComposerMode,
   type ComposerMode,
 } from "./composerMode";
-import { MessageActions } from "./MessageActions";
-import { useRunUiPreviewShortcut } from "./dev/RunUiPreviewPanel";
 import {
   formatAutomationFlowCancellationMessage,
   isAutomationComposerFlow,
@@ -37,9 +33,6 @@ import {
 } from "./automation/orchestration";
 import { createFlowAssistantMessage } from "./automation/followUp";
 import { useAutomationOrchestration } from "./automation/useAutomationOrchestration";
-import { BacksterAssistantBlock } from "./BacksterAssistantBlock";
-import { RunBlock } from "./RunBlock";
-import { TerminalTypingText } from "./TerminalTypingText";
 import { useTranscriptPacing } from "./useTranscriptPacing";
 import type { AppView } from "../app/appViews";
 import {
@@ -55,18 +48,15 @@ import {
 } from "./morningReview";
 import {
   DAILY_CAPTURE_ACTION_ID,
-  DAILY_CAPTURE_MESSAGE_LABEL,
   formatDailyCaptureLogEntry,
   formatDailyCaptureLogTime,
   isDailyCaptureComposerMode,
   isDailyCaptureMessage,
   normalizeDailyCaptureLogTime,
-  parseDailyCaptureLogEntry,
   parseDailyCaptureShortcut,
 } from "./dailyCapture";
 import {
   GROCERY_LIST_ACTION_ID,
-  GROCERY_LIST_MESSAGE_LABEL,
   isGroceryListComposerMode,
   isGroceryListMessage,
   parseGroceryShortcut,
@@ -75,16 +65,13 @@ import {
   formatCurrentGroceryWeekNumber,
   formatGroceryLogEntry,
   normalizeGroceryWeekNumber,
-  parseGroceryLogEntry,
 } from "./groceryWeek";
 import type { GroceryWeekTagHandle } from "./GroceryWeekTag";
 import type { DailyCaptureTimeTagHandle } from "./DailyCaptureTimeTag";
 import {
   GOOD_NIGHT_ACTION_ID,
   GOOD_NIGHT_MESSAGE,
-  GOOD_NIGHT_REFLECTION_ACTION_ID,
   isGoodNightComposerMode,
-  isGoodNightFlowMessage,
   isGoodNightMessage,
   isGoodNightReflectionMessage,
   parseGoodNightShortcut,
@@ -97,7 +84,6 @@ import {
   isLetterMessage,
   LETTER_ACTION_ID,
   LETTER_CONFIRM_ACTION_ID,
-  LETTER_LABEL,
   LETTER_MESSAGE,
   parseLetterShortcut,
   shouldSendComposerAttachments,
@@ -110,7 +96,6 @@ import {
   findActiveDeleteConfirmRunId,
   formatDeleteFileAssistantReply,
   isDeleteFileComposerMode,
-  isDeleteFileFlowMessage,
   isDeleteFileMessage,
   parseDeleteShortcut,
   shouldActivateDeleteFileFromComposerInput,
@@ -118,10 +103,11 @@ import {
 import { LetterUploadModal } from "./LetterUploadModal";
 import { isPdfAttachmentFile, isPdfPendingAttachment } from "./letterFiling";
 import { isSlashCommandPaletteOpen, type SlashCommandDefinition } from "./slashCommands";
+import { createRunEventBatcher } from "./runStreamUpdates";
 import { mergeStructuredPayload } from "./runEntities";
 import {
-  cycleToolPin,
   EMPTY_TOOL_PINS,
+  hasManualToolPins,
   resolveToolSelection,
   type ToolPinSelection,
   type ToolSelection,
@@ -130,6 +116,7 @@ import type {
   AgentEvent,
   AttachmentPreviewTarget,
   ChatMessage,
+  MessageAttachment,
   PendingAttachment,
   RunViewModel,
 } from "./types";
@@ -408,7 +395,6 @@ export const ChatView = forwardRef<
     composerModeDisplayName("auto"),
   );
   const [savingComposerMode, setSavingComposerMode] = useState(false);
-  const [uiPreviewOpen, setUiPreviewOpen] = useState(false);
   const [committedTools, setCommittedTools] = useState<ToolSelection | null>(null);
   const [toolPins, setToolPins] = useState<ToolPinSelection>(EMPTY_TOOL_PINS);
   const composerRef = useRef<ComposerHandle>(null);
@@ -466,7 +452,6 @@ export const ChatView = forwardRef<
   >(
     async () => {},
   );
-  const fallbackTts = useTts();
   const voiceMode = useVoiceMode({
     onTranscript: async (text) => {
       await handleSendRef.current(text);
@@ -474,6 +459,7 @@ export const ChatView = forwardRef<
     isActive,
   });
   const voiceModeSupported = voiceMode.supported;
+  const fallbackTts = useTts({ isActive: isActive && !voiceModeSupported });
   const voiceModeEnabled = voiceModeSupported ? voiceMode.enabled : false;
   voiceModeFocusGuardRef.current = voiceModeEnabled;
   const ttsSupported = voiceModeSupported || fallbackTts.supported;
@@ -546,6 +532,25 @@ export const ChatView = forwardRef<
     const el = transcriptRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  const scrollFrameRef = useRef<number | null>(null);
+
+  const scheduleScrollToBottom = useCallback(() => {
+    if (!isActive || !stickToBottomRef.current) return;
+    if (scrollFrameRef.current != null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      scrollTranscriptToBottom();
+    });
+  }, [isActive, scrollTranscriptToBottom]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollFrameRef.current != null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
   }, []);
 
   const handleTranscriptScroll = useCallback(() => {
@@ -760,27 +765,23 @@ export const ChatView = forwardRef<
     await handleCancelRun();
   }, [handleCancelRun, interruptVoice]);
 
-  const toggleUiPreview = useCallback(() => {
-    setUiPreviewOpen((current) => !current);
-    focusComposer();
-  }, [focusComposer]);
-
   const composerTools = useMemo(() => {
     if (input.trim()) {
       return resolveToolSelection(input, toolPins);
+    }
+    if (hasManualToolPins(toolPins)) {
+      return resolveToolSelection("", toolPins);
     }
     if (committedTools) return committedTools;
     return EMPTY_TOOLS;
   }, [committedTools, input, toolPins]);
 
-  const handleToggleToolPin = useCallback((tool: keyof ToolSelection) => {
+  const handleDismissTool = useCallback((tool: keyof ToolSelection) => {
     setToolPins((current) => ({
       ...current,
-      [tool]: cycleToolPin(current[tool]),
+      [tool]: "off",
     }));
   }, []);
-
-  useRunUiPreviewShortcut(toggleUiPreview);
 
   useEffect(() => {
     void (async () => {
@@ -997,6 +998,11 @@ export const ChatView = forwardRef<
   );
 
   const runCount = useMemo(() => Object.keys(runs).length, [runs]);
+  const activeRunTextLength = useMemo(() => {
+    const activeRunId = liveRunIdRef.current;
+    if (!activeRunId) return 0;
+    return runs[activeRunId]?.text.length ?? 0;
+  }, [runs]);
 
   const refreshDiff = useCallback(async () => {
     try {
@@ -1011,13 +1017,22 @@ export const ChatView = forwardRef<
     void refreshDiff();
   }, [refreshDiff, runCount]);
 
-  useLayoutEffect(() => {
-    if (stickToBottomRef.current) {
-      scrollTranscriptToBottom();
-    }
-  }, [messages, runs, error, transcribing, voiceModeEnabled, voiceTurnPhase, scrollTranscriptToBottom]);
+  useEffect(() => {
+    scheduleScrollToBottom();
+  }, [
+    messages.length,
+    runCount,
+    activeRunTextLength,
+    error,
+    transcribing,
+    voiceModeEnabled,
+    voiceTurnPhase,
+    scheduleScrollToBottom,
+  ]);
 
   useEffect(() => {
+    const anyRunning = Object.values(runs).some((run) => run.status === "running");
+    if (anyRunning) return;
     onStateChangeRef.current?.(messages, runs);
   }, [messages, runs]);
 
@@ -1111,11 +1126,26 @@ export const ChatView = forwardRef<
 
   const handleRunPresentationComplete = useCallback(
     (runId: string, quickActionId?: string) => {
+      skipAnimationRunIdsRef.current.add(runId);
       markPresentationComplete();
       automation.onRegisteredAutomationRunPresentationComplete(quickActionId, runId);
     },
     [automation, markPresentationComplete],
   );
+
+  const toggleRunExpanded = useCallback((runId: string) => {
+    setRuns((current) => {
+      const existing = current[runId];
+      if (!existing) return current;
+      return {
+        ...current,
+        [runId]: {
+          ...existing,
+          expanded: !existing.expanded,
+        },
+      };
+    });
+  }, []);
 
   async function handleSend(
     messageText?: string,
@@ -1465,41 +1495,49 @@ export const ChatView = forwardRef<
       const streamTimeout = window.setTimeout(() => activeStreamController.abort(), 10 * 60 * 1000);
 
       try {
-        await subscribeToRunWithAuth(
-          sessionId,
-          runId,
-          (event) => {
-            if (event.type === "context.added") {
-              setMessages((current) =>
-                current.map((message) =>
-                  message.id === userMessage.id
-                    ? {
-                        ...message,
-                        contextChips: (message.contextChips ?? []).some(
-                          (chip) => chip.id === event.id,
-                        )
-                          ? message.contextChips
-                          : [
-                              ...(message.contextChips ?? []),
-                              {
-                                id: event.id,
-                                title: event.title,
-                                entityType: event.entityType,
-                              },
-                            ],
-                      }
-                    : message,
-                ),
-              );
-            }
+        const runEventBatcher = createRunEventBatcher({
+          setRuns,
+          createEmptyRun,
+          applyEvent,
+        });
 
-            setRuns((current) => {
-              const existing = current[runId] ?? createEmptyRun(runId);
-              return { ...current, [runId]: applyEvent(existing, event) };
-            });
-          },
-          streamController.signal,
-        );
+        try {
+          await subscribeToRunWithAuth(
+            sessionId,
+            runId,
+            (event) => {
+              if (event.type === "context.added") {
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === userMessage.id
+                      ? {
+                          ...message,
+                          contextChips: (message.contextChips ?? []).some(
+                            (chip) => chip.id === event.id,
+                          )
+                            ? message.contextChips
+                            : [
+                                ...(message.contextChips ?? []),
+                                {
+                                  id: event.id,
+                                  title: event.title,
+                                  entityType: event.entityType,
+                                },
+                              ],
+                        }
+                      : message,
+                  ),
+                );
+              }
+
+              runEventBatcher.push(runId, event);
+            },
+            streamController.signal,
+          );
+        } finally {
+          runEventBatcher.flush();
+          runEventBatcher.dispose();
+        }
       } finally {
         window.clearTimeout(streamTimeout);
         if (streamControllerRef.current === streamController) {
@@ -1747,6 +1785,16 @@ export const ChatView = forwardRef<
   }
 
   function handleSlashCommandSelect(command: SlashCommandDefinition) {
+    if (command.toolKey) {
+      setToolPins((current) => ({
+        ...current,
+        [command.toolKey!]: "on",
+      }));
+      setInput("");
+      focusComposer();
+      return;
+    }
+
     switch (command.id) {
       case "daily-capture":
         handleActivateDailyCaptureShortcut();
@@ -1811,10 +1859,28 @@ export const ChatView = forwardRef<
     onNavigateToView?.("whoop");
   }, [onNavigateToView]);
 
-  async function handleApproval(approvalId: string, approved: boolean) {
+  const openAttachmentPreview = useCallback((attachment: MessageAttachment) => {
+    setPreviewTarget(toAttachmentPreviewTarget(attachment));
+  }, []);
+
+  const handleApproval = useCallback(async (approvalId: string, approved: boolean) => {
     await respondApproval(approvalId, approved);
     focusComposer();
-  }
+  }, [focusComposer]);
+
+  const approveApproval = useCallback(
+    (approvalId: string) => {
+      void handleApproval(approvalId, true);
+    },
+    [handleApproval],
+  );
+
+  const rejectApproval = useCallback(
+    (approvalId: string) => {
+      void handleApproval(approvalId, false);
+    },
+    [handleApproval],
+  );
 
   return (
     <div className="chat-view">
@@ -1856,231 +1922,32 @@ export const ChatView = forwardRef<
             onScroll={handleTranscriptScroll}
           >
           <div className="chat-transcript-inner">
-        {messages.map((message) => {
-          const run = message.runId ? runs[message.runId] : undefined;
-          const isGoodMorningFlow =
-            message.role === "user" &&
-            (isGoodMorningFlowMessage(message.quickActionId) ||
-              message.flowVariant === "good-morning");
-          const isGoodNightFlow =
-            message.role === "user" &&
-            (isGoodNightFlowMessage(message.quickActionId) ||
-              message.flowVariant === "good-night");
-          const isLetterFlow =
-            message.role === "user" &&
-            (isLetterFlowMessage(message.quickActionId) ||
-              message.flowVariant === "letter");
-          const isFlowAssistantMessage =
-            message.role === "assistant" &&
-            (message.flowVariant === "good-morning" ||
-              message.flowVariant === "good-night" ||
-              message.presentation === "backster");
-          const animateFlowAssistantMessage =
-            !skipAnimationMessageIdsRef.current.has(message.id);
-          const animateRun = run ? !skipAnimationRunIdsRef.current.has(run.runId) : false;
-
-          return (
-            <div key={message.id} className="chat-turn">
-              <div className={`chat-message ${message.role === "user" ? "user" : "assistant"}`}>
-                {message.role === "user" && isLetterMessage(message.quickActionId) ? (
-                  <div className="chat-letter-user-message">
-                    <span className="chat-quick-action-tag chat-quick-action-tag-letter">
-                      {LETTER_LABEL}
-                    </span>
-                    {message.attachments && message.attachments.length > 0 && (
-                      <div className="message-attachments">
-                        {message.attachments.map((attachment) => (
-                          <AttachmentChip
-                            key={`${message.id}-${attachment.name}-${attachment.vaultPath ?? "local"}`}
-                            attachment={attachment}
-                            onOpen={() => setPreviewTarget(toAttachmentPreviewTarget(attachment))}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : message.text && (
-                  <>
-                    {message.role === "assistant" ? (
-                      isFlowAssistantMessage ? (
-                        <BacksterAssistantBlock
-                          messageId={message.id}
-                          text={message.text}
-                          sentAt={message.createdAt}
-                          animate={animateFlowAssistantMessage}
-                          canSpeak={
-                            ttsSupported &&
-                            message.text.trim().length > 0 &&
-                            !voiceModeEnabled
-                          }
-                          onTypingComplete={
-                            animateFlowAssistantMessage
-                              ? markPresentationComplete
-                              : undefined
-                          }
-                          onOpenLinearDashboard={openLinearDashboard}
-                          onOpenWhoopDashboard={openWhoopDashboard}
-                        />
-                      ) : (
-                        <TerminalTypingText
-                          key={message.id}
-                          text={message.text}
-                          running={false}
-                          startedAt={message.createdAt}
-                          animate={!skipAnimationMessageIdsRef.current.has(message.id)}
-                        />
-                      )
-                    ) : isDailyCaptureMessage(message.quickActionId) ? (
-                      (() => {
-                        const parsed = parseDailyCaptureLogEntry(message.text);
-                        const body = parsed?.body ?? message.text;
-                        const logTime = parsed?.logTime ?? formatDailyCaptureLogTime();
-
-                        return (
-                          <>
-                            <div className="chat-daily-capture-user-message">
-                              <span className="chat-daily-capture-heading">{DAILY_CAPTURE_MESSAGE_LABEL}</span>
-                              <div className="bubble chat-daily-capture-bubble">
-                                <span className="chat-quick-action-tag chat-quick-action-tag-daily-capture chat-daily-capture-time-tag">
-                                  {logTime}
-                                </span>
-                                <span className="chat-daily-capture-text">{body}</span>
-                              </div>
-                            </div>
-                            <MessageActions text={body} />
-                          </>
-                        );
-                      })()
-                    ) : isGroceryListMessage(message.quickActionId) ? (
-                      (() => {
-                        const parsed = parseGroceryLogEntry(message.text);
-                        const body = parsed?.body ?? message.text;
-                        const week = parsed?.week ?? Number(formatCurrentGroceryWeekNumber());
-
-                        return (
-                          <>
-                            <div className="chat-grocery-list-user-message">
-                              <span className="chat-grocery-list-heading">{GROCERY_LIST_MESSAGE_LABEL}</span>
-                              <div className="bubble chat-grocery-list-bubble">
-                                <span className="chat-quick-action-tag chat-quick-action-tag-grocery-list chat-grocery-list-week-tag">
-                                  W{week}
-                                </span>
-                                <span className="chat-grocery-list-text">{body}</span>
-                              </div>
-                            </div>
-                            <MessageActions text={body} />
-                          </>
-                        );
-                      })()
-                    ) : isDeleteFileMessage(message.quickActionId) ? (
-                      <>
-                        <div className="bubble">{message.text}</div>
-                        <MessageActions text={message.text} />
-                      </>
-                    ) : (
-                      <>
-                        {isLetterConfirmMessage(message.quickActionId) && (
-                          <span className="chat-quick-action-tag chat-quick-action-tag-letter">
-                            {LETTER_LABEL}
-                          </span>
-                        )}
-                        <div
-                          className={`bubble ${
-                            message.quickActionId &&
-                            !isGoodMorningFlow &&
-                            !isGoodNightFlow &&
-                            !isLetterFlow
-                              ? "bubble-quick-action"
-                              : ""
-                          }`}
-                        >
-                          {isGoodMorningMessage(message.quickActionId)
-                            ? MORNING_REVIEW_MESSAGE
-                            : isGoodNightMessage(message.quickActionId)
-                              ? GOOD_NIGHT_MESSAGE
-                              : message.text}
-                        </div>
-                        {!isGoodMorningMessage(message.quickActionId) &&
-                          !isGoodNightMessage(message.quickActionId) &&
-                          !isLetterFlow && (
-                          <MessageActions text={message.text} />
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-                {message.attachments &&
-                  message.attachments.length > 0 &&
-                  !isLetterMessage(message.quickActionId) && (
-                  <div className="message-attachments">
-                    {message.attachments.map((attachment) => (
-                      <AttachmentChip
-                        key={`${message.id}-${attachment.name}-${attachment.vaultPath ?? "local"}`}
-                        attachment={attachment}
-                        onOpen={() => setPreviewTarget(toAttachmentPreviewTarget(attachment))}
-                      />
-                    ))}
-                  </div>
-                )}
-                {message.contextChips
-                  ?.filter(isValidLinearContextChip)
-                  .map((chip) => (
-                    <ContextChip key={chip.id} id={chip.id} title={chip.title} />
-                  ))}
-              </div>
-
-              {run && (
-                <RunBlock
-                  run={run}
-                  animate={animateRun}
-                  sourceBrand={
-                    isGoodMorningFlowMessage(message.quickActionId) ||
-                    isGoodNightFlowMessage(message.quickActionId) ||
-                    isDailyCaptureMessage(message.quickActionId) ||
-                    isGroceryListMessage(message.quickActionId) ||
-                    isDeleteFileFlowMessage(message.quickActionId) ||
-                    isLetterFlowMessage(message.quickActionId) ||
-                    message.flowVariant === "daily-capture" ||
-                    message.flowVariant === "grocery-list" ||
-                    message.flowVariant === "delete-file" ||
-                    message.flowVariant === "letter"
-                      ? "backster"
-                      : undefined
-                  }
-                  onToggle={() =>
-                    setRuns((current) => ({
-                      ...current,
-                      [run.runId]: {
-                        ...current[run.runId],
-                        expanded: !current[run.runId].expanded,
-                      },
-                    }))
-                  }
-                  onApprove={(approvalId) => void handleApproval(approvalId, true)}
-                  onReject={(approvalId) => void handleApproval(approvalId, false)}
-                  canSpeak={
-                    ttsSupported &&
-                    run.status !== "running" &&
-                    run.text.trim().length > 0 &&
-                    !voiceModeEnabled
-                  }
-                  voiceModeEnabled={voiceModeEnabled}
-                  onOpenLinearDashboard={openLinearDashboard}
-                  onOpenWhoopDashboard={openWhoopDashboard}
-                  onPresentationComplete={
-                    animateRun && message.runId
-                      ? () => handleRunPresentationComplete(message.runId!, message.quickActionId)
-                      : undefined
-                  }
-                  onDeleteFileConfirm={(runId) => void handleDeleteFileConfirm(runId)}
-                  onDeleteFileReturn={(runId) => void handleDeleteFileReturn(runId)}
-                  deleteConfirmResolved={deleteConfirmResolved}
-                />
-              )}
-
-            </div>
-          );
-        })}
+        {messages.map((message) => (
+          <ChatTurn
+            key={message.id}
+            message={message}
+            run={message.runId ? runs[message.runId] : undefined}
+            animateMessage={!skipAnimationMessageIdsRef.current.has(message.id)}
+            animateRun={
+              message.runId ? !skipAnimationRunIdsRef.current.has(message.runId) : false
+            }
+            ttsSupported={ttsSupported}
+            voiceModeEnabled={voiceModeEnabled}
+            deleteConfirmState={
+              message.runId ? deleteConfirmResolved[message.runId] : undefined
+            }
+            onOpenAttachmentPreview={openAttachmentPreview}
+            onToggleRun={toggleRunExpanded}
+            onApproveApproval={approveApproval}
+            onRejectApproval={rejectApproval}
+            onRunPresentationComplete={handleRunPresentationComplete}
+            onDeleteFileConfirm={handleDeleteFileConfirm}
+            onDeleteFileReturn={handleDeleteFileReturn}
+            onOpenLinearDashboard={openLinearDashboard}
+            onOpenWhoopDashboard={openWhoopDashboard}
+            onFlowPresentationComplete={markPresentationComplete}
+          />
+        ))}
 
         {voiceTurnPhase && (
           <VoiceTurnBubble phase={voiceTurnPhase} />
@@ -2137,11 +2004,6 @@ export const ChatView = forwardRef<
             composerModeLabel={composerModeLabel}
             onComposerModeChange={(mode) => void handleComposerModeChange(mode)}
             savingComposerMode={savingComposerMode}
-            uiPreview={
-              import.meta.env.DEV
-                ? { open: uiPreviewOpen, onToggle: toggleUiPreview }
-                : undefined
-            }
             tts={
               ttsSupported && !voiceModeSupported
                 ? {
@@ -2167,7 +2029,7 @@ export const ChatView = forwardRef<
             voiceMode={voiceModeEnabled}
             toolIndicators={composerTools}
             toolPins={toolPins}
-            onToggleToolPin={handleToggleToolPin}
+            onDismissTool={handleDismissTool}
             composerQuickAction={
               isDailyCaptureComposerMode(composerQuickActionId)
                 ? { onClear: handleClearDailyCaptureMode }

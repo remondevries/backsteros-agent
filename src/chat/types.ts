@@ -324,6 +324,8 @@ export interface AppSettings {
   defaultNotesPath: string;
   modelMode: ModelMode;
   modelId: string;
+  autoModelId?: string | null;
+  maxModelId?: string | null;
   modelName?: string;
   defaultModelMode: ModelMode;
   executionMode?: ExecutionMode;

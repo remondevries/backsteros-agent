@@ -7,6 +7,7 @@ import {
   GOOD_MORNING_LABEL,
   isMorningReviewChipVisible,
 } from "./morningReview";
+import type { ToolSelection } from "./tool-routing";
 
 export type SlashCommandContext = "chat" | "lookup";
 
@@ -17,6 +18,10 @@ export type SlashCommandId =
   | "good-night"
   | "letter"
   | "delete-file"
+  | "tool-obsidian"
+  | "tool-linear"
+  | "tool-calendar"
+  | "tool-whoop"
   | "clear";
 
 export type SlashCommandDefinition = {
@@ -26,6 +31,8 @@ export type SlashCommandDefinition = {
   triggers: string[];
   contexts: SlashCommandContext[];
   isVisible?: (now: Date) => boolean;
+  /** When set, selecting this command pins the tool on for the next message. */
+  toolKey?: keyof ToolSelection;
 };
 
 export const SLASH_COMMANDS: SlashCommandDefinition[] = [
@@ -71,6 +78,38 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     description: "Delete a note or file from your vault",
     triggers: ["d", "delete"],
     contexts: ["chat"],
+  },
+  {
+    id: "tool-obsidian",
+    label: "Obsidian",
+    description: "Use Obsidian notes tools for the next message",
+    triggers: ["obsidian"],
+    contexts: ["chat"],
+    toolKey: "obsidian",
+  },
+  {
+    id: "tool-linear",
+    label: "Linear",
+    description: "Use Linear tools for the next message",
+    triggers: ["linear"],
+    contexts: ["chat"],
+    toolKey: "linear",
+  },
+  {
+    id: "tool-calendar",
+    label: "Google Calendar",
+    description: "Use Google Calendar tools for the next message",
+    triggers: ["googlecalendar", "google-calendar"],
+    contexts: ["chat"],
+    toolKey: "calendar",
+  },
+  {
+    id: "tool-whoop",
+    label: "Whoop",
+    description: "Use Whoop tools for the next message",
+    triggers: ["whoop"],
+    contexts: ["chat"],
+    toolKey: "whoop",
   },
   {
     id: "clear",

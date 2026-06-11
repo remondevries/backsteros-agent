@@ -27,6 +27,24 @@ function configureSidecarProxy(
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("react-markdown") || id.includes("remark-gfm") || id.includes("micromark")) {
+            return "markdown";
+          }
+          if (id.includes("react-dom") || id.includes("/react/")) {
+            return "react";
+          }
+          if (id.includes("@tauri-apps")) {
+            return "tauri";
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

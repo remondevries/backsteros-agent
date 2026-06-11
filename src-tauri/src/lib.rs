@@ -14,6 +14,11 @@ fn get_sidecar_connection(state: tauri::State<'_, SidecarState>) -> sidecar::Sid
 }
 
 #[tauri::command]
+fn restart_sidecar(app: tauri::AppHandle) -> Result<(), String> {
+    sidecar::restart_sidecar(&app)
+}
+
+#[tauri::command]
 fn set_traffic_lights_visible(window: tauri::WebviewWindow, visible: bool) -> Result<(), String> {
     traffic_lights::set_visible(&window, visible)
 }
@@ -27,6 +32,7 @@ pub fn run() {
         .manage(SidecarState::new())
         .invoke_handler(tauri::generate_handler![
             get_sidecar_connection,
+            restart_sidecar,
             set_traffic_lights_visible
         ])
         .setup(|app| {

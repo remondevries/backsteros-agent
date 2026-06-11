@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { listVaultFiles, vaultFileExists } from "./vault-files.ts";
 
 export interface ParsedWikilinkTarget {
   target: string;
@@ -46,41 +46,12 @@ function normalizeVaultRelativePath(target: string): string {
   return normalized.endsWith(".md") ? normalized : `${normalized}.md`;
 }
 
-function isArchivePath(vaultRelativePath: string): boolean {
-  const normalized = vaultRelativePath.replace(/\\/g, "/");
-  return normalized === "archive" || normalized.startsWith("archive/");
-}
-
 function fileExistsInVault(notesPath: string, vaultRelativePath: string): boolean {
-  if (isArchivePath(vaultRelativePath)) {
-    return false;
-  }
-  const abs = join(notesPath, vaultRelativePath);
-  return existsSync(abs) && statSync(abs).isFile();
+  return vaultFileExists(notesPath, vaultRelativePath);
 }
 
 function listMarkdownFiles(notesPath: string): string[] {
-  const results: string[] = [];
-
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const abs = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(abs);
-        continue;
-      }
-      if (!entry.isFile() || !entry.name.endsWith(".md")) {
-        continue;
-      }
-      const rel = relative(notesPath, abs).replace(/\\/g, "/");
-      if (!isArchivePath(rel)) {
-        results.push(rel);
-      }
-    }
-  };
-
-  walk(notesPath);
-  return results;
+  return listVaultFiles(notesPath).filter((path) => path.endsWith(".md"));
 }
 
 function stemMatchesTarget(stem: string, target: string): boolean {

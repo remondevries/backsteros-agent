@@ -35,7 +35,7 @@
   },
   "plugins": {
     "shell": {
-      "open": "^((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(linear://.+)|(obsidian://.+))"
+      "open": "^((mailto:.+)|(tel:.+)|(https?://.+)|(file://.+)|(linear://.+)|(obsidian://.+))$"
     }
   },
   "bundle": {

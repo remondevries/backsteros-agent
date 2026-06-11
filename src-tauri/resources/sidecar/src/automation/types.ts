@@ -10,11 +10,13 @@ export type ActivityStepLogger = (
 
 export type AutomationHandlerContext = {
   runId: string;
+  sessionId?: string;
   text: string;
   notesPath: string;
   timezone: string;
   selectedModel?: string;
   captureTime?: string;
+  groceryWeek?: string;
   logStep: ActivityStepLogger;
   broadcastAssistantMessage: (text: string) => void;
   setLastAssistantText: (text: string) => void;

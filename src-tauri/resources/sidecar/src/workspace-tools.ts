@@ -8,6 +8,12 @@ import {
 } from "./daily-note.ts";
 import { isDestructiveShellCommand } from "./shell-policy.ts";
 import { formatWikilinkResolution, resolveWikilink } from "./wikilink.ts";
+import {
+  deleteWorkspaceFile,
+  expandLetterDeletionShellCommand,
+} from "./letter-deletion.ts";
+import { assertWritableVaultPath, shouldSkipVaultDirectory } from "./vault-paths.ts";
+import { lookupWorldTimes } from "./world-time.ts";
 
 function resolveWorkspacePath(notesPath: string, targetPath: string): string {
   const abs = join(notesPath, targetPath);
@@ -21,9 +27,7 @@ function resolveWorkspacePath(notesPath: string, targetPath: string): string {
 function assertWritable(notesPath: string, targetPath: string): string {
   const abs = resolveWorkspacePath(notesPath, targetPath);
   const rel = relative(notesPath, abs).replace(/\\/g, "/");
-  if (rel === "archive" || rel.startsWith("archive/")) {
-    throw new Error("archive/ is read-only");
-  }
+  assertWritableVaultPath(rel);
   return abs;
 }
 
@@ -31,9 +35,11 @@ function countFiles(absPath: string): number {
   let count = 0;
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const next = join(dir, entry.name);
       if (entry.isDirectory()) {
-        walk(next);
+        if (shouldSkipVaultDirectory(entry.name)) {
+          continue;
+        }
+        walk(join(dir, entry.name));
       } else if (entry.isFile()) {
         count += 1;
       }
@@ -204,20 +210,22 @@ export function getWorkspaceCustomTools(
           throw new Error("command is required");
         }
 
+        const expandedCommand = expandLetterDeletionShellCommand(command);
+
         const cwdArg = String(args.cwd ?? ".").trim() || ".";
         const absCwd = resolveWorkspacePath(notesPath, cwdArg);
         if (!statSync(absCwd).isDirectory()) {
           throw new Error(`Not a directory: ${cwdArg}`);
         }
 
-        if (isDestructiveShellCommand(command)) {
-          const approved = await options.requestShellApproval?.(command, cwdArg);
+        if (isDestructiveShellCommand(expandedCommand)) {
+          const approved = await options.requestShellApproval?.(expandedCommand, cwdArg);
           if (!approved) {
             throw new Error("Shell command denied by user");
           }
         }
 
-        const result = spawnSync(command, {
+        const result = spawnSync(expandedCommand, {
           cwd: absCwd,
           shell: true,
           encoding: "utf8",
@@ -230,7 +238,7 @@ export function getWorkspaceCustomTools(
         });
 
         return formatShellResult(
-          command,
+          expandedCommand,
           cwdArg,
           result.status,
           result.stdout ?? "",
@@ -273,6 +281,39 @@ export function getWorkspaceCustomTools(
         return `Appended to ${target}`;
       },
     },
+    delete_workspace_file: {
+      description:
+        "Delete a file relative to the notes workspace root. When deleting a letter wrapper note under Letters/*.md, also deletes the sibling PDF with the same basename.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "File path relative to workspace root, e.g. Letters/2025-06-21 - Sender.md",
+          },
+        },
+        required: ["path"],
+      },
+      execute: async (args) => {
+        const target = String(args.path ?? "").trim();
+        if (!target) {
+          throw new Error("path is required");
+        }
+
+        const approved = await options.requestShellApproval?.(
+          `delete_workspace_file: ${target}`,
+        );
+        if (options.requestShellApproval && approved === false) {
+          throw new Error("Delete denied by user");
+        }
+
+        const deleted = deleteWorkspaceFile(notesPath, target);
+        if (deleted.length === 1) {
+          return `Deleted ${deleted[0]}`;
+        }
+        return `Deleted ${deleted.join(" and ")}`;
+      },
+    },
     today_daily_note: {
       description:
         "Resolve today's daily note path using the user's timezone from profile.md. Optionally read or create Daily/YYYY-MM-DD.md. Prefer this over guessing today's date or path.",
@@ -297,6 +338,30 @@ export function getWorkspaceCustomTools(
           createIfMissing,
         });
         return formatTodayDailyNoteResult(result);
+      },
+    },
+    world_time: {
+      description:
+        "Get the current date and time in one or more cities or IANA timezones. Use this instead of shell commands or web search for world-clock questions. Accepts city names (Tokyo, London, New York), IANA ids (Europe/Amsterdam), or local/home for the user's profile timezone.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          locations: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Places to look up, e.g. [\"Tokyo\", \"London\", \"America/Chicago\"]. Omit or pass [] for the user's local timezone.",
+          },
+        },
+      },
+      execute: (args) => {
+        const raw = args.locations;
+        const locations = Array.isArray(raw)
+          ? raw.map((entry) => String(entry))
+          : typeof raw === "string"
+            ? [raw]
+            : [];
+        return lookupWorldTimes(locations);
       },
     },
     resolve_wikilink: {

@@ -7,16 +7,20 @@ Built-in shell/glob/grep/write/edit tools cannot access the notes workspace. Use
 - list_workspace_entries(path)
 - read_workspace_file(path)
 - write_workspace_file(path, content)
+- delete_workspace_file(path)
 - append_workspace_file(path, text)
 - today_daily_note(include_content?, create_if_missing?)
+- world_time(locations?)
 - resolve_wikilink(link, from?)
 - run_workspace_shell(command, cwd?)
 
 Rules:
 - Prefer today_daily_note before guessing today's Daily/YYYY-MM-DD.md path.
+- Prefer world_time for current time in other cities or timezones — do not use shell or web search for simple clock lookups.
 - Prefer editing existing notes over creating duplicates.
 - Ask before deleting any file.
 - Never modify files under archive/.
+- Never search, read, write, or delete anything under .obsidian/ — it is Obsidian system config, not user notes.
 - Use run_workspace_shell instead of the built-in shell tool.
 - When note content contains [[wikilinks]], call resolve_wikilink(link, from=<current file>) then read_workspace_file.
 - When citing notes to the user, include [[wikilinks]] when helpful.
@@ -32,6 +36,7 @@ const AREA_GUIDANCE: Record<ObsidianArea, string> = {
 - Replace metric lines in place instead of duplicating sections.`,
   projects: `[Project notes]
 - Project notes live under Projects/.
+- Project notes may include an \`alias\` frontmatter list with alternate names used during letter filing.
 - Preserve existing headings and wikilinks when updating a project note.
 - Link related daily notes, meetings, and specs with [[wikilinks]] instead of duplicating context.`,
   inbox: `[Inbox]
@@ -44,12 +49,17 @@ const AREA_GUIDANCE: Record<ObsidianArea, string> = {
 - Link follow-ups to project or daily notes with [[wikilinks]].`,
   letters: `[Letters]
 - Letters live under Letters/.
-- Preserve tone, recipient context, and any existing letter structure when editing.`,
+- Each letter PDF has a sibling wrapper note (same basename, .md) with frontmatter: type, assigned, date, organization, project, status, note.
+- Wrapper notes embed the PDF with ![[filename.pdf]].
+- When filing a new letter, write the PDF to Letters/ and create or update the wrapper note with matching frontmatter.
+- When deleting a letter wrapper note (Letters/*.md), always delete the sibling PDF with the same basename too. Prefer delete_workspace_file over shell rm.`,
   contacts: `[Contacts]
 - Contact notes live under Contacts/.
+- Contacts may include an \`alias\` frontmatter list with OCR or historical name variants used for letter matching.
 - Update facts in place; avoid creating a second note for the same person.`,
   organizations: `[Organizations]
 - Organization notes live under Organizations/.
+- Organizations may include an \`alias\` frontmatter list with sender names seen on incoming letters.
 - Keep company context, links, and related contacts consistent with existing notes.`,
   specs: `[Specs]
 - Specs and plans live under specs/.

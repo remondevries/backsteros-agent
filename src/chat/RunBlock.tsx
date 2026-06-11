@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useRunPlaybackActive } from "../hooks/useTtsPlayback";
 import { ActivityHeader, ActivityStepRow, ActivityTimeline } from "./ActivityTimeline";
 import { ApprovalCard } from "./ApprovalCard";
@@ -17,7 +17,7 @@ import { parseDeleteFileConfirmToken } from "./deleteFileConfirm";
 import { ToolResultCard } from "./ToolResultCard";
 import type { RunViewModel } from "./types";
 
-export function RunBlock({
+export const RunBlock = memo(function RunBlock({
   run,
   onToggle,
   onApprove,
@@ -31,6 +31,7 @@ export function RunBlock({
   onPresentationComplete,
   onDeleteFileConfirm,
   onDeleteFileReturn,
+  deleteConfirmState,
   deleteConfirmResolved,
 }: {
   run: RunViewModel;
@@ -46,6 +47,8 @@ export function RunBlock({
   onPresentationComplete?: () => void;
   onDeleteFileConfirm?: (runId: string) => void;
   onDeleteFileReturn?: (runId: string) => void;
+  deleteConfirmState?: { confirmed: boolean };
+  /** @deprecated Prefer deleteConfirmState — avoids re-rendering unrelated runs. */
   deleteConfirmResolved?: Record<string, { confirmed: boolean }>;
 }) {
   const running = run.status === "running";
@@ -53,7 +56,8 @@ export function RunBlock({
   const readingAloud = useRunPlaybackActive(voiceModeEnabled ? run.runId : "");
   const updateConfirmation = parseUpdateConfirmationToken(run.text);
   const deleteFileConfirm = parseDeleteFileConfirmToken(run.text);
-  const deleteConfirmState = deleteConfirmResolved?.[run.runId];
+  const resolvedDeleteConfirm =
+    deleteConfirmState ?? deleteConfirmResolved?.[run.runId];
   const runDisplayText = deleteFileConfirm ? deleteFileConfirm.message : run.text;
   const runActionText = updateConfirmation
     ? formatUpdateConfirmationMessage(updateConfirmation)
@@ -99,6 +103,11 @@ export function RunBlock({
     ((hasTableEntities && tableEntityBrands.length > 0) || showWhoopBrandForFileDiff);
   const textBelowBrand = showBacksterBrand || showGeminiBrand || textAboveEntities;
 
+  const activityScrollKey = useMemo(
+    () => run.steps.map((step) => `${step.stepId}:${step.status}:${step.label}`).join("|"),
+    [run.steps],
+  );
+
   const waitForTextPresentation = showTextBlock && animate;
   const deferredReady = !waitForTextPresentation || typingComplete;
   const hasDeferredContent =
@@ -107,7 +116,7 @@ export function RunBlock({
         !(entity.type === "file_diff" && updateConfirmation) &&
         !(entity.type === "whoop_snapshots" && hasFileDiff),
     ) ||
-    (deleteFileConfirm != null && !deleteConfirmState) ||
+    (deleteFileConfirm != null && !resolvedDeleteConfirm) ||
     run.approvals.length > 0;
 
   useEffect(() => {
@@ -215,7 +224,7 @@ export function RunBlock({
             );
           })}
 
-        {deleteFileConfirm && !deleteConfirmState ? (
+        {deleteFileConfirm && !resolvedDeleteConfirm ? (
           <DeleteFileConfirmActions
             onConfirm={() => onDeleteFileConfirm?.(run.runId)}
             onReturn={() => onDeleteFileReturn?.(run.runId)}
@@ -257,7 +266,7 @@ export function RunBlock({
         {run.expanded && run.steps.length > 0 && (
           <ActivityTimeline
             running={running}
-            scrollKey={run.steps.map((step) => `${step.stepId}:${step.status}:${step.label}`).join("|")}
+            scrollKey={activityScrollKey}
           >
             {run.steps.map((step) => (
               <ActivityStepRow key={step.stepId} {...step} />
@@ -275,4 +284,4 @@ export function RunBlock({
       </div>
     </div>
   );
-}
+});

@@ -1,26 +1,12 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
-function loadDotEnvFile(path: string) {
-  if (!existsSync(path)) return;
-  const content = readFileSync(path, "utf8");
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const separator = trimmed.indexOf("=");
-    if (separator <= 0) continue;
-    const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim();
-    if (!(key in process.env)) {
-      process.env[key] = value;
-    }
-  }
-}
+/** Matches Tauri default and Vite `VITE_SIDECAR_TOKEN` fallback for local dev. */
+export const DEFAULT_SIDECAR_TOKEN = "dev-token-change-me";
+import { reloadEnvFromDisk } from "./env-file.ts";
 
-loadDotEnvFile(join(homedir(), ".backsteros-agent", ".env"));
-loadDotEnvFile(join(homedir(), ".backsteros-agent", "totem.env"));
+reloadEnvFromDisk();
 
 const defaultPath = [
   "/opt/homebrew/bin",
@@ -47,7 +33,8 @@ export function getAgentProfilePath(): string {
 }
 
 export function getSidecarToken(): string {
-  return process.env.SIDECAR_TOKEN ?? randomBytes(24).toString("hex");
+  const value = process.env.SIDECAR_TOKEN?.trim();
+  return value || DEFAULT_SIDECAR_TOKEN;
 }
 
 export function getSidecarPort(): number {
@@ -71,6 +58,10 @@ export function getNotesDirOverride(): string | undefined {
 
 export function getLinearApiKey(): string | undefined {
   return process.env.LINEAR_API_KEY?.trim() || undefined;
+}
+
+export function getDefaultGoogleOAuthCredentialsPath(): string {
+  return join(getDataDir(), "google-oauth.keys.json");
 }
 
 export function getGoogleOAuthCredentialsPath(): string | undefined {
