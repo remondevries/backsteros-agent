@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildLookupTools, extractUrls, normalizeLookupSearchMode } from "./lookup-tools.ts";
+import { buildLookupTools, extractUrls, normalizeLookupSearchMode, resolveLookupSearchModeForRequest } from "./lookup-tools.ts";
 
 describe("lookup tools", () => {
   test("normalizes search mode", () => {
@@ -27,5 +27,17 @@ describe("lookup tools", () => {
       { url_context: {} },
     ]);
     expect(buildLookupTools("docs", "Summarize this PDF")).toEqual([]);
+  });
+
+  test("auto-switches to docs for attachments without urls", () => {
+    expect(
+      resolveLookupSearchModeForRequest("web", "Summarize this PDF", true),
+    ).toBe("docs");
+    expect(
+      resolveLookupSearchModeForRequest("web", "Read https://example.com", true),
+    ).toBe("web");
+    expect(
+      resolveLookupSearchModeForRequest("docs", "Summarize this PDF", true),
+    ).toBe("docs");
   });
 });

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { getDataDir } from "./config.ts";
 import { loadStoredLookupAttachmentTexts } from "./lookup-attachment-store.ts";
 import { formatExtractedAttachmentText } from "./lookup-attachments.ts";
+import { prepareLookupAssistantHistoryText } from "./lookup-limits.ts";
 import type { GeminiContentPart } from "./lookup-attachments.ts";
 import type {
   PersistedChatMessage,
@@ -302,7 +303,7 @@ export function loadLookupHistory(sessionId: string): GeminiHistoryTurn[] {
         if (run?.text.trim()) {
           history.push({
             role: "assistant",
-            parts: [{ text: run.text.trim() }],
+            parts: [{ text: prepareLookupAssistantHistoryText(run.text) }],
           });
         }
       }
@@ -312,9 +313,10 @@ export function loadLookupHistory(sessionId: string): GeminiHistoryTurn[] {
     if (message.role === "assistant" && message.text.trim()) {
       history.push({
         role: "assistant",
-        parts: [{ text: message.text.trim() }],
+        parts: [{ text: prepareLookupAssistantHistoryText(message.text) }],
       });
     }
   }
+
   return history;
 }

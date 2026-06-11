@@ -170,7 +170,10 @@ import { persistLookupAttachments } from "./lookup-attachment-store.ts";
 import { buildGeminiUserParts } from "./lookup-attachments.ts";
 import { completeLookupRun, runLookupMessage } from "./lookup-handler.ts";
 import { normalizeLookupOutputFormat } from "./lookup-output-format.ts";
-import { normalizeLookupSearchMode } from "./lookup-tools.ts";
+import {
+  normalizeLookupSearchMode,
+  resolveLookupSearchModeForRequest,
+} from "./lookup-tools.ts";
 import { loadSettings, saveSettings } from "./store.ts";
 import type { AgentEvent, ReadyMessage } from "./types.ts";
 import {
@@ -1714,7 +1717,11 @@ app.post("/lookup/sessions/:sessionId/messages", async (c) => {
     return c.json({ error: "depthMode must be fast or deep" }, 400);
   }
 
-  const searchMode = normalizeLookupSearchMode(body.searchMode);
+  const searchMode = resolveLookupSearchModeForRequest(
+    normalizeLookupSearchMode(body.searchMode),
+    text,
+    attachments.length > 0,
+  );
   const outputFormat = normalizeLookupOutputFormat(body.outputFormat);
 
   const runId = crypto.randomUUID();
