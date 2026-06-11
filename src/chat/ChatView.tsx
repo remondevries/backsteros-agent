@@ -39,6 +39,8 @@ import {
   GOOD_MORNING_ACTION_ID,
   isGoodMorningComposerMode,
   isGoodMorningFeelMessage,
+  isGoodMorningFlowMessage,
+  isGoodMorningMessage,
   isGoodMorningWakeMessage,
   markMorningReviewUsedToday,
   MORNING_REVIEW_MESSAGE,
@@ -1302,6 +1304,7 @@ export const ChatView = forwardRef<
       (autoDeleteIntent ? DELETE_FILE_ACTION_ID : undefined);
     const isDailyCapture = isDailyCaptureMessage(effectiveQuickActionId);
     const isGroceryList = isGroceryListMessage(effectiveQuickActionId);
+    const isDeleteFile = isDeleteFileMessage(effectiveQuickActionId);
     const isGoodMorningWake = isGoodMorningWakeMessage(effectiveQuickActionId);
     const isGoodMorningFeel = isGoodMorningFeelMessage(effectiveQuickActionId);
     const isGoodNightReflection = isGoodNightReflectionMessage(effectiveQuickActionId);
