@@ -15,11 +15,11 @@ A macOS Tauri app for talking to a local Cursor agent with markdown notes worksp
 
 ```bash
 cd ~/code/backsteros-agent
-cp .env.example .env
-# Edit .env with CURSOR_API_KEY and optional LINEAR_API_KEY
 npm install
 cd sidecar && bun install
 ```
+
+On first launch, open **Settings → Integrations** in the app to add your Cursor API key and any optional integrations. Power users can still edit `~/.backsteros-agent/.env` directly (see `.env.example`).
 
 ## Development (browser + sidecar)
 
@@ -107,19 +107,13 @@ Authenticate Linear MCP once in the Cursor desktop app, or set `LINEAR_API_KEY` 
 
 ## Google Calendar MCP
 
-BacksterOS Agent attaches Google Calendar tools when a message looks calendar-related (meetings, schedule, availability, etc.).
+BacksterOS Agent attaches Google Calendar tools when a message looks calendar-related (meetings, schedule, availability, etc.). Calendar is optional — configure it from **Settings → Integrations** when you want schedule tools.
 
 1. Create a Google Cloud OAuth **Desktop app** credential with the Calendar API enabled.
-2. Save the downloaded JSON somewhere stable, e.g. `~/.backsteros-agent/google-oauth.keys.json`.
-3. Add to `~/.backsteros-agent/.env`:
+2. In the app, open **Settings → Integrations → Google Calendar** and import the downloaded JSON file.
+3. Click **Connect Google Calendar** and complete sign-in in your browser.
 
-```bash
-GOOGLE_OAUTH_CREDENTIALS=/Users/you/.backsteros-agent/google-oauth.keys.json
-```
-
-The default Google account nickname is `personal` (see `DEFAULT_GOOGLE_CALENDAR_ACCOUNT` in `sidecar/src/config.ts`). Override with `GOOGLE_CALENDAR_ACCOUNT` in `~/.backsteros-agent/.env` if needed.
-
-4. Ask the agent to authenticate with Google Calendar on first use. Tokens are stored at `~/.backsteros-agent/google-calendar-tokens.json`.
+Alternatively, save the JSON to e.g. `~/.backsteros-agent/google-oauth.keys.json` and set `GOOGLE_OAUTH_CREDENTIALS` in `~/.backsteros-agent/.env`.
 
 The sidecar launches `@cocal/google-calendar-mcp` via `npx` when calendar tools are needed. Node.js/npx must be available on the PATH.
 

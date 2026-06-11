@@ -8,7 +8,12 @@ import {
   isGoogleCalendarConfigured,
 } from "./config.ts";
 import { enrichCalendarResult } from "./enrichers/calendar.ts";
-import { formatDateInTimezone, resolveTodayDailyNoteInfo } from "./daily-note.ts";
+import {
+  formatDateInTimezone,
+  formatRFC3339InTimezone,
+  formatTimezoneOffset,
+  resolveTodayDailyNoteInfo,
+} from "./daily-note.ts";
 import type { CalendarEventEntity } from "./types.ts";
 
 interface OAuthCredentials {
@@ -135,7 +140,8 @@ export async function fetchCalendarEventsToday(options: {
   timezone?: string;
   now?: Date;
 } = {}): Promise<TodayCalendarSummary> {
-  const { timezone, date } = resolveTodayDailyNoteInfo(options.timezone, options.now);
+  const { timezone } = resolveTodayDailyNoteInfo(options.timezone, options.now);
+  const { timeMin, timeMax } = resolveCalendarDayBounds(timezone, options.now);
   const client = await getCalendarAuthClient();
   const accessToken = await client.getAccessToken();
   if (!accessToken.token) {
@@ -146,15 +152,26 @@ export async function fetchCalendarEventsToday(options: {
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("timeZone", timezone);
-  url.searchParams.set("timeMin", `${date}T00:00:00`);
-  url.searchParams.set("timeMax", `${date}T23:59:59`);
+  url.searchParams.set("timeMin", timeMin);
+  url.searchParams.set("timeMax", timeMax);
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken.token}` },
   });
 
   if (!response.ok) {
-    throw new Error(`Google Calendar request failed (${response.status})`);
+    let detail = "";
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      detail = body.error?.message?.trim() ?? "";
+    } catch {
+      // Ignore malformed error bodies.
+    }
+    throw new Error(
+      detail
+        ? `Google Calendar request failed (${response.status}): ${detail}`
+        : `Google Calendar request failed (${response.status})`,
+    );
   }
 
   const body = (await response.json()) as { items?: GoogleEventItem[] };
@@ -180,7 +197,17 @@ export function resolveCalendarDayBounds(timezone: string, now = new Date()): {
   const date = formatDateInTimezone(timezone, now);
   return {
     date,
-    timeMin: `${date}T00:00:00`,
-    timeMax: `${date}T23:59:59`,
+    timeMin: formatRFC3339InTimezone(
+      date,
+      "00:00:00",
+      timezone,
+      new Date(`${date}T00:00:00.000Z`),
+    ),
+    timeMax: formatRFC3339InTimezone(
+      date,
+      "23:59:59",
+      timezone,
+      new Date(`${date}T23:59:59.000Z`),
+    ),
   };
 }

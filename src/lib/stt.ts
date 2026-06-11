@@ -50,12 +50,32 @@ export async function getSttStatus(): Promise<SttStatus | null> {
 }
 
 export async function isSttSupported(): Promise<boolean> {
+  if (sttSupportedCache !== null) {
+    return sttSupportedCache;
+  }
+
+  if (!sttSupportedProbe) {
+    sttSupportedProbe = probeSttSupported();
+  }
+
+  return sttSupportedProbe;
+}
+
+let sttSupportedCache: boolean | null = null;
+let sttSupportedProbe: Promise<boolean> | null = null;
+
+async function probeSttSupported(): Promise<boolean> {
   try {
     const response = await sttRequest("/stt/status", { method: "GET" }, 5_000);
-    if (!response.ok) return false;
+    if (!response.ok) {
+      sttSupportedCache = false;
+      return false;
+    }
     const body = (await response.json()) as SttStatus;
-    return body.available;
+    sttSupportedCache = body.available;
+    return sttSupportedCache;
   } catch {
+    sttSupportedCache = false;
     return false;
   }
 }

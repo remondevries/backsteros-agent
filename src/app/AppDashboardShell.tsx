@@ -34,6 +34,7 @@ export function AppDashboardShell({
               className="app-dashboard-refresh"
               disabled={loading || refreshing}
               onClick={onRefresh}
+              title="Refresh (⌘R)"
             >
               {refreshing ? "Refreshing…" : "Refresh"}
             </button>

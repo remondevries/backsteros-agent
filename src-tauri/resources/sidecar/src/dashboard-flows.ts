@@ -3,7 +3,9 @@ import { applyMorningReviewDailyNote } from "./daily-note-automation.ts";
 import { loadUserTimezone } from "./context/profile.ts";
 import { getSelectedModelSelection } from "./models.ts";
 import { loadSettings } from "./store.ts";
+import { isTestExecutionMode } from "./execution-mode.ts";
 import { runGoodMorningFeelFlow } from "./good-morning-feel.ts";
+import { runGoodMorningWakeFlow } from "./good-morning-wake.ts";
 import { runGoodNightActions } from "./good-night.ts";
 import { buildGoodNightChatResponse } from "./good-night-response.ts";
 import { runGoodNightReflectionFlow } from "./good-night-reflection.ts";
@@ -40,16 +42,21 @@ export async function runGoodMorningDashboardFlow(notesPath: string) {
   return { prefetched, dailyNoteUpdate };
 }
 
+export async function runGoodMorningWakeDashboardFlow(notesPath: string, answer: string) {
+  return runGoodMorningWakeFlow(notesPath, answer, {
+    timezone: loadUserTimezone(),
+  });
+}
+
 export async function runGoodMorningFeelDashboardFlow(
   notesPath: string,
   answer: string,
-  agent: SDKAgent,
+  _agent?: SDKAgent,
 ) {
   const settings = loadSettings();
-  const model = getSelectedModelSelection(settings);
+  const model = isTestExecutionMode(settings) ? undefined : getSelectedModelSelection(settings);
 
   return runGoodMorningFeelFlow(notesPath, answer, {
-    agent,
     model,
     timezone: loadUserTimezone(),
   });
@@ -71,18 +78,17 @@ export async function runGoodNightDashboardFlow(notesPath: string) {
 export async function runGoodNightReflectionDashboardFlow(
   notesPath: string,
   answers: string[],
-  agent: SDKAgent,
+  _agent?: SDKAgent,
 ) {
   if (answers.length !== GOOD_NIGHT_REFLECTION_SECTIONS.length) {
     throw new Error("Good night reflection requires five answers");
   }
 
   const settings = loadSettings();
-  const model = getSelectedModelSelection(settings);
+  const model = isTestExecutionMode(settings) ? undefined : getSelectedModelSelection(settings);
   const payloadText = buildReflectionPayloadText(answers);
 
   return runGoodNightReflectionFlow(notesPath, payloadText, {
-    agent,
     model,
     timezone: loadUserTimezone(),
   });

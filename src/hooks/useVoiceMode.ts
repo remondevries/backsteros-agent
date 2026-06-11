@@ -113,6 +113,8 @@ export function useVoiceMode({
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
+
     void (async () => {
       const [ttsAvailable, sttAvailable, micAvailable] = await Promise.all([
         isSpeechSupported(),
@@ -121,7 +123,7 @@ export function useVoiceMode({
       ]);
       setSupported(ttsAvailable && sttAvailable && micAvailable);
     })();
-  }, []);
+  }, [isActive]);
 
   const processPttAudio = useCallback(async (audio: Float32Array) => {
     if (!enabledRef.current) return;

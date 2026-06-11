@@ -1,19 +1,28 @@
-import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
-import { ComposerModeToggle } from "../chat/ComposerModeToggle";
-import { TtsToggle } from "../chat/TtsToggle";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   composerModeFromSettings,
   settingsFromComposerMode,
   type ComposerMode,
 } from "../chat/composerMode";
 import type { LinearIssueLinkMode } from "../chat/types";
-import { useTts } from "../hooks/useTts";
-import { getSettings, updateSettings } from "../lib/api";
-import { LinearProjectPicker } from "./LinearProjectPicker";
+import { getProfileContent, getSettings, updateProfileContent, updateSettings, type ProfileKind } from "../lib/api";
 import { setLinearIssueLinkMode } from "../lib/linear/linearLink";
-import { openLocalFile } from "../lib/openExternalUrl";
 import { resolveProfilePaths } from "../lib/profilePaths";
+import { CursorIntegrationSection } from "./CursorIntegrationSection";
+import { GeneralSettingsSection } from "./GeneralSettingsSection";
+import { GeminiIntegrationSection } from "./GeminiIntegrationSection";
+import { GoogleCalendarIntegrationSection } from "./GoogleCalendarIntegrationSection";
+import {
+  isSettingsTabConnected,
+  tabShowsConnectionIndicator,
+} from "./integrationConnectionStatus";
+import { LinearIntegrationSection } from "./LinearIntegrationSection";
+import { ObsidianSettingsSection } from "./ObsidianSettingsSection";
+import { ProfileEditorSection } from "./ProfileEditorSection";
+import { SettingsConnectionBadge } from "./SettingsConnectionBadge";
+import { SettingsConnectionDot } from "./SettingsConnectionDot";
+import { SETTINGS_TABS, type SettingsTabId } from "./settingsTabs";
+import { useIntegrationsStatus } from "./useIntegrationsStatus";
 
 export function SettingsPanel({
   notesPath,
@@ -23,6 +32,7 @@ export function SettingsPanel({
   initialUserProfilePath,
   initialAgentProfilePath,
   onUpdated,
+  onSecretsUpdated,
 }: {
   notesPath: string | null;
   vaultName?: string | null;
@@ -31,7 +41,9 @@ export function SettingsPanel({
   initialUserProfilePath?: string;
   initialAgentProfilePath?: string;
   onUpdated: (path: string, nextVaultName?: string | null) => void;
+  onSecretsUpdated?: () => void | Promise<void>;
 }) {
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("general");
   const [manualPath, setManualPath] = useState(notesPath ?? defaultNotesPath);
   const [manualVaultName, setManualVaultName] = useState(vaultName ?? "");
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
@@ -45,7 +57,76 @@ export function SettingsPanel({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { enabled: ttsEnabled, toggle: toggleTts, supported: ttsSupported } = useTts();
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [profileEditor, setProfileEditor] = useState<ProfileKind | null>(null);
+  const [profileDraft, setProfileDraft] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  const activeTabMeta = SETTINGS_TABS.find((tab) => tab.id === activeTab) ?? SETTINGS_TABS[0];
+  const showSaveFooter =
+    profileEditor !== null ||
+    activeTab === "general" ||
+    activeTab === "obsidian" ||
+    activeTab === "linear";
+  const { status: integrationsStatus, refresh: refreshIntegrationsStatus } =
+    useIntegrationsStatus(true);
+  const connectionContext = useMemo(
+    () => ({
+      integrationsStatus,
+      savedNotesPath: notesPath,
+    }),
+    [integrationsStatus, notesPath],
+  );
+  const showConnectionBadge = !profileEditor && isSettingsTabConnected(activeTab, connectionContext);
+
+  const profileEditorMeta =
+    profileEditor === "agent"
+      ? {
+          title: "Agent persona",
+          description:
+            "Markdown read on every turn for Backster's identity and behavior. Changes apply on the next message.",
+        }
+      : profileEditor === "user"
+        ? {
+            title: "User profile",
+            description:
+              "Markdown read on every turn for your identity and timezone context. Changes apply on the next message.",
+          }
+        : null;
+
+  const handleSecretsUpdated = useCallback(async () => {
+    await refreshIntegrationsStatus();
+    await onSecretsUpdated?.();
+  }, [onSecretsUpdated, refreshIntegrationsStatus]);
+
+  useEffect(() => {
+    setSaveMessage(null);
+    setError(null);
+    setProfileEditor(null);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!profileEditor) {
+      setProfileDraft("");
+      setProfileLoading(false);
+      return;
+    }
+
+    setProfileLoading(true);
+    setSaveMessage(null);
+    setError(null);
+    void getProfileContent(profileEditor)
+      .then(({ content }) => {
+        setProfileDraft(content);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load profile");
+        setProfileDraft("");
+      })
+      .finally(() => {
+        setProfileLoading(false);
+      });
+  }, [profileEditor]);
 
   useEffect(() => {
     void (async () => {
@@ -71,24 +152,31 @@ export function SettingsPanel({
     })();
   }, [initialAgentProfilePath, initialUserProfilePath]);
 
-  async function pickFolder() {
+  async function saveProfile() {
+    if (!profileEditor) return;
+
+    setSaving(true);
+    setError(null);
+    setSaveMessage(null);
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: notesPath ?? defaultNotesPath,
-      });
-      if (typeof selected === "string") {
-        setManualPath(selected);
-      }
-    } catch {
-      // Browser dev mode: keep manual path input
+      await updateProfileContent(profileEditor, profileDraft);
+      setSaveMessage("Saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save profile");
+    } finally {
+      setSaving(false);
     }
   }
 
   async function save() {
+    if (profileEditor) {
+      await saveProfile();
+      return;
+    }
+
     setSaving(true);
     setError(null);
+    setSaveMessage(null);
     try {
       const result = await updateSettings({
         notesPath: manualPath,
@@ -103,6 +191,7 @@ export function SettingsPanel({
       setIssueLinkMode(result.issueLinkMode);
       setLinearIssueLinkMode(result.issueLinkMode);
       setGroceryLinearProjectId(result.groceryLinearProjectId ?? "");
+      setSaveMessage("Saved");
       onUpdated(manualPath, result.vaultName ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
@@ -112,145 +201,177 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="settings-panel">
-      <h2>Workspace</h2>
-      <p>Select the folder where markdown notes live.</p>
-      <div className="settings-row">
-        <input
-          value={manualPath}
-          onChange={(event) => setManualPath(event.target.value)}
-          placeholder={defaultNotesPath}
-        />
-        <button type="button" className="btn-secondary" onClick={pickFolder}>
-          Browse
-        </button>
-      </div>
+    <div className="settings-shell">
+      <aside className="settings-sidebar" aria-label="Settings categories">
+        <div className="settings-sidebar-header">
+          <h1 className="settings-sidebar-title">Settings</h1>
+        </div>
+        <nav className="settings-sidebar-nav">
+          {SETTINGS_TABS.map((tab, index) => {
+            const previousTab = index > 0 ? SETTINGS_TABS[index - 1] : null;
+            const showGroupDivider =
+              tab.group === "integration" && previousTab?.group === "general";
 
-      <label className="settings-field-label" htmlFor="vault-name-input">
-        Obsidian vault name (optional)
-      </label>
-      <p className="settings-hint">
-        Leave blank to use the folder name. Set this only when Obsidian shows a different vault name.
-      </p>
-      <div className="settings-row">
-        <input
-          id="vault-name-input"
-          value={manualVaultName}
-          onChange={(event) => setManualVaultName(event.target.value)}
-          placeholder="Folder name by default"
-        />
-      </div>
+            const showSidebarConnectionDot =
+              tabShowsConnectionIndicator(tab.id) &&
+              isSettingsTabConnected(tab.id, connectionContext);
 
-      <h2 className="settings-section-title">Profiles</h2>
-      <p>Edit Backster&apos;s persona and your identity context. Changes apply on the next message.</p>
-      <div className="settings-row settings-row-profiles">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            if (agentProfilePath) {
-              void openLocalFile(agentProfilePath);
-            }
-          }}
+            return (
+              <Fragment key={tab.id}>
+                {showGroupDivider ? (
+                  <div className="settings-sidebar-divider" role="separator" />
+                ) : null}
+                <button
+                  type="button"
+                  className={[
+                    "settings-sidebar-item",
+                    activeTab === tab.id ? "settings-sidebar-item--active" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  aria-current={activeTab === tab.id ? "page" : undefined}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <div className="settings-sidebar-item-heading">
+                    <span className="settings-sidebar-item-label">{tab.label}</span>
+                    {showSidebarConnectionDot && (
+                      <SettingsConnectionDot className="settings-sidebar-item-dot" />
+                    )}
+                  </div>
+                  <span className="settings-sidebar-item-description">{tab.description}</span>
+                </button>
+              </Fragment>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <div className="settings-panel">
+        <div
+          className={[
+            "settings-panel-body",
+            profileEditor ? "settings-panel-body--editor" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
-          Edit agent persona
-        </button>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            if (userProfilePath) {
-              void openLocalFile(userProfilePath);
-            }
-          }}
-        >
-          Edit user profile
-        </button>
-      </div>
-      {(agentProfilePath || userProfilePath) && (
-        <p className="settings-hint settings-hint-spaced">
-          {agentProfilePath && <>Agent: {agentProfilePath}</>}
-          {agentProfilePath && userProfilePath && " · "}
-          {userProfilePath && <>User: {userProfilePath}</>}
-        </p>
-      )}
+          <div className="settings-content-container">
+            <header className="settings-content-header">
+              {profileEditor && profileEditorMeta ? (
+                <>
+                  <div className="settings-content-title-row">
+                    <button
+                      type="button"
+                      className="settings-back-button"
+                      onClick={() => setProfileEditor(null)}
+                    >
+                      Back
+                    </button>
+                    <h2 className="settings-content-title">{profileEditorMeta.title}</h2>
+                  </div>
+                  <p className="settings-content-description">{profileEditorMeta.description}</p>
+                </>
+              ) : (
+                <>
+                  <div className="settings-content-title-row">
+                    <h2 className="settings-content-title">{activeTabMeta.label}</h2>
+                    {showConnectionBadge && <SettingsConnectionBadge />}
+                  </div>
+                  <p className="settings-content-description">{activeTabMeta.description}</p>
+                </>
+              )}
+            </header>
 
-      <h2 className="settings-section-title">Linear</h2>
-      <p>Choose how Linear issue links open when you click them in chat or the Linear view.</p>
-      <label className="settings-field-label" htmlFor="issue-link-mode">
-        Linear link type
-      </label>
-      <div className="settings-row settings-row-select">
-        <select
-          id="issue-link-mode"
-          value={issueLinkMode}
-          disabled={saving}
-          onChange={(event) => {
-            const value = event.target.value;
-            if (value === "external" || value === "internal") {
-              setIssueLinkMode(value);
-            }
-          }}
-        >
-          <option value="external">Web URL (browser)</option>
-          <option value="internal">Application URL (Linear app)</option>
-        </select>
-      </div>
-      <p className="settings-hint settings-hint-spaced">
-        Application URL uses the Linear desktop app via <code>linear://</code> links.
-      </p>
+            {profileEditor && profileEditorMeta ? (
+              <ProfileEditorSection
+                label={profileEditorMeta.title}
+                pathHint={
+                  profileEditor === "agent"
+                    ? agentProfilePath
+                      ? `File: ${agentProfilePath}`
+                      : undefined
+                    : userProfilePath
+                      ? `File: ${userProfilePath}`
+                      : undefined
+                }
+                value={profileDraft}
+                loading={profileLoading}
+                disabled={saving || profileLoading}
+                onChange={setProfileDraft}
+              />
+            ) : null}
 
-      <label className="settings-field-label" htmlFor="grocery-linear-project">
-        Grocery list project
-      </label>
-      <p className="settings-hint">
-        Weekly grocery items are added as checkboxes on a Linear issue in this project.
-      </p>
-      <div className="settings-row settings-row-project-picker">
-        <LinearProjectPicker
-          id="grocery-linear-project"
-          value={groceryLinearProjectId}
-          disabled={saving}
-          onChange={setGroceryLinearProjectId}
-        />
-      </div>
+            {activeTab === "general" && !profileEditor && (
+              <GeneralSettingsSection
+                composerMode={composerMode}
+                saving={saving}
+                userProfilePath={userProfilePath}
+                agentProfilePath={agentProfilePath}
+                onComposerModeChange={setComposerMode}
+                onEditAgentProfile={() => setProfileEditor("agent")}
+                onEditUserProfile={() => setProfileEditor("user")}
+              />
+            )}
 
-      <h2 className="settings-section-title">Composer</h2>
-      <p>
-        Test runs automation playbooks with deterministic local responses. Auto uses the fast model.
-        Max uses the latest Opus model.
-      </p>
-      <div className="settings-row settings-row-model">
-        <ComposerModeToggle
-          mode={composerMode}
-          onChange={setComposerMode}
-          disabled={saving}
-        />
-      </div>
-      <p className="settings-hint settings-hint-spaced">
-        You can also set <code>BACKSTER_EXECUTION_MODE=test</code> for one-off runs.
-      </p>
+            {activeTab === "obsidian" && (
+              <ObsidianSettingsSection
+                notesPath={notesPath}
+                defaultNotesPath={defaultNotesPath}
+                manualPath={manualPath}
+                manualVaultName={manualVaultName}
+                onManualPathChange={setManualPath}
+                onManualVaultNameChange={setManualVaultName}
+              />
+            )}
 
-      <h2 className="settings-section-title">Accessibility</h2>
-      <p>Read assistant responses aloud when they finish.</p>
-      <div className="settings-row settings-row-tts">
-        {ttsSupported ? (
-          <TtsToggle enabled={ttsEnabled} onToggle={toggleTts} />
-        ) : (
-          <p className="settings-hint">Text-to-speech is not available in this environment.</p>
+            {activeTab === "cursor" && (
+              <CursorIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+            )}
+
+            {activeTab === "linear" && (
+              <LinearIntegrationSection
+                issueLinkMode={issueLinkMode}
+                groceryLinearProjectId={groceryLinearProjectId}
+                saving={saving}
+                onIssueLinkModeChange={setIssueLinkMode}
+                onGroceryLinearProjectIdChange={setGroceryLinearProjectId}
+                onSecretsUpdated={handleSecretsUpdated}
+              />
+            )}
+
+            {activeTab === "gemini" && (
+              <GeminiIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+            )}
+
+            {activeTab === "google-calendar" && (
+              <GoogleCalendarIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+            )}
+          </div>
+        </div>
+
+        {showSaveFooter && (
+          <div className="settings-footer">
+            {error ? (
+              <p className="error-text settings-footer-status settings-footer-status--error">{error}</p>
+            ) : saveMessage ? (
+              <p className="settings-footer-status settings-footer-status--ok" role="status">
+                {saveMessage}
+              </p>
+            ) : (
+              <span className="settings-footer-status" aria-hidden="true" />
+            )}
+            <button
+              type="button"
+              className="btn-primary settings-save-button"
+              onClick={() => {
+                void save();
+              }}
+              disabled={saving || profileLoading}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
         )}
-      </div>
-      {ttsSupported && (
-        <p className="settings-hint settings-hint-spaced">
-          Uses the local Cori UK voice (Piper, offline).
-        </p>
-      )}
-
-      <div className="settings-footer">
-        {error && <p className="error-text settings-footer-error">{error}</p>}
-        <button type="button" className="btn-primary settings-save-button" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </button>
       </div>
     </div>
   );

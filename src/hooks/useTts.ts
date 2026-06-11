@@ -30,7 +30,7 @@ function writeEnabled(enabled: boolean): void {
   }
 }
 
-export function useTts() {
+export function useTts({ isActive = true }: { isActive?: boolean } = {}) {
   const [enabled, setEnabledState] = useState(readEnabled);
   const [supported, setSupported] = useState(false);
 
@@ -43,14 +43,16 @@ export function useTts() {
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
+
     void (async () => {
       const available = await isSpeechSupported();
       setSupported(available);
-      if (available) {
+      if (available && readEnabled()) {
         void primeSpeech();
       }
     })();
-  }, []);
+  }, [isActive]);
 
   const setEnabled = useCallback((value: boolean) => {
     writeEnabled(value);

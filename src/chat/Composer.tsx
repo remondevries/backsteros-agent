@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import { ComposerTextarea } from "./ComposerTextarea";
-import { RunUiPreviewPanel } from "./dev/RunUiPreviewPanel";
 import { AttachmentChip } from "./AttachmentChip";
 import { filesFromClipboard } from "./attachments";
 import { ComposerToolIndicators } from "./ComposerToolIndicators";
@@ -77,10 +76,6 @@ export const Composer = forwardRef<
     composerModeLabel?: string;
     onComposerModeChange?: (mode: ComposerMode) => void;
     savingComposerMode?: boolean;
-    uiPreview?: {
-      open: boolean;
-      onToggle: () => void;
-    };
     tts?: {
       enabled: boolean;
       onToggle: () => void;
@@ -94,7 +89,7 @@ export const Composer = forwardRef<
     voiceMode?: boolean;
     toolIndicators?: ToolSelection;
     toolPins?: ToolPinSelection;
-    onToggleToolPin?: (tool: keyof ToolSelection) => void;
+    onDismissTool?: (tool: keyof ToolSelection) => void;
     composerQuickAction?: {
       onClear: () => void;
     };
@@ -140,13 +135,12 @@ export const Composer = forwardRef<
     composerModeLabel,
     onComposerModeChange,
     savingComposerMode,
-    uiPreview,
     tts,
     textVoice,
     voiceMode = false,
     toolIndicators,
     toolPins,
-    onToggleToolPin,
+    onDismissTool,
     composerQuickAction,
     composerAutomationFlow = null,
     dailyCaptureTime,
@@ -249,10 +243,14 @@ export const Composer = forwardRef<
     onEscapeBlur?.();
   }
 
-  const activeTools = toolIndicators ?? { obsidian: false, linear: false, calendar: false, whoop: false };
-  const showFooter = Boolean(
-    textVoice?.supported || (composerMode && onComposerModeChange) || uiPreview,
-  );
+  const activeTools = toolIndicators ?? {
+    obsidian: false,
+    linear: false,
+    calendar: false,
+    whoop: false,
+  };
+  const showToolIndicators = Object.values(activeTools).some(Boolean);
+  const showFooter = Boolean(textVoice?.supported || (composerMode && onComposerModeChange));
   const showReadAloudToggle = Boolean(tts?.supported && !textVoice?.supported);
 
   function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -271,10 +269,6 @@ export const Composer = forwardRef<
       className={`composer ${isDragging ? "composer-dragging" : ""} ${voiceMode ? "composer-voice-layout" : ""}`}
     >
       {isDragging && !voiceMode && <div className="drop-overlay">Drop files to attach</div>}
-
-      {uiPreview?.open && !voiceMode && (
-        <RunUiPreviewPanel onClose={() => uiPreview.onToggle()} />
-      )}
 
       <div
         className={`composer-slide-panel ${voiceMode ? "composer-slide-panel-hidden" : ""}`}
@@ -307,12 +301,12 @@ export const Composer = forwardRef<
             />
           )}
 
-          {onToggleToolPin && (
+          {showToolIndicators && (
             <div className="composer-floating-controls">
               <ComposerToolIndicators
                 tools={activeTools}
                 pins={toolPins}
-                onTogglePin={onToggleToolPin}
+                onDismiss={onDismissTool}
               />
             </div>
           )}
@@ -609,16 +603,6 @@ export const Composer = forwardRef<
             )}
           </div>
           <div className="composer-footer-end">
-            {!voiceMode && uiPreview && (
-              <button
-                type="button"
-                className={`run-ui-preview-toggle ${uiPreview.open ? "active" : ""}`}
-                onClick={uiPreview.onToggle}
-                title="Toggle run UI preview (Cmd+Shift+L)"
-              >
-                UI preview
-              </button>
-            )}
             {textVoice?.supported && (
               <TextVoiceToggle
                 mode={textVoice.mode}

@@ -5,7 +5,14 @@ import type { MarkdownFileEntity } from "../chat/types";
 import { useVault } from "../chat/VaultContext";
 import { AppDashboardShell } from "../app/AppDashboardShell";
 import { GoodNightFlowCard } from "../flows/GoodNightFlowCard";
-import { fetchVaultDailyNoteToday } from "../lib/api";
+import {
+  DASHBOARD_CACHE_TTL_MS,
+  fetchVaultDailyNoteToday,
+  peekCached,
+  REQUEST_CACHE_KEYS,
+} from "../lib/api";
+
+type VaultDailyNoteResult = Awaited<ReturnType<typeof fetchVaultDailyNoteToday>>;
 
 function extractDayLogPreview(content: string): string {
   const heading = "## Day log";
@@ -18,35 +25,43 @@ function extractDayLogPreview(content: string): string {
   return body.slice(0, 1200);
 }
 
+function readCachedVaultDailyNote(): VaultDailyNoteResult | null {
+  return peekCached<VaultDailyNoteResult>(
+    REQUEST_CACHE_KEYS.vaultDailyNoteToday,
+    DASHBOARD_CACHE_TTL_MS,
+  );
+}
+
 export function ObsidianDashboard() {
   const vault = useVault();
-  const [loading, setLoading] = useState(true);
+  const initialCache = readCachedVaultDailyNote();
+  const [loading, setLoading] = useState(() => initialCache == null);
   const [refreshing, setRefreshing] = useState(false);
-  const [date, setDate] = useState("");
-  const [path, setPath] = useState("");
-  const [exists, setExists] = useState(false);
-  const [content, setContent] = useState<string | null>(null);
-  const [recentNotes, setRecentNotes] = useState<MarkdownFileEntity[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [date, setDate] = useState(() => initialCache?.note.date ?? "");
+  const [path, setPath] = useState(() => initialCache?.note.path ?? "");
+  const [exists, setExists] = useState(() => initialCache?.note.exists ?? false);
+  const [content, setContent] = useState<string | null>(() => initialCache?.note.content ?? null);
+  const [recentNotes, setRecentNotes] = useState<MarkdownFileEntity[]>(
+    () => initialCache?.recentNotes ?? [],
+  );
+  const [error, setError] = useState<string | null>(() => initialCache?.error ?? null);
 
   const loadVault = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
-    } else {
+    } else if (readCachedVaultDailyNote() == null) {
       setLoading(true);
     }
     setError(null);
 
     try {
-      const result = await fetchVaultDailyNoteToday();
+      const result = await fetchVaultDailyNoteToday({ force: isRefresh });
       setDate(result.note.date);
       setPath(result.note.path);
       setExists(result.note.exists);
       setContent(result.note.content ?? null);
       setRecentNotes(result.recentNotes);
-      if (result.error) {
-        setError(result.error);
-      }
+      setError(result.error ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load daily note");
       setExists(false);

@@ -36,6 +36,7 @@ export interface PersistedChatMessage {
     mimeType: string;
     vaultPath?: string;
     previewUrl?: string;
+    storageId?: string;
   }>;
   contextChips?: Array<{ id: string; title: string; entityType: string }>;
 }
@@ -198,6 +199,10 @@ export function migrateLegacySessionIfNeeded(notesPath: string): SessionIndex {
   };
   writeIndex(index);
   return index;
+}
+
+export function listSessionSummaries(): SessionTabMeta[] {
+  return readIndex().tabs;
 }
 
 export function listSessions(): SessionListItem[] {

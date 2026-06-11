@@ -12,7 +12,21 @@ import type {
   SidecarConnection,
   WhoopSnapshotEntity,
 } from "../chat/types";
-import type { LetterAnalysisSummary, LetterFilingOptions } from "../chat/letterFiling";
+import type { LetterFilingOptions } from "../chat/letterFiling";
+import {
+  cachedRequest,
+  DASHBOARD_CACHE_TTL_MS,
+  HEALTH_CACHE_TTL_MS,
+  REQUEST_CACHE_KEYS,
+} from "./requestCache";
+
+export {
+  DASHBOARD_CACHE_TTL_MS,
+  invalidateDashboardRequestCache,
+  invalidateRequestCache,
+  peekCached,
+  REQUEST_CACHE_KEYS,
+} from "./requestCache";
 
 let connection: SidecarConnection = {
   baseUrl: import.meta.env.DEV ? "/api" : "http://127.0.0.1:3847",
@@ -134,6 +148,88 @@ export async function connectGoogleCalendar() {
   });
 }
 
+export type IntegrationsStatus = {
+  cursorApiKey: { configured: boolean; preview?: string };
+  linearApiKey: { configured: boolean; preview?: string };
+  geminiApiKey: { configured: boolean; preview?: string };
+  googleCalendar: {
+    credentialsConfigured: boolean;
+    authenticated: boolean;
+    clientId: { configured: boolean; preview?: string };
+    clientSecret: { configured: boolean; preview?: string };
+  };
+};
+
+export async function getIntegrationsStatus() {
+  return request<IntegrationsStatus>("/integrations/status");
+}
+
+export async function updateIntegrationSecrets(body: {
+  cursorApiKey?: string | null;
+  linearApiKey?: string | null;
+  geminiApiKey?: string | null;
+}) {
+  return request<IntegrationsStatus>("/integrations/secrets", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function saveGoogleCalendarCredentials(body: {
+  clientId?: string | null;
+  clientSecret?: string | null;
+  clear?: boolean;
+}) {
+  return request<IntegrationsStatus>("/integrations/google-calendar/credentials", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** @deprecated Use saveGoogleCalendarCredentials with clientId/clientSecret fields */
+export async function importGoogleCalendarCredentials(json: unknown) {
+  return request<IntegrationsStatus>("/integrations/google-calendar/credentials", {
+    method: "POST",
+    body: JSON.stringify(json),
+  });
+}
+
+export type IntegrationTestTarget =
+  | "cursor"
+  | "linear"
+  | "gemini"
+  | "googleCalendar"
+  | "googleCalendarCredentials";
+
+export type IntegrationTestResult = {
+  ok: boolean;
+  message: string;
+};
+
+export type IntegrationTestCredentials = {
+  cursorApiKey?: string;
+  linearApiKey?: string;
+  geminiApiKey?: string;
+  googleOAuthClientId?: string;
+  googleOAuthClientSecret?: string;
+};
+
+const INTEGRATION_TEST_TIMEOUT_MS = 20_000;
+
+export async function runIntegrationTest(
+  target: IntegrationTestTarget,
+  credentials?: IntegrationTestCredentials,
+): Promise<IntegrationTestResult> {
+  return request<IntegrationTestResult>(
+    "/integrations/test",
+    {
+      method: "POST",
+      body: JSON.stringify({ target, ...credentials }),
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
+}
+
 export async function getWhoopSetup() {
   return request<{ envPath: string; authCommand: string; docsUrl: string }>(
     "/integrations/whoop/setup",
@@ -141,21 +237,31 @@ export async function getWhoopSetup() {
   );
 }
 
-export async function fetchWhoopToday() {
-  return request<{
-    authenticated: boolean;
-    snapshot: WhoopSnapshotEntity | null;
-    error?: string;
-  }>("/whoop/today");
+export async function fetchWhoopToday(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.whoopToday,
+    () =>
+      request<{
+        authenticated: boolean;
+        snapshot: WhoopSnapshotEntity | null;
+        error?: string;
+      }>("/whoop/today"),
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
 }
 
-export async function fetchLinearToday() {
-  return request<{
-    configured: boolean;
-    dueDate: string;
-    issues: LinearIssueEntity[];
-    error?: string;
-  }>("/linear/today");
+export async function fetchLinearToday(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.linearToday,
+    () =>
+      request<{
+        configured: boolean;
+        dueDate: string;
+        issues: LinearIssueEntity[];
+        error?: string;
+      }>("/linear/today"),
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
 }
 
 export async function fetchLetterFilingOptions() {
@@ -196,26 +302,31 @@ export async function respondDeleteFile(
   });
 }
 
-export async function fetchVaultDailyNoteToday() {
-  return request<{
-    note: {
-      date: string;
-      weekday: string;
-      timezone: string;
-      path: string;
-      exists: boolean;
-      created: boolean;
-      content?: string;
-    };
-    stats: {
-      sleep: number | null;
-      recovery: number | null;
-      strain: number | null;
-      productivity: number | null;
-    } | null;
-    recentNotes: MarkdownFileEntity[];
-    error?: string;
-  }>("/vault/daily-note/today");
+export async function fetchVaultDailyNoteToday(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.vaultDailyNoteToday,
+    () =>
+      request<{
+        note: {
+          date: string;
+          weekday: string;
+          timezone: string;
+          path: string;
+          exists: boolean;
+          created: boolean;
+          content?: string;
+        };
+        stats: {
+          sleep: number | null;
+          recovery: number | null;
+          strain: number | null;
+          productivity: number | null;
+        } | null;
+        recentNotes: MarkdownFileEntity[];
+        error?: string;
+      }>("/vault/daily-note/today"),
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
 }
 
 export async function runGoodMorningFlow() {
@@ -264,7 +375,18 @@ export async function submitGoodNightReflection(answers: string[]) {
   }, 180_000);
 }
 
-export async function getHealth(timeoutMs = HEALTH_REQUEST_TIMEOUT_MS) {
+type HealthResponse = {
+  ok: boolean;
+  hasApiKey: boolean;
+  hasGeminiApiKey: boolean;
+  hasLinearApiKey: boolean;
+  hasGoogleCalendarCredentials: boolean;
+  hasGoogleCalendarAuth: boolean;
+  hasWhoopConfigured: boolean;
+  hasWhoopAuth: boolean;
+};
+
+async function fetchHealth(timeoutMs = HEALTH_REQUEST_TIMEOUT_MS): Promise<HealthResponse> {
   let response: Response;
   try {
     response = await fetchWithTimeout(`${connection.baseUrl}/healthz`, undefined, timeoutMs);
@@ -282,20 +404,39 @@ export async function getHealth(timeoutMs = HEALTH_REQUEST_TIMEOUT_MS) {
     throw new Error(await readErrorMessage(response));
   }
 
-  return response.json() as Promise<{
-    ok: boolean;
-    hasApiKey: boolean;
-    hasGeminiApiKey: boolean;
-    hasLinearApiKey: boolean;
-    hasGoogleCalendarCredentials: boolean;
-    hasGoogleCalendarAuth: boolean;
-    hasWhoopConfigured: boolean;
-    hasWhoopAuth: boolean;
-  }>;
+  return response.json() as Promise<HealthResponse>;
+}
+
+export async function getHealth(
+  timeoutMsOrOptions: number | { timeoutMs?: number; force?: boolean } = HEALTH_REQUEST_TIMEOUT_MS,
+): Promise<HealthResponse> {
+  const timeoutMs =
+    typeof timeoutMsOrOptions === "number"
+      ? timeoutMsOrOptions
+      : (timeoutMsOrOptions.timeoutMs ?? HEALTH_REQUEST_TIMEOUT_MS);
+  const force = typeof timeoutMsOrOptions === "number" ? false : (timeoutMsOrOptions.force ?? false);
+
+  return cachedRequest(REQUEST_CACHE_KEYS.health, () => fetchHealth(timeoutMs), {
+    ttlMs: HEALTH_CACHE_TTL_MS,
+    force,
+  });
 }
 
 export async function getSettings() {
   return request<AppSettings>("/settings", undefined, SETTINGS_REQUEST_TIMEOUT_MS);
+}
+
+export type ProfileKind = "user" | "agent";
+
+export async function getProfileContent(kind: ProfileKind) {
+  return request<{ content: string }>(`/profiles/${kind}`);
+}
+
+export async function updateProfileContent(kind: ProfileKind, content: string) {
+  return request<{ content: string }>(`/profiles/${kind}`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
 }
 
 export type LinearProjectSummary = {
@@ -327,11 +468,23 @@ export async function fetchLinearProjectById(projectId: string) {
   );
 }
 
+export type CursorModelSummary = {
+  id: string;
+  displayName: string;
+  aliases?: string[];
+};
+
+export async function fetchCursorModels() {
+  return request<{ models: CursorModelSummary[] }>("/integrations/cursor/models");
+}
+
 export async function updateSettings(updates: {
   notesPath?: string;
   vaultName?: string | null;
   modelMode?: ModelMode;
   executionMode?: ExecutionMode;
+  autoModelId?: string | null;
+  maxModelId?: string | null;
   issueLinkMode?: LinearIssueLinkMode;
   groceryLinearProjectId?: string | null;
 }) {
@@ -341,6 +494,8 @@ export async function updateSettings(updates: {
     agentId: string | null;
     modelMode: ModelMode;
     modelId: string;
+    autoModelId: string | null;
+    maxModelId: string | null;
     modelName: string;
     executionMode: ExecutionMode;
     issueLinkMode: LinearIssueLinkMode;

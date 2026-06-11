@@ -20,11 +20,13 @@ export function useStreamingRunTts({
   const prevRunStatusRef = useRef<Record<string, RunViewModel["status"]>>({});
   const ttsSessionReadyRef = useRef(false);
   const prefetchedRunIdsRef = useRef(new Set<string>());
+  const activeRunIdRef = useRef<string | null>(null);
 
   const resetTtsRunTracking = () => {
     prevRunStatusRef.current = {};
     ttsSessionReadyRef.current = false;
     prefetchedRunIdsRef.current.clear();
+    activeRunIdRef.current = null;
   };
 
   useEffect(() => {
@@ -44,6 +46,9 @@ export function useStreamingRunTts({
     if (!ttsSessionReadyRef.current) {
       for (const [runId, run] of Object.entries(runs)) {
         prevRunStatusRef.current[runId] = run.status;
+        if (run.status === "running") {
+          activeRunIdRef.current = runId;
+        }
       }
       ttsSessionReadyRef.current = true;
       return;
@@ -51,7 +56,27 @@ export function useStreamingRunTts({
 
     if (!ttsEnabled) return;
 
+    const runIdsToProcess = new Set<string>();
+    const activeRunId = activeRunIdRef.current;
+    if (activeRunId && runs[activeRunId]) {
+      runIdsToProcess.add(activeRunId);
+    }
+
     for (const [runId, run] of Object.entries(runs)) {
+      if (run.status === "running") {
+        activeRunIdRef.current = runId;
+        runIdsToProcess.add(runId);
+      }
+      const previousStatus = prevRunStatusRef.current[runId];
+      if (previousStatus === "running" && run.status !== "running") {
+        runIdsToProcess.add(runId);
+      }
+    }
+
+    for (const runId of runIdsToProcess) {
+      const run = runs[runId];
+      if (!run) continue;
+
       const previousStatus = prevRunStatusRef.current[runId];
 
       if (run.text.trim()) {
@@ -72,6 +97,9 @@ export function useStreamingRunTts({
       }
 
       prevRunStatusRef.current[runId] = run.status;
+      if (run.status !== "running" && activeRunIdRef.current === runId) {
+        activeRunIdRef.current = null;
+      }
     }
   }, [runs, ttsEnabled, ttsSupported, advanceStreamingTts, isActive]);
 

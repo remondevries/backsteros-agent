@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TerminalTypingText } from "./TerminalTypingText";
 import { UpdateConfirmationCheckIcon } from "./UpdateConfirmationCheckIcon";
 import {
@@ -30,28 +30,38 @@ export function UpdateConfirmationPresentation({
 }) {
   const messageText = formatUpdateConfirmationMessage({ what, where, message });
   const [settled, setSettled] = useState(!animate);
+  const [animationDone, setAnimationDone] = useState(!animate);
 
   const handleTypingComplete = useCallback(() => {
     setSettled(true);
   }, []);
 
   useEffect(() => {
-    if (!settled || !onTypingComplete) return;
+    if (!settled || animationDone) return;
+
     if (!animate) {
-      onTypingComplete();
+      setAnimationDone(true);
+      onTypingComplete?.();
       return;
     }
 
     const timer = window.setTimeout(() => {
-      onTypingComplete();
+      setAnimationDone(true);
+      onTypingComplete?.();
     }, UPDATE_CONFIRMATION_SETTLE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [animate, onTypingComplete, settled]);
+  }, [animate, animationDone, onTypingComplete, settled]);
 
   return (
     <div
-      className={`update-confirmation ${settled ? "update-confirmation--settled" : ""}`}
+      className={[
+        "update-confirmation",
+        settled ? "update-confirmation--settled" : "",
+        animationDone ? "update-confirmation--animation-done" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-label={messageText}
     >
       <div className="update-confirmation-icon-slot" aria-hidden={!settled}>

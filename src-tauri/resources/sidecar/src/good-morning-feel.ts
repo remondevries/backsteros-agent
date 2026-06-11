@@ -1,5 +1,6 @@
-import type { SDKAgent, ModelSelection } from "@cursor/sdk";
+import type { ModelSelection } from "@cursor/sdk";
 import { createEphemeralAgent, disposeEphemeralAgent, sendPolishPrompt } from "./agent.ts";
+import { isTestExecutionMode } from "./execution-mode.ts";
 import { applyGoodMorningFeelDailyNote, type DailyNoteWriteResult } from "./daily-note-automation.ts";
 import { buildUpdateConfirmationToken } from "./update-confirmation.ts";
 import {
@@ -66,8 +67,25 @@ export function polishFeelLocally(rawAnswer: string): string {
 export function accumulateAssistantText(previous: string, chunk: string): string {
   if (!chunk) return previous;
   if (!previous) return chunk;
+
+  // Fast paths for the common streaming patterns where one side fully extends the other.
   if (chunk.startsWith(previous)) return chunk;
   if (previous.startsWith(chunk)) return previous;
+
+  // If the new chunk is already contained, keep the longer previous text.
+  if (previous.includes(chunk)) return previous;
+  if (chunk.includes(previous)) return chunk;
+
+  // Generic overlap: stream chunks sometimes overlap on a suffix/prefix boundary
+  // (e.g. "...pre" + "pretty..."). Dedupe via the longest overlap.
+  const maxOverlap = Math.min(previous.length, chunk.length);
+  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
+    const overlapPrefix = chunk.slice(0, overlap);
+    if (previous.endsWith(overlapPrefix)) {
+      return `${previous}${chunk.slice(overlap)}`;
+    }
+  }
+
   return `${previous}${chunk}`;
 }
 
@@ -191,11 +209,10 @@ export async function runGoodMorningFeelFlow(
   notesPath: string,
   rawAnswerInput: string,
   options: {
-    agent: SDKAgent;
-    model: ModelSelection;
+    model?: ModelSelection;
     timezone?: string;
     now?: Date;
-  },
+  } = {},
 ): Promise<GoodMorningFeelFlowResult> {
   const timezone = options.timezone ?? loadUserTimezone();
   const now = options.now ?? new Date();
@@ -206,13 +223,17 @@ export async function runGoodMorningFeelFlow(
   }
 
   let polishedFeel = polishFeelLocally(rawAnswer);
-  try {
-    const candidate = await polishFeelWithAgent(notesPath, rawAnswer, options.model);
-    if (isUsablePolishedFeel(candidate)) {
-      polishedFeel = candidate;
+  if (!isTestExecutionMode() && options.model) {
+    try {
+      const candidate = await polishFeelWithAgent(notesPath, rawAnswer, options.model);
+      if (isUsablePolishedFeel(candidate)) {
+        // Ensure agent output gets the same final formatting guarantees as the local fallback
+        // (capitalization + trailing punctuation).
+        polishedFeel = polishFeelLocally(candidate);
+      }
+    } catch {
+      // Keep local polish fallback.
     }
-  } catch {
-    // Keep local polish fallback.
   }
 
   if (!isUsablePolishedFeel(polishedFeel)) {

@@ -19,6 +19,8 @@ describe("slashCommands", () => {
     const all = filterSlashCommands("", { now: new Date(2026, 5, 10, 10, 0, 0), context: "chat" });
     expect(all.map((command) => command.id)).toContain("daily-capture");
     expect(all.map((command) => command.id)).toContain("grocery-list");
+    expect(all.map((command) => command.id)).toContain("tool-linear");
+    expect(all.map((command) => command.id)).toContain("tool-calendar");
     expect(all.map((command) => command.id)).toContain("clear");
 
     const clearOnly = filterSlashCommands("clear", {
@@ -63,5 +65,21 @@ describe("slashCommands", () => {
       context: "chat",
     })[0]!;
     expect(formatSlashCommandTriggerHint(grocery)).toBe("/gr · /grocery");
+  });
+
+  test("filterSlashCommands matches tool pre-select commands", () => {
+    const linear = filterSlashCommands("linear", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "chat",
+    });
+    expect(linear.map((command) => command.id)).toEqual(["tool-linear"]);
+    expect(linear[0]?.toolKey).toBe("linear");
+
+    const calendar = filterSlashCommands("googlecalendar", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "chat",
+    });
+    expect(calendar.map((command) => command.id)).toEqual(["tool-calendar"]);
+    expect(calendar[0]?.toolKey).toBe("calendar");
   });
 });

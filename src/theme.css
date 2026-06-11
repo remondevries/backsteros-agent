@@ -109,6 +109,12 @@
   --automation-composer-border: #4ade80;
   --automation-composer-border-opacity: 35%;
   --delete-file-composer-border: #f87171;
+
+  --settings-connection-dot: #4ade80;
+  --settings-connection-dot-pulse: color-mix(in srgb, #4ade80 55%, transparent);
+  --settings-connection-badge-bg: color-mix(in srgb, #4ade80 10%, transparent);
+  --settings-connection-badge-border: color-mix(in srgb, #4ade80 34%, transparent);
+  --settings-connection-badge-text: #86efac;
 }
 
 @media (prefers-color-scheme: light) {
@@ -223,5 +229,11 @@
     --automation-composer-border: #16a34a;
     --automation-composer-border-opacity: 42%;
     --delete-file-composer-border: #dc2626;
+
+    --settings-connection-dot: #15803d;
+    --settings-connection-dot-pulse: color-mix(in srgb, #16a34a 45%, transparent);
+    --settings-connection-badge-bg: #dcfce7;
+    --settings-connection-badge-border: #86efac;
+    --settings-connection-badge-text: #166534;
   }
 }

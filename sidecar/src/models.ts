@@ -103,17 +103,39 @@ export function getModelMode(settings: AppSettings): ModelMode {
   return "auto";
 }
 
-export function getSelectedModelId(settings: AppSettings): string {
-  if (getModelMode(settings) === "max") {
-    return cachedMaxModelId;
+export function getAutoModelId(settings: AppSettings): string {
+  const custom = settings.autoModelId?.trim();
+  if (custom) return custom;
+
+  const legacy = settings.modelId?.trim();
+  if (legacy && getModelMode(settings) === "auto") {
+    return legacy;
   }
 
   const fromEnv = process.env.MODEL_ID?.trim();
-  if (fromEnv) {
-    return fromEnv;
-  }
+  if (fromEnv) return fromEnv;
 
   return AUTO_MODEL_ID;
+}
+
+export function getMaxModelId(settings: AppSettings): string {
+  const custom = settings.maxModelId?.trim();
+  if (custom) return custom;
+
+  const legacy = settings.modelId?.trim();
+  if (legacy && getModelMode(settings) === "max") {
+    return legacy;
+  }
+
+  return cachedMaxModelId;
+}
+
+export function getSelectedModelId(settings: AppSettings): string {
+  if (getModelMode(settings) === "max") {
+    return getMaxModelId(settings);
+  }
+
+  return getAutoModelId(settings);
 }
 
 export function getSelectedModelSelection(settings: AppSettings): ModelSelection {
@@ -173,26 +195,42 @@ export function getModelDisplayName(
 export function resolveSelectedModelName(settings: AppSettings): string {
   const models = cachedModels;
   const mode = getModelMode(settings);
+  const modelId = mode === "max" ? getMaxModelId(settings) : getAutoModelId(settings);
 
-  if (mode === "max") {
-    const modelId = resolveMaxModelId(models);
-    cachedMaxModelId = modelId;
-    return getModelDisplayName(models, modelId);
+  if (mode === "max" && !settings.maxModelId?.trim()) {
+    cachedMaxModelId = resolveMaxModelId(models);
   }
 
-  return getModelDisplayName(models, getSelectedModelId(settings));
+  return getModelDisplayName(models, modelId);
 }
 
 export async function resolveSelectedModelNameFresh(settings: AppSettings): Promise<string> {
   const models = await listAvailableModels();
   cachedModels = models;
   const mode = getModelMode(settings);
+  const modelId = mode === "max" ? getMaxModelId(settings) : getAutoModelId(settings);
 
-  if (mode === "max") {
-    const modelId = resolveMaxModelId(models);
-    cachedMaxModelId = modelId;
-    return getModelDisplayName(models, modelId);
+  if (mode === "max" && !settings.maxModelId?.trim()) {
+    cachedMaxModelId = resolveMaxModelId(models);
   }
 
-  return getModelDisplayName(models, getSelectedModelId(settings));
+  return getModelDisplayName(models, modelId);
+}
+
+export function defaultAutoModelId(models: ModelListItem[]): string {
+  const exact = models.find((model) => model.id === AUTO_MODEL_ID);
+  if (exact) return exact.id;
+
+  const composer = models.find((model) => /composer/i.test(model.id));
+  if (composer) return composer.id;
+
+  return models[0]?.id ?? AUTO_MODEL_ID;
+}
+
+export function defaultMaxModelId(models: ModelListItem[]): string {
+  const resolved = resolveMaxModelId(models);
+  if (models.some((model) => model.id === resolved)) {
+    return resolved;
+  }
+  return models[0]?.id ?? MAX_MODEL_ID_FALLBACK;
 }

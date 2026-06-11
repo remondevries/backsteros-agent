@@ -318,12 +318,32 @@ async function ttsRequest(path: string, init?: RequestInit, timeoutMs = 60_000):
 }
 
 export async function isSpeechSupported(): Promise<boolean> {
+  if (speechSupportedCache !== null) {
+    return speechSupportedCache;
+  }
+
+  if (!speechSupportedProbe) {
+    speechSupportedProbe = probeSpeechSupported();
+  }
+
+  return speechSupportedProbe;
+}
+
+let speechSupportedCache: boolean | null = null;
+let speechSupportedProbe: Promise<boolean> | null = null;
+
+async function probeSpeechSupported(): Promise<boolean> {
   try {
     const response = await ttsRequest("/tts/voices", undefined, 5_000);
-    if (!response.ok) return false;
+    if (!response.ok) {
+      speechSupportedCache = false;
+      return false;
+    }
     const body = (await response.json()) as { voices?: TtsVoice[] };
-    return (body.voices?.length ?? 0) > 0;
+    speechSupportedCache = (body.voices?.length ?? 0) > 0;
+    return speechSupportedCache;
   } catch {
+    speechSupportedCache = false;
     return false;
   }
 }

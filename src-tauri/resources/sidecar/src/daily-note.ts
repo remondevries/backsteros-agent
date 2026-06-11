@@ -16,6 +16,32 @@ export function formatDateInTimezone(timezone: string, date = new Date()): strin
   }).format(date);
 }
 
+export function formatTimezoneOffset(timeZone: string, date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "longOffset",
+  }).formatToParts(date);
+  const raw = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  if (raw === "GMT") return "+00:00";
+
+  const match = raw.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!match) return "+00:00";
+
+  const sign = match[1];
+  const hours = match[2].padStart(2, "0");
+  const minutes = match[3] ?? "00";
+  return `${sign}${hours}:${minutes}`;
+}
+
+export function formatRFC3339InTimezone(
+  dateIso: string,
+  time: string,
+  timeZone: string,
+  reference = new Date(`${dateIso}T12:00:00.000Z`),
+): string {
+  return `${dateIso}T${time}${formatTimezoneOffset(timeZone, reference)}`;
+}
+
 export function formatWeekdayInTimezone(timezone: string, date = new Date()): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -340,6 +366,31 @@ export function upsertMetricAfterInDayLog(
 
     if (afterPattern.test(body)) {
       return body.replace(afterPattern, (match) => `${match}\n${line}`);
+    }
+
+    if (!body) return line;
+    return `${body}\n${line}`;
+  }, date);
+}
+
+export function upsertMetricBeforeInDayLog(
+  content: string,
+  metric: string,
+  value: string,
+  beforeMetric: string,
+  date: string,
+): string {
+  const line = `${metric}: ${value}`;
+  const metricPattern = new RegExp(`^${metric}:\\s*.+$`, "m");
+  const beforePattern = new RegExp(`^${beforeMetric}:\\s*.+$`, "m");
+
+  return updateDayLogBody(content, (body) => {
+    if (metricPattern.test(body)) {
+      return body.replace(metricPattern, line);
+    }
+
+    if (beforePattern.test(body)) {
+      return body.replace(beforePattern, (match) => `${line}\n${match}`);
     }
 
     if (!body) return line;

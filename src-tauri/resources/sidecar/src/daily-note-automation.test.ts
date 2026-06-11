@@ -84,7 +84,7 @@ describe("daily note automation", () => {
 });
 
 describe("daily note automation writes", () => {
-  test("morning review writes wake, sleep, and weather lines", () => {
+  test("morning review writes sleep and weather lines without wake time", () => {
     const { mkdtempSync, rmSync, readFileSync } = require("node:fs");
     const { join } = require("node:path");
     const { tmpdir } = require("node:os");
@@ -119,7 +119,7 @@ describe("daily note automation writes", () => {
       expect(content).toContain("recovery: 82");
       expect(content).not.toContain("strain: 4.2");
       expect(content).toContain("## Day log");
-      expect(content).toContain("woke: around 7:15 AM");
+      expect(content).not.toContain("woke:");
       expect(content).toContain("slept: 7h 32m");
       expect(content).toContain("weather: partly cloudy, 12°C in Leeuwarden, Netherlands");
       expect(content.indexOf("sleep: 84")).toBeLessThan(content.indexOf("## Day log"));

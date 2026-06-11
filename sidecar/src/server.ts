@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { cors } from "hono/cors";
 import { bearerAuth } from "hono/bearer-auth";
+import { HTTPException } from "hono/http-exception";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -40,8 +41,11 @@ import {
   isWhoopConfigured,
 } from "./config.ts";
 import {
+  defaultAutoModelId,
+  defaultMaxModelId,
   getModelMode,
   getSelectedModelId,
+  listAvailableModels,
   resolveSelectedModelName,
   resolveSelectedModelNameFresh,
   getSelectedModelSelection,
@@ -111,6 +115,23 @@ import { isDestructiveShellCommand } from "./shell-policy.ts";
 import { getWorkspaceCustomTools } from "./workspace-tools.ts";
 import { fetchWhoopTodaySnapshot } from "./morning-review-whoop.ts";
 import { getWhoopSetupInfo } from "./whoopAuth.ts";
+import {
+  getIntegrationsStatus,
+  importGoogleCalendarCredentials,
+  saveGoogleCalendarOAuthCredentials,
+  updateIntegrationSecrets,
+} from "./integrations-secrets.ts";
+import {
+  parseProfileKind,
+  readProfileContent,
+  writeProfileContent,
+} from "./profiles-api.ts";
+import {
+  runIntegrationTests,
+  type IntegrationTestReport,
+  type IntegrationTestResult,
+  type IntegrationTestTarget,
+} from "./integrations-test.ts";
 import type { LinearIssueEntity, MarkdownFileEntity, ToolCategory } from "./types.ts";
 import { ensureAgentProfile } from "./context/agent.ts";
 import { ensureUserProfile, loadUserFirstName, loadUserTimezone } from "./context/profile.ts";
@@ -307,11 +328,16 @@ app.use("/tts/*", bearerAuth({ token }));
 app.use("/stt/*", bearerAuth({ token }));
 app.use("/llm-extract/*", bearerAuth({ token }));
 app.use("/linear/*", bearerAuth({ token }));
+app.use("/integrations/*", bearerAuth({ token }));
+app.use("/profiles/*", bearerAuth({ token }));
 
 app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
   const message = err instanceof Error ? err.message : "Unknown error";
   const status = message === "Unauthorized" ? 401 : 500;
-  return c.json({ error: message }, status);
+  return c.json({ error: message || "Unknown error" }, status);
 });
 
 app.get("/healthz", (c) => {
@@ -418,6 +444,93 @@ app.get("/linear/projects/:projectId", async (c) => {
 app.post("/integrations/whoop/setup", async (c) => {
   const info = getWhoopSetupInfo();
   return c.json(info);
+});
+
+app.get("/integrations/status", (c) => {
+  return c.json(getIntegrationsStatus());
+});
+
+app.put("/integrations/secrets", async (c) => {
+  const body = (await c.req.json()) as {
+    cursorApiKey?: string | null;
+    linearApiKey?: string | null;
+    geminiApiKey?: string | null;
+  };
+  return c.json(updateIntegrationSecrets(body));
+});
+
+app.post("/integrations/test", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    target?: IntegrationTestTarget | "all";
+    cursorApiKey?: string;
+    linearApiKey?: string;
+    geminiApiKey?: string;
+    googleOAuthClientId?: string;
+    googleOAuthClientSecret?: string;
+  };
+  const target = body.target ?? "all";
+  if (
+    target !== "all" &&
+    target !== "cursor" &&
+    target !== "linear" &&
+    target !== "gemini" &&
+    target !== "googleCalendar" &&
+    target !== "googleCalendarCredentials"
+  ) {
+    return c.json({ error: "Invalid integration test target" }, 400);
+  }
+
+  const credentials = {
+    cursorApiKey: body.cursorApiKey,
+    linearApiKey: body.linearApiKey,
+    geminiApiKey: body.geminiApiKey,
+    googleOAuthClientId: body.googleOAuthClientId,
+    googleOAuthClientSecret: body.googleOAuthClientSecret,
+  };
+
+  const result = await runIntegrationTests(target, credentials);
+  return c.json(result);
+});
+
+app.get("/integrations/cursor/models", async (c) => {
+  if (!getCursorApiKey()?.trim()) {
+    return c.json({ error: "Cursor API key is not configured" }, 400);
+  }
+
+  try {
+    const models = await listAvailableModels();
+    return c.json({ models });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to list Cursor models";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.post("/integrations/google-calendar/credentials", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (body && typeof body === "object" && ("clientId" in body || "clientSecret" in body || "clear" in body)) {
+      return c.json(saveGoogleCalendarOAuthCredentials(body as {
+        clientId?: string | null;
+        clientSecret?: string | null;
+        clear?: boolean;
+      }));
+    }
+    return c.json(importGoogleCalendarCredentials(body));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save Google OAuth credentials";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/integrations/google-calendar/connect", async (c) => {
+  try {
+    const result = await startGoogleCalendarAuth();
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to start Google Calendar authentication";
+    return c.json({ error: message }, 500);
+  }
 });
 
 app.get("/whoop/today", async (c) => {
@@ -670,16 +783,6 @@ app.post("/flows/good-night/reflection", async (c) => {
   }
 });
 
-app.post("/integrations/google-calendar/connect", async (c) => {
-  try {
-    const result = await startGoogleCalendarAuth();
-    return c.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to start Google Calendar authentication";
-    return c.json({ error: message }, 500);
-  }
-});
-
 app.get("/settings", async (c) => {
   const settings = loadSettings();
   const modelMode = getModelMode(settings);
@@ -691,6 +794,8 @@ app.get("/settings", async (c) => {
     agentId: settings.agentId,
     modelMode,
     modelId,
+    autoModelId: settings.autoModelId ?? null,
+    maxModelId: settings.maxModelId ?? null,
     modelName,
     executionMode: getExecutionMode(settings),
     issueLinkMode: settings.issueLinkMode ?? "external",
@@ -709,6 +814,8 @@ app.put("/settings", async (c) => {
     vaultName?: string | null;
     modelMode?: string;
     executionMode?: string;
+    autoModelId?: string | null;
+    maxModelId?: string | null;
     issueLinkMode?: string;
     groceryLinearProjectId?: string | null;
   };
@@ -719,18 +826,23 @@ app.put("/settings", async (c) => {
   const hasIssueLinkMode = body.issueLinkMode !== undefined;
   const hasGroceryLinearProjectId = body.groceryLinearProjectId !== undefined;
 
+  const hasAutoModelId = body.autoModelId !== undefined;
+  const hasMaxModelId = body.maxModelId !== undefined;
+
   if (
     !notesPath &&
     !modelMode &&
     !executionMode &&
     !hasVaultName &&
     !hasIssueLinkMode &&
-    !hasGroceryLinearProjectId
+    !hasGroceryLinearProjectId &&
+    !hasAutoModelId &&
+    !hasMaxModelId
   ) {
     return c.json(
       {
         error:
-          "notesPath, vaultName, modelMode, executionMode, issueLinkMode, or groceryLinearProjectId is required",
+          "notesPath, vaultName, modelMode, executionMode, autoModelId, maxModelId, issueLinkMode, or groceryLinearProjectId is required",
       },
       400,
     );
@@ -772,6 +884,18 @@ app.put("/settings", async (c) => {
     }
   }
 
+  if (hasAutoModelId) {
+    const trimmed = body.autoModelId?.trim();
+    settings.autoModelId = trimmed || null;
+    settings.modelId = null;
+  }
+
+  if (hasMaxModelId) {
+    const trimmed = body.maxModelId?.trim();
+    settings.maxModelId = trimmed || null;
+    settings.modelId = null;
+  }
+
   if (executionMode === "live" || executionMode === "test") {
     settings.executionMode = executionMode;
   }
@@ -803,11 +927,46 @@ app.put("/settings", async (c) => {
     agentId: next.notesPath ? next.agentIdByNotesPath[next.notesPath] ?? null : null,
     modelMode: resolvedMode,
     modelId: getSelectedModelId(next),
+    autoModelId: next.autoModelId ?? null,
+    maxModelId: next.maxModelId ?? null,
     modelName,
     executionMode: getExecutionMode(next),
     issueLinkMode: next.issueLinkMode ?? "external",
     groceryLinearProjectId: next.groceryLinearProjectId ?? null,
   });
+});
+
+app.get("/profiles/:kind", (c) => {
+  const kind = parseProfileKind(c.req.param("kind"));
+  if (!kind) {
+    return c.json({ error: "Profile kind must be user or agent" }, 400);
+  }
+
+  try {
+    return c.json({ content: readProfileContent(kind) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to read profile";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.put("/profiles/:kind", async (c) => {
+  const kind = parseProfileKind(c.req.param("kind"));
+  if (!kind) {
+    return c.json({ error: "Profile kind must be user or agent" }, 400);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { content?: string };
+  if (typeof body.content !== "string") {
+    return c.json({ error: "content is required" }, 400);
+  }
+
+  try {
+    return c.json({ content: writeProfileContent(kind, body.content) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save profile";
+    return c.json({ error: message }, 500);
+  }
 });
 
 function resolveNotesPath(): string {

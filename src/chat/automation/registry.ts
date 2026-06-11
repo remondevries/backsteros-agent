@@ -44,7 +44,6 @@ import {
   LETTER_LABEL,
   LETTER_MESSAGE,
   isLetterComposerMode,
-  isLetterConfirmMessage,
   isLetterFlowMessage,
   isLetterMessage,
 } from "../letter";

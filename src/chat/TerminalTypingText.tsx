@@ -104,20 +104,47 @@ export function TerminalTypingText({
   onOpenWhoopDashboard?: () => void;
 }) {
   const presentationStartedAtRef = useRef(startedAt ?? Date.now());
+  const streamedDuringRunRef = useRef(false);
   const hasInlineTokens = contentHasInlineTokens(text);
   const targetLength = hasInlineTokens ? logicalContentLength(text) : text.length;
-  const [phase, setPhase] = useState<ResponsePresentationPhase>(() => (animate ? "loading" : "typing"));
-  const [displayedLength, setDisplayedLength] = useState(() => (animate ? 0 : targetLength));
+  const targetLengthRef = useRef(targetLength);
+  targetLengthRef.current = targetLength;
+  const effectiveAnimate = animate && !running;
+  const [phase, setPhase] = useState<ResponsePresentationPhase>(() =>
+    animate && !running ? "loading" : "typing",
+  );
+  const [displayedLength, setDisplayedLength] = useState(() =>
+    animate && !running ? 0 : targetLength,
+  );
 
   useEffect(() => {
+    if (running) {
+      streamedDuringRunRef.current = true;
+      setPhase("typing");
+      setDisplayedLength(targetLengthRef.current);
+      return;
+    }
+
+    if (streamedDuringRunRef.current) {
+      streamedDuringRunRef.current = false;
+      setPhase("typing");
+      setDisplayedLength(targetLengthRef.current);
+      return;
+    }
+
     if (!animate) {
       setPhase("typing");
-      setDisplayedLength(targetLength);
+      setDisplayedLength(targetLengthRef.current);
+      return;
     }
-  }, [animate, targetLength]);
+
+    setPhase("loading");
+    setDisplayedLength(0);
+    presentationStartedAtRef.current = startedAt ?? Date.now();
+  }, [animate, running, targetLength, startedAt]);
 
   useEffect(() => {
-    if (!animate || phase !== "loading") return;
+    if (!effectiveAnimate || phase !== "loading") return;
 
     const tryAdvance = () => {
       const elapsedMs = Date.now() - presentationStartedAtRef.current;
@@ -129,10 +156,10 @@ export function TerminalTypingText({
     tryAdvance();
     const timer = window.setInterval(tryAdvance, LOADING_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [animate, phase, text, running]);
+  }, [effectiveAnimate, phase, text, running]);
 
   useEffect(() => {
-    if (!animate || phase !== "cursor") return;
+    if (!effectiveAnimate || phase !== "cursor") return;
 
     const timer = window.setTimeout(() => {
       setDisplayedLength(0);
@@ -143,15 +170,18 @@ export function TerminalTypingText({
   }, [phase]);
 
   useEffect(() => {
-    if (!animate || phase !== "typing") return;
-    if (displayedLength >= targetLength) return;
+    if (!effectiveAnimate || phase !== "typing") return;
 
     const timer = window.setInterval(() => {
-      setDisplayedLength((current) => Math.min(current + CHARS_PER_TICK, targetLength));
+      setDisplayedLength((current) => {
+        const target = targetLengthRef.current;
+        if (current >= target) return current;
+        return Math.min(current + CHARS_PER_TICK, target);
+      });
     }, TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [phase, text, displayedLength, targetLength]);
+  }, [effectiveAnimate, phase]);
 
   const displayed =
     phase === "typing"

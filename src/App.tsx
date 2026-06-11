@@ -3,6 +3,7 @@ import { AppViewRibbon } from "./app/AppViewRibbon";
 import { CommandPanel } from "./app/CommandPanel";
 import type { AppView } from "./app/appViews";
 import { ChatView, type ChatViewHandle } from "./chat/ChatView";
+import { UiPreviewProvider } from "./chat/dev/UiPreviewContext";
 import { SessionTabBar } from "./chat/SessionTabBar";
 import type { ModelMode } from "./chat/types";
 import { useCommandPanelShortcuts } from "./hooks/useCommandPanelShortcuts";
@@ -12,20 +13,31 @@ import { useLookupSessionTabs } from "./hooks/useLookupSessionTabs";
 import { useSessionTabs } from "./hooks/useSessionTabs";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import { LookupView, type LookupViewHandle } from "./lookup/LookupView";
+import { SettingsModal } from "./settings/SettingsModal";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import { VaultProvider } from "./chat/VaultContext";
 import {
-  connectGoogleCalendar,
   formatSidecarReachabilityError,
   getHealth,
   getSettings,
   getWhoopSetup,
+  invalidateDashboardRequestCache,
   setSidecarConnection,
   waitForSidecar,
 } from "./lib/api";
+import { connectGoogleCalendarAndWait } from "./lib/googleCalendarConnect";
+import { getCalendarStartupWarning } from "./lib/integrationWarnings";
 import { isTauriRuntime } from "./lib/tauriRuntime";
 import { setLinearIssueLinkMode } from "./lib/linear/linearLink";
 import { openExternalUrl } from "./lib/openExternalUrl";
+
+type DashboardView = Extract<AppView, "whoop" | "linear" | "obsidian">;
+
+const DASHBOARD_VIEWS = new Set<DashboardView>(["whoop", "linear", "obsidian"]);
+
+function isDashboardView(view: AppView): view is DashboardView {
+  return DASHBOARD_VIEWS.has(view as DashboardView);
+}
 
 const WhoopDashboard = lazy(() =>
   import("./whoop/WhoopDashboard").then((module) => ({ default: module.WhoopDashboard })),
@@ -75,6 +87,9 @@ export default function App() {
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renamingLookupSessionId, setRenamingLookupSessionId] = useState<string | null>(null);
   const [appView, setAppView] = useState<AppView>("chat");
+  const [mountedDashboardViews, setMountedDashboardViews] = useState<Set<DashboardView>>(
+    () => new Set(),
+  );
   const [commandPanelOpen, setCommandPanelOpen] = useState(false);
   const activeChatRef = useRef<ChatViewHandle>(null);
   const activeLookupRef = useRef<LookupViewHandle>(null);
@@ -101,7 +116,7 @@ export default function App() {
     [focusActiveComposer, focusActiveLookupComposer],
   );
 
-  const chatEnabled = ready && Boolean(notesPath) && !showSettings;
+  const chatEnabled = ready && Boolean(notesPath);
   const lookupEnabled = chatEnabled;
   const {
     tabs,
@@ -146,20 +161,33 @@ export default function App() {
   useSystemTheme();
 
   useEffect(() => {
+    if (!isDashboardView(appView)) return;
+    setMountedDashboardViews((current) => {
+      if (current.has(appView)) return current;
+      const next = new Set(current);
+      next.add(appView);
+      return next;
+    });
+  }, [appView]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
-        setShowSettings(true);
-        return;
+        setShowSettings((open) => {
+          if (open && notesPath) {
+            window.requestAnimationFrame(() => focusActiveComposer());
+          }
+          return !open;
+        });
       }
-
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [focusActiveComposer, notesPath]);
 
-  const commandPanelEnabled = ready && Boolean(notesPath) && !showSettings;
+  const commandPanelEnabled = ready && Boolean(notesPath);
 
   useCommandPanelShortcuts({
     enabled: commandPanelEnabled,
@@ -177,6 +205,7 @@ export default function App() {
   const connectToSidecar = useCallback(async () => {
     setConnecting(true);
     setHealthError(null);
+    invalidateDashboardRequestCache();
 
     try {
       const usingTauri = await loadTauriConnection();
@@ -186,9 +215,9 @@ export default function App() {
         healthTimeoutMs: usingTauri || isTauriRuntime() ? 2_000 : 8_000,
       });
 
-      const [health, settings] = await Promise.all([getHealth(), getSettings()]);
+      const [health, settings] = await Promise.all([getHealth({ force: true }), getSettings()]);
       if (!health.hasApiKey) {
-        setHealthError("Set CURSOR_API_KEY in ~/.backsteros-agent/.env");
+        setHealthError("Add your Cursor API key in Settings → Cursor.");
         return;
       }
 
@@ -204,20 +233,9 @@ export default function App() {
       } else {
         setLinearWarning(null);
       }
-      if (!health.hasGoogleCalendarCredentials) {
-        setCalendarWarning(
-          "Google Calendar MCP is not configured. Add GOOGLE_OAUTH_CREDENTIALS to ~/.backsteros-agent/.env.",
-        );
-        setNeedsCalendarConnect(false);
-      } else if (!health.hasGoogleCalendarAuth) {
-        setCalendarWarning(
-          "Google Calendar is configured but not linked yet. Connect your Google account in your browser (not inside this window).",
-        );
-        setNeedsCalendarConnect(true);
-      } else {
-        setCalendarWarning(null);
-        setNeedsCalendarConnect(false);
-      }
+      const calendarWarningState = getCalendarStartupWarning(health);
+      setCalendarWarning(calendarWarningState.message);
+      setNeedsCalendarConnect(calendarWarningState.needsConnect);
       if (!health.hasWhoopAuth) {
         setWhoopWarning(
           "Whoop is not connected. Add tokens to ~/.backsteros-agent/totem.env after running `npx -y @briangaoo/totem auth`.",
@@ -355,30 +373,21 @@ export default function App() {
   async function handleSettingsUpdated(path: string, nextVaultName?: string | null) {
     setNotesPath(path);
     setVaultName(nextVaultName ?? null);
-    setShowSettings(false);
     await reloadTabs();
-    focusActiveComposer();
   }
 
   async function handleConnectGoogleCalendar() {
     setCalendarConnecting(true);
     try {
-      const { authUrl } = await connectGoogleCalendar();
-      await openExternalUrl(authUrl);
-
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        const health = await getHealth();
-        if (health.hasGoogleCalendarAuth) {
-          setCalendarWarning(null);
-          setNeedsCalendarConnect(false);
-          return;
-        }
+      const result = await connectGoogleCalendarAndWait();
+      if (result.connected) {
+        setCalendarWarning(null);
+        setNeedsCalendarConnect(false);
+        return;
       }
-
-      setCalendarWarning(
-        "Browser sign-in started. Keep BacksterOS Agent open until the success page appears, then return here.",
-      );
+      if (result.message) {
+        setCalendarWarning(result.message);
+      }
     } catch (error) {
       setCalendarWarning(
         error instanceof Error ? error.message : "Failed to start Google Calendar sign-in",
@@ -412,6 +421,7 @@ export default function App() {
   }
 
   return (
+    <UiPreviewProvider>
     <div className="app-shell">
       {healthError && (
         <div className="warning-banner">
@@ -464,19 +474,7 @@ export default function App() {
         <div className="warning-banner">{geminiWarning}</div>
       )}
 
-      {!notesPath || showSettings ? (
-        <SettingsPanel
-          notesPath={notesPath}
-          vaultName={vaultName}
-          defaultNotesPath={defaultNotesPath}
-          initialModelMode={modelMode}
-          initialUserProfilePath={userProfilePath}
-          initialAgentProfilePath={agentProfilePath}
-          onUpdated={(path, nextVaultName) => {
-            void handleSettingsUpdated(path, nextVaultName);
-          }}
-        />
-      ) : (
+      {notesPath ? (
         <VaultProvider notesPath={notesPath} vaultNameOverride={vaultName}>
           {commandPanelOpen && (
             <CommandPanel
@@ -606,24 +604,24 @@ export default function App() {
                 )}
               </div>
 
-              {appView === "whoop" ? (
-                <div className="app-view-pane">
+              {mountedDashboardViews.has("whoop") ? (
+                <div className="app-view-pane" hidden={appView !== "whoop"}>
                   <Suspense fallback={<div className="app-shell loading">Loading Whoop…</div>}>
-                    <WhoopDashboard />
+                    <WhoopDashboard isActive={appView === "whoop"} />
                   </Suspense>
                 </div>
               ) : null}
 
-              {appView === "linear" ? (
-                <div className="app-view-pane">
+              {mountedDashboardViews.has("linear") ? (
+                <div className="app-view-pane" hidden={appView !== "linear"}>
                   <Suspense fallback={<div className="app-shell loading">Loading Linear…</div>}>
-                    <LinearDashboard />
+                    <LinearDashboard isActive={appView === "linear"} />
                   </Suspense>
                 </div>
               ) : null}
 
-              {appView === "obsidian" ? (
-                <div className="app-view-pane">
+              {mountedDashboardViews.has("obsidian") ? (
+                <div className="app-view-pane" hidden={appView !== "obsidian"}>
                   <Suspense fallback={<div className="app-shell loading">Loading vault…</div>}>
                     <ObsidianDashboard />
                   </Suspense>
@@ -632,7 +630,37 @@ export default function App() {
             </div>
           </div>
         </VaultProvider>
+      ) : (
+        <div className="app-setup-shell" aria-hidden="true" />
+      )}
+
+      {(showSettings || !notesPath) && (
+        <SettingsModal
+          dismissible={Boolean(notesPath)}
+          onClose={
+            notesPath
+              ? () => {
+                  setShowSettings(false);
+                  focusActiveComposer();
+                }
+              : undefined
+          }
+        >
+          <SettingsPanel
+            notesPath={notesPath}
+            vaultName={vaultName}
+            defaultNotesPath={defaultNotesPath}
+            initialModelMode={modelMode}
+            initialUserProfilePath={userProfilePath}
+            initialAgentProfilePath={agentProfilePath}
+            onSecretsUpdated={() => connectToSidecar()}
+            onUpdated={(path, nextVaultName) => {
+              void handleSettingsUpdated(path, nextVaultName);
+            }}
+          />
+        </SettingsModal>
       )}
     </div>
+    </UiPreviewProvider>
   );
 }

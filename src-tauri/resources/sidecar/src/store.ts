@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppSettings } from "./types.ts";
 import { getDataDir } from "./config.ts";
@@ -9,8 +9,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   agentIdByNotesPath: {},
   modelId: null,
   modelMode: "auto",
+  executionMode: "live",
   issueLinkMode: "external",
+  groceryLinearProjectId: null,
 };
+
+let cachedSettings: AppSettings | null = null;
+let cachedSettingsMtime: number | null = null;
 
 function settingsPath(): string {
   const dir = getDataDir();
@@ -23,18 +28,37 @@ function settingsPath(): string {
 export function loadSettings(): AppSettings {
   const path = settingsPath();
   if (!existsSync(path)) {
-    return { ...DEFAULT_SETTINGS };
+    cachedSettings = { ...DEFAULT_SETTINGS };
+    cachedSettingsMtime = null;
+    return cachedSettings;
   }
+
   try {
+    const mtime = statSync(path).mtimeMs;
+    if (cachedSettings && cachedSettingsMtime === mtime) {
+      return cachedSettings;
+    }
+
     const parsed = JSON.parse(readFileSync(path, "utf8")) as AppSettings;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    cachedSettings = { ...DEFAULT_SETTINGS, ...parsed };
+    cachedSettingsMtime = mtime;
+    return cachedSettings;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    cachedSettings = { ...DEFAULT_SETTINGS };
+    cachedSettingsMtime = null;
+    return cachedSettings;
   }
 }
 
 export function saveSettings(settings: AppSettings): void {
-  writeFileSync(settingsPath(), JSON.stringify(settings, null, 2));
+  const path = settingsPath();
+  writeFileSync(path, JSON.stringify(settings, null, 2));
+  cachedSettings = { ...settings };
+  try {
+    cachedSettingsMtime = statSync(path).mtimeMs;
+  } catch {
+    cachedSettingsMtime = null;
+  }
 }
 
 export function getAgentIdForPath(
