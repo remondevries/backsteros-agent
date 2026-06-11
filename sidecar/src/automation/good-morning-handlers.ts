@@ -2,7 +2,11 @@ import { applyMorningReviewDailyNote } from "../daily-note-automation.ts";
 import { loadUserFirstName } from "../context/profile.ts";
 import { buildGoodMorningChatResponse, filterUrgentLinearIssues } from "../good-morning-response.ts";
 import { runGoodMorningFeelFlow } from "../good-morning-feel.ts";
-import { isGoodMorningFeelQuickAction } from "../good-morning.ts";
+import { runGoodMorningWakeFlow } from "../good-morning-wake.ts";
+import {
+  isGoodMorningFeelQuickAction,
+  isGoodMorningWakeQuickAction,
+} from "../good-morning.ts";
 import { isMorningReviewQuickAction } from "../morning-review-linear.ts";
 import { prefetchMorningReviewData } from "../morning-review-prefetch.ts";
 import { isTestExecutionMode } from "../execution-mode.ts";
@@ -89,7 +93,7 @@ export async function runGoodMorningInitialAutomation(ctx: AutomationHandlerCont
     logPrefetchStep(
       `morning-obsidian-${ctx.runId}`,
       "notes",
-      "Updated today's daily note with wake time, sleep, weather, and recovery",
+      "Updated today's daily note with sleep, weather, and recovery",
       "completed",
     );
   } catch (error) {
@@ -125,6 +129,31 @@ export async function runGoodMorningInitialAutomation(ctx: AutomationHandlerCont
   ctx.completeFinished();
 }
 
+export async function runGoodMorningWakeAutomation(ctx: AutomationHandlerContext): Promise<void> {
+  const logWakeStep = (stepId: string, label: string, status: "completed" | "error" | "running") => {
+    ctx.logStep(stepId, "generic", label, status, "good_morning_wake");
+  };
+
+  const noteStepId = `good-morning-wake-note-${ctx.runId}`;
+  logWakeStep(noteStepId, "Saving wake time to daily note", "running");
+
+  try {
+    const result = runGoodMorningWakeFlow(ctx.notesPath, ctx.text, {
+      timezone: ctx.timezone,
+    });
+
+    logWakeStep(noteStepId, "Saved wake time to daily note", "completed");
+
+    ctx.setLastAssistantText(result.response);
+    ctx.broadcastAssistantMessage(result.response);
+    ctx.completeFinished();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Good morning wake time failed";
+    logWakeStep(noteStepId, message, "error");
+    ctx.completeFailed(message);
+  }
+}
+
 export async function runGoodMorningFeelAutomation(ctx: AutomationHandlerContext): Promise<void> {
   const logFeelStep = (stepId: string, label: string, status: "completed" | "error" | "running") => {
     ctx.logStep(stepId, "generic", label, status, "good_morning_feel");
@@ -156,6 +185,12 @@ export const GOOD_MORNING_INITIAL_HANDLER: AutomationHandler = {
   id: "good-morning-initial",
   matches: (quickActionId) => isMorningReviewQuickAction(quickActionId),
   run: runGoodMorningInitialAutomation,
+};
+
+export const GOOD_MORNING_WAKE_HANDLER: AutomationHandler = {
+  id: "good-morning-wake",
+  matches: (quickActionId) => isGoodMorningWakeQuickAction(quickActionId),
+  run: runGoodMorningWakeAutomation,
 };
 
 export const GOOD_MORNING_FEEL_HANDLER: AutomationHandler = {

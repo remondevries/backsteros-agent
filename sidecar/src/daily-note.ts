@@ -347,6 +347,31 @@ export function upsertMetricAfterInDayLog(
   }, date);
 }
 
+export function upsertMetricBeforeInDayLog(
+  content: string,
+  metric: string,
+  value: string,
+  beforeMetric: string,
+  date: string,
+): string {
+  const line = `${metric}: ${value}`;
+  const metricPattern = new RegExp(`^${metric}:\\s*.+$`, "m");
+  const beforePattern = new RegExp(`^${beforeMetric}:\\s*.+$`, "m");
+
+  return updateDayLogBody(content, (body) => {
+    if (metricPattern.test(body)) {
+      return body.replace(metricPattern, line);
+    }
+
+    if (beforePattern.test(body)) {
+      return body.replace(beforePattern, (match) => `${line}\n${match}`);
+    }
+
+    if (!body) return line;
+    return `${body}\n${line}`;
+  }, date);
+}
+
 export function appendDayLogLine(content: string, line: string, date: string): string {
   const trimmed = line.trim();
   if (!trimmed) return content;

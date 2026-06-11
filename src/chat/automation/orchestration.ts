@@ -1,4 +1,5 @@
 import type { AutomationDefinition, AutomationFlowId, FollowUpPromptStep } from "./types";
+import type { ChatMessage } from "../types";
 import {
   getAutomationDefinition,
   getRegisteredAutomationFlowIds,
@@ -152,6 +153,37 @@ export function resolveInitialRunFollowUpStep(
   definition: AutomationDefinition,
 ): import("./types").FollowUpPromptStep | import("./types").FollowUpQuestionnaireStep | undefined {
   return getPostInitialRunStep(definition);
+}
+
+export function findAutomationFlowRunId(
+  messages: Array<Pick<ChatMessage, "role" | "quickActionId" | "runId">>,
+  definition: AutomationDefinition,
+): string | undefined {
+  const initialStep = getInitialRunStep(definition);
+  if (!initialStep) return undefined;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (
+      message.role === "user" &&
+      message.quickActionId === initialStep.quickActionId &&
+      message.runId
+    ) {
+      return message.runId;
+    }
+  }
+
+  return undefined;
+}
+
+export function getFollowUpPromptAfterAnswer(
+  definition: AutomationDefinition,
+  answerQuickActionId: string,
+): FollowUpPromptStep | undefined {
+  const steps = getFollowUpPromptSteps(definition);
+  const index = steps.findIndex((step) => step.answerQuickActionId === answerQuickActionId);
+  if (index < 0 || index >= steps.length - 1) return undefined;
+  return steps[index + 1];
 }
 
 export function resolveAutomationFlowForInitialRun(

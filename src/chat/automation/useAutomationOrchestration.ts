@@ -6,7 +6,11 @@ import {
   scheduleFlowFollowUp,
   shouldScheduleFlowFollowUp,
 } from "./followUp";
-import { resolveInitialRunFollowUpStep } from "./orchestration";
+import {
+  findAutomationFlowRunId,
+  getFollowUpPromptAfterAnswer,
+  resolveInitialRunFollowUpStep,
+} from "./orchestration";
 import { getAutomationDefinition, getRegisteredAutomationFlowIds } from "./registry";
 import type { AutomationFlowId, FollowUpQuestionnaireStep } from "./types";
 import { getFollowUpPromptStep, getFollowUpQuestionnaireStep } from "./types";
@@ -278,22 +282,31 @@ export function useAutomationOrchestration({
     (quickActionId: string | undefined, runId: string) => {
       for (const flowId of getRegisteredAutomationFlowIds()) {
         const definition = getAutomationDefinition(flowId);
-        if (!definition?.isInitialRun(quickActionId)) continue;
+        if (!definition) continue;
 
-        const followUpStep = resolveInitialRunFollowUpStep(definition);
-        if (!followUpStep) continue;
-
-        if (followUpStep.kind === "followUpQuestionnaire") {
-          scheduleQuestionnaireStart(flowId, runId, followUpStep.id);
-        } else {
-          scheduleFollowUpPrompt(flowId, runId, followUpStep.id);
+        if (definition.isInitialRun(quickActionId)) {
+          const followUpStep = resolveInitialRunFollowUpStep(definition);
+          if (followUpStep) {
+            if (followUpStep.kind === "followUpQuestionnaire") {
+              scheduleQuestionnaireStart(flowId, runId, followUpStep.id);
+            } else {
+              scheduleFollowUpPrompt(flowId, runId, followUpStep.id);
+            }
+          }
+          return true;
         }
-        return true;
+
+        const nextFollowUp = getFollowUpPromptAfterAnswer(definition, quickActionId ?? "");
+        if (nextFollowUp) {
+          const flowRunId = findAutomationFlowRunId(messagesRef.current, definition) ?? runId;
+          scheduleFollowUpPrompt(flowId, flowRunId, nextFollowUp.id);
+          return true;
+        }
       }
 
       return false;
     },
-    [scheduleFollowUpPrompt, scheduleQuestionnaireStart],
+    [messagesRef, scheduleFollowUpPrompt, scheduleQuestionnaireStart],
   );
 
   return {

@@ -7,6 +7,14 @@ import type {
 } from "./types";
 import { filterOpenLinearIssues } from "./linearIssue";
 export const GOOD_MORNING_FEEL_ACTION_ID = "good-morning-feel";
+export const GOOD_MORNING_WAKE_ACTION_ID = "good-morning-wake";
+
+export const GOOD_MORNING_WAKE_PROMPT =
+  "Can you tell me what time you woke up so I can add it to your journal?";
+
+export function getGoodMorningWakePlaceholder(): string {
+  return "e.g. 7:15 AM";
+}
 
 export const GOOD_MORNING_FEEL_PROMPT = "How do you feel? How was your sleep?";
 
@@ -90,12 +98,33 @@ export function isGoodMorningFeelMessage(quickActionId?: string): boolean {
   return quickActionId === GOOD_MORNING_FEEL_ACTION_ID;
 }
 
+export function isGoodMorningWakeMessage(quickActionId?: string): boolean {
+  return quickActionId === GOOD_MORNING_WAKE_ACTION_ID;
+}
+
 export function isGoodMorningFlowMessage(quickActionId?: string): boolean {
-  return isGoodMorningMessage(quickActionId) || isGoodMorningFeelMessage(quickActionId);
+  return (
+    isGoodMorningMessage(quickActionId) ||
+    isGoodMorningWakeMessage(quickActionId) ||
+    isGoodMorningFeelMessage(quickActionId)
+  );
 }
 
 export function isGoodMorningComposerMode(composerQuickActionId?: string | null): boolean {
   return composerQuickActionId === GOOD_MORNING_ACTION_ID;
+}
+
+export function hasGoodMorningWakePromptForRun(
+  messages: Array<Pick<ChatMessage, "role" | "flowVariant" | "text" | "flowRunId">>,
+  runId: string,
+): boolean {
+  return messages.some(
+    (entry) =>
+      entry.role === "assistant" &&
+      entry.flowVariant === "good-morning" &&
+      entry.text === GOOD_MORNING_WAKE_PROMPT &&
+      entry.flowRunId === runId,
+  );
 }
 
 export function hasGoodMorningFeelPromptForRun(

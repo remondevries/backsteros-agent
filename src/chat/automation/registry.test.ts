@@ -24,9 +24,11 @@ describe("automation registry", () => {
     expect(initialRun?.sourceBrand).toBe("backster");
 
     const followUp = getFollowUpPromptSteps(GOOD_MORNING_AUTOMATION);
-    expect(followUp).toHaveLength(1);
-    expect(followUp[0]?.id).toBe("feel");
-    expect(followUp[0]?.answerQuickActionId).toBe("good-morning-feel");
+    expect(followUp).toHaveLength(2);
+    expect(followUp[0]?.id).toBe("wake");
+    expect(followUp[0]?.answerQuickActionId).toBe("good-morning-wake");
+    expect(followUp[1]?.id).toBe("feel");
+    expect(followUp[1]?.answerQuickActionId).toBe("good-morning-feel");
 
     const confirmation = getConfirmationRunStep(GOOD_MORNING_AUTOMATION);
     expect(confirmation?.answerQuickActionId).toBe("good-morning-feel");
