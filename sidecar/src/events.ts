@@ -200,6 +200,23 @@ export async function mapSdkMessageToEvents(
   return events;
 }
 
+export function reconcileAssistantTextFromRun(
+  state: RunState,
+  runResult: { result?: string | null },
+): string | null {
+  if (state.lastAssistantText.trim()) {
+    return null;
+  }
+
+  const fallback = runResult.result?.trim();
+  if (!fallback) {
+    return null;
+  }
+
+  state.lastAssistantText = fallback;
+  return fallback;
+}
+
 export function createRunLifecycleEvents(
   runId: string,
   state: RunState,

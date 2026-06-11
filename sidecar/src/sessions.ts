@@ -201,6 +201,10 @@ export function migrateLegacySessionIfNeeded(notesPath: string): SessionIndex {
   return index;
 }
 
+export function listSessionSummaries(): SessionTabMeta[] {
+  return readIndex().tabs;
+}
+
 export function listSessions(): SessionListItem[] {
   const index = readIndex();
   return index.tabs

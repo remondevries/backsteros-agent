@@ -22,27 +22,33 @@ describe("resolveLetterStatus", () => {
 });
 
 describe("buildLetterWrapperContent", () => {
-  test("creates letter frontmatter and embed matching Backster OS", () => {
-    const content = buildLetterWrapperContent(
-      "2026-03-08 - Tax Office.pdf",
-      {
-        creator: "Jane Doe",
-        organization: "Belastingdienst",
-        date: "2026-03-08",
-        status: "Inbox",
-        project: "Administration",
-      },
-      "Remon de Vries",
-    );
+  test("creates letter frontmatter in vault field order", () => {
+    const content = buildLetterWrapperContent("2026-03-08 - Tax Office.pdf", {
+      assigned: "Remon de Vries",
+      creator: "Jane Doe",
+      organization: "Belastingdienst",
+      date: "2026-03-08",
+      status: "In Progress",
+      project: "Taxes",
+      note: "We made a payment agreement for this payment, this is filed away and is in progress and will be finished on 2026-12-03.",
+    });
 
-    expect(content).toContain("type: letter");
-    expect(content).toContain('assigned: "Remon de Vries"');
-    expect(content).toContain('organization: "Belastingdienst"');
-    expect(content).toContain("status: Inbox");
-    expect(content).toContain('date: "2026-03-08"');
-    expect(content).toContain('creator: "Jane Doe"');
-    expect(content).toContain('project: "Administration"');
-    expect(content).toContain("![[2026-03-08 - Tax Office.pdf]]");
+    expect(content).toBe(
+      [
+        "---",
+        "type: letter",
+        'assigned: "Remon de Vries"',
+        'date: "2026-03-08"',
+        'organization: "Belastingdienst"',
+        'project: "Taxes"',
+        'status: "In Progress"',
+        "note: We made a payment agreement for this payment, this is filed away and is in progress and will be finished on 2026-12-03.",
+        "---",
+        "",
+        "![[2026-03-08 - Tax Office.pdf]]",
+      ].join("\n"),
+    );
+    expect(content).not.toContain("creator:");
   });
 });
 

@@ -5,7 +5,7 @@ function isShortcutBlockedTarget(target: EventTarget | null): boolean {
     target instanceof HTMLElement &&
     Boolean(
       target.closest(
-        ".session-tab-rename-input, .attachment-modal-backdrop, .command-panel-root",
+        ".session-tab-rename-input, .attachment-modal-backdrop, .letter-modal-backdrop, .command-panel-root",
       ),
     )
   );

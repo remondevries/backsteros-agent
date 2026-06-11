@@ -12,6 +12,7 @@ import { DAILY_CAPTURE_ACTION_ID } from "./dailyCapture";
 import { GROCERY_LIST_ACTION_ID } from "./groceryList";
 import { GOOD_MORNING_ACTION_ID } from "./morningReview";
 import { GOOD_NIGHT_ACTION_ID } from "./goodNight";
+import { LETTER_CONFIRM_ACTION_ID } from "./letter";
 
 describe("automationFlow", () => {
   test("resolves active automation flows from composer state", () => {
@@ -19,6 +20,7 @@ describe("automationFlow", () => {
     expect(resolveActiveAutomationFlow(GROCERY_LIST_ACTION_ID)).toBe("grocery-list");
     expect(resolveActiveAutomationFlow(GOOD_MORNING_ACTION_ID)).toBe("good-morning");
     expect(resolveActiveAutomationFlow(GOOD_NIGHT_ACTION_ID)).toBe("good-night");
+    expect(resolveActiveAutomationFlow(LETTER_CONFIRM_ACTION_ID)).toBe("letter");
     expect(resolveActiveAutomationFlow(null)).toBeNull();
   });
 

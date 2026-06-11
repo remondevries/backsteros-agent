@@ -20,6 +20,11 @@ const FALLBACK_MODELS: ModelListItem[] = [
 ];
 
 let cachedMaxModelId = MAX_MODEL_ID_FALLBACK;
+let cachedModels: ModelListItem[] = FALLBACK_MODELS;
+
+export function getCachedModels(): ModelListItem[] {
+  return cachedModels;
+}
 
 export async function listAvailableModels(): Promise<ModelListItem[]> {
   const apiKey = getCursorApiKey();
@@ -70,6 +75,7 @@ export function resolveMaxModelId(models: ModelListItem[]): string {
 
 export async function refreshMaxModelCache(): Promise<string> {
   const models = await listAvailableModels();
+  cachedModels = models;
   cachedMaxModelId = resolveMaxModelId(models);
   return cachedMaxModelId;
 }
@@ -164,8 +170,22 @@ export function getModelDisplayName(
   return modelId;
 }
 
-export async function resolveSelectedModelName(settings: AppSettings): Promise<string> {
+export function resolveSelectedModelName(settings: AppSettings): string {
+  const models = cachedModels;
+  const mode = getModelMode(settings);
+
+  if (mode === "max") {
+    const modelId = resolveMaxModelId(models);
+    cachedMaxModelId = modelId;
+    return getModelDisplayName(models, modelId);
+  }
+
+  return getModelDisplayName(models, getSelectedModelId(settings));
+}
+
+export async function resolveSelectedModelNameFresh(settings: AppSettings): Promise<string> {
   const models = await listAvailableModels();
+  cachedModels = models;
   const mode = getModelMode(settings);
 
   if (mode === "max") {

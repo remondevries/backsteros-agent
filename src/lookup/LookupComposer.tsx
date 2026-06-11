@@ -8,6 +8,7 @@ import {
 } from "react";
 import { AttachmentChip } from "../chat/AttachmentChip";
 import { ComposerTextarea } from "../chat/ComposerTextarea";
+import { DotScrollLoader } from "../chat/DotScrollLoader";
 import { filesFromClipboard } from "../chat/attachments";
 import { SlashCommandMenu } from "../chat/SlashCommandMenu";
 import {
@@ -185,14 +186,14 @@ export const LookupComposer = forwardRef<
       if (event.key !== "Enter" || event.shiftKey || event.metaKey || event.ctrlKey) return;
       if (document.activeElement !== textareaRef.current) return;
       event.preventDefault();
-      if (!disabled && !running && canSend) {
+      if (!disabled && !voiceMode && !running && canSend) {
         onSend();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canSend, disabled, onSend, running]);
+  }, [canSend, disabled, onSend, running, voiceMode]);
 
   const showOptionsMenu = Boolean(
     onAddAttachments && lookupSearchMode && lookupOutputFormat,
@@ -250,7 +251,14 @@ export const LookupComposer = forwardRef<
             />
           )}
 
-          <div className="composer-input-shell">
+          <div
+            className={[
+              "composer-input-shell",
+              disabled || voiceMode ? "composer-input-shell--inactive" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             <div className="composer-input-row">
               {showOptionsMenu && lookupSearchMode && lookupOutputFormat && (
                 <LookupComposerOptionsMenu
@@ -267,12 +275,14 @@ export const LookupComposer = forwardRef<
                 ref={textareaRef}
                 value={value}
                 placeholder={
-                  placeholder ??
-                  (lookupSearchMode?.mode === "docs"
-                    ? "Ask about attached files or paste a URL…"
-                    : "Ask anything — Gemini can search the web and read links")
+                  disabled || voiceMode
+                    ? ""
+                    : placeholder ??
+                      (lookupSearchMode?.mode === "docs"
+                        ? "Ask about attached files or paste a URL…"
+                        : "Ask anything — Gemini can search the web and read links")
                 }
-                disabled={disabled}
+                disabled={disabled || voiceMode}
                 onChange={(event) => onChange(event.target.value)}
                 onPaste={handlePaste}
                 onKeyDown={(event) => {
@@ -311,7 +321,7 @@ export const LookupComposer = forwardRef<
 
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    if (!disabled && !running && canSend) {
+                    if (!disabled && !voiceMode && !running && canSend) {
                       onSend();
                     }
                   }
@@ -329,7 +339,14 @@ export const LookupComposer = forwardRef<
                 )}
                 <button
                   type="button"
-                  className={`composer-icon-button composer-send ${running ? "composer-send-stop" : ""}`}
+                  className={[
+                    "composer-icon-button",
+                    "composer-send",
+                    running ? "composer-send-stop" : "",
+                    disabled ? "composer-send-busy" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => {
                     if (running) {
                       onCancel?.();
@@ -338,10 +355,21 @@ export const LookupComposer = forwardRef<
                     onSend();
                   }}
                   disabled={!running && (disabled || !canSend)}
-                  aria-label={running ? "Stop message" : "Send message"}
-                  title={running ? "Stop (Ctrl+C)" : "Send message"}
+                  aria-label={
+                    disabled ? "Working" : running ? "Stop message" : "Send message"
+                  }
+                  title={disabled ? "Working" : running ? "Stop (Ctrl+C)" : "Send message"}
                 >
-                  {running ? <ComposerStopIcon /> : <ComposerSendIcon />}
+                  {disabled ? (
+                    <DotScrollLoader
+                      className="composer-send-loader"
+                      aria-label="Working"
+                    />
+                  ) : running ? (
+                    <ComposerStopIcon />
+                  ) : (
+                    <ComposerSendIcon />
+                  )}
                 </button>
               </div>
             </div>

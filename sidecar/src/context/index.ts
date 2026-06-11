@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 import { join } from "node:path";
 import type { ToolSelection } from "../tool-routing.ts";
-import { readCachedFileContent } from "./cache.ts";
+import { loadVaultAgentKnowledge } from "../vault-agent-knowledge.ts";
 import { calendarGuidance } from "./calendar.ts";
 import { integrationReadinessHints } from "./integrations.ts";
 import { linearGuidance } from "./linear.ts";
@@ -11,13 +11,7 @@ import { obsidianAreaGuidance, obsidianCoreGuidance } from "./obsidian.ts";
 import { whoopGuidance } from "./whoop.ts";
 
 function loadVaultUserRules(notesPath: string): string | null {
-  const agentsPath = join(notesPath, "AGENTS.md");
-  const content = readCachedFileContent(agentsPath)?.trim();
-  if (!content) {
-    return null;
-  }
-
-  return truncateContextSection(`[Vault rules from AGENTS.md]\n${content}`);
+  return loadVaultAgentKnowledge(notesPath);
 }
 
 function extractPathHints(text: string): string[] {

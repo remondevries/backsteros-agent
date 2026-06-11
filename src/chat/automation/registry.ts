@@ -35,6 +35,23 @@ import {
   isGoodNightMessage,
   serializeGoodNightReflectionAnswers,
 } from "../goodNight";
+import {
+  LETTER_ACTION_ID,
+  LETTER_CONFIRM_ACTION_ID,
+  LETTER_LABEL,
+  LETTER_MESSAGE,
+  isLetterComposerMode,
+  isLetterConfirmMessage,
+  isLetterFlowMessage,
+  isLetterMessage,
+} from "../letter";
+import {
+  DELETE_FILE_ACTION_ID,
+  DELETE_FILE_LABEL,
+  isDeleteFileComposerMode,
+  isDeleteFileFlowMessage,
+  isDeleteFileMessage,
+} from "../deleteFile";
 import type { AutomationDefinition, AutomationFlowId } from "./types";
 
 export const AUTOMATION_FLOW_CANCELLATION_DEFAULT =
@@ -152,11 +169,60 @@ export const GOOD_NIGHT_AUTOMATION: AutomationDefinition = {
   isFlowMessage: isGoodNightFlowMessage,
 };
 
+export const LETTER_AUTOMATION: AutomationDefinition = {
+  id: "letter",
+  flowVariant: "letter",
+  label: LETTER_LABEL,
+  trigger: {
+    shortcut: /^\/letter\s*$/i,
+    initialMessage: LETTER_MESSAGE,
+    initialQuickActionId: LETTER_ACTION_ID,
+  },
+  steps: [
+    {
+      kind: "initialRun",
+      quickActionId: LETTER_ACTION_ID,
+      sourceBrand: "backster",
+    },
+    {
+      kind: "confirmationRun",
+      answerQuickActionId: LETTER_CONFIRM_ACTION_ID,
+    },
+  ],
+  cancellationMessage: "Okay, I'll stop the letter filing flow for now.",
+  isComposerMode: isLetterComposerMode,
+  isInitialRun: isLetterMessage,
+  isFlowMessage: isLetterFlowMessage,
+};
+
+export const DELETE_FILE_AUTOMATION: AutomationDefinition = {
+  id: "delete-file",
+  flowVariant: "delete-file",
+  label: DELETE_FILE_LABEL,
+  trigger: {
+    shortcut: /^\/(?:d|delete)(?:\s|$)/i,
+    initialMessage: "",
+    initialQuickActionId: DELETE_FILE_ACTION_ID,
+  },
+  steps: [
+    {
+      kind: "confirmationRun",
+      answerQuickActionId: DELETE_FILE_ACTION_ID,
+    },
+  ],
+  cancellationMessage: "Okay, I cancelled the delete flow.",
+  isComposerMode: isDeleteFileComposerMode,
+  isInitialRun: isDeleteFileMessage,
+  isFlowMessage: isDeleteFileFlowMessage,
+};
+
 export const AUTOMATION_DEFINITIONS: Partial<Record<AutomationFlowId, AutomationDefinition>> = {
   "good-morning": GOOD_MORNING_AUTOMATION,
   "good-night": GOOD_NIGHT_AUTOMATION,
   "daily-capture": DAILY_CAPTURE_AUTOMATION,
   "grocery-list": GROCERY_LIST_AUTOMATION,
+  letter: LETTER_AUTOMATION,
+  "delete-file": DELETE_FILE_AUTOMATION,
 };
 
 export function getAutomationDefinition(flowId: AutomationFlowId): AutomationDefinition | undefined {

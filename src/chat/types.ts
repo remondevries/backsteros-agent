@@ -255,7 +255,7 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   quickActionId?: string;
-  flowVariant?: "good-morning" | "good-night" | "letter" | "daily-capture" | "grocery-list";
+  flowVariant?: "good-morning" | "good-night" | "letter" | "daily-capture" | "grocery-list" | "delete-file";
   /** Links a flow follow-up assistant message to the run that triggered it. */
   flowRunId?: string;
   presentation?: "backster";

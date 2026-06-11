@@ -35,6 +35,7 @@ import {
   resolveAutomationFlowForOutgoingMessage,
   shouldBlockRegisteredAutomationComposerSend,
 } from "./automation/orchestration";
+import { createFlowAssistantMessage } from "./automation/followUp";
 import { useAutomationOrchestration } from "./automation/useAutomationOrchestration";
 import { BacksterAssistantBlock } from "./BacksterAssistantBlock";
 import { RunBlock } from "./RunBlock";
@@ -89,6 +90,7 @@ import {
 } from "./goodNight";
 import {
   isLetterComposerMode,
+  isLetterConfirmComposerMode,
   isLetterConfirmMessage,
   isLetterFlowMessage,
   isLetterMessage,
@@ -99,6 +101,21 @@ import {
   parseLetterShortcut,
   shouldSendComposerAttachments,
 } from "./letter";
+import {
+  DELETE_FILE_ACTION_ID,
+  DELETE_FILE_CONFIRM_USER_MESSAGE,
+  DELETE_FILE_DECLINE_USER_MESSAGE,
+  detectDeleteFileIntent,
+  findActiveDeleteConfirmRunId,
+  formatDeleteFileAssistantReply,
+  isDeleteFileComposerMode,
+  isDeleteFileFlowMessage,
+  isDeleteFileMessage,
+  parseDeleteShortcut,
+  shouldActivateDeleteFileFromComposerInput,
+} from "./deleteFile";
+import { LetterUploadModal } from "./LetterUploadModal";
+import { isPdfAttachmentFile, isPdfPendingAttachment } from "./letterFiling";
 import { isSlashCommandPaletteOpen, type SlashCommandDefinition } from "./slashCommands";
 import { mergeStructuredPayload } from "./runEntities";
 import {
@@ -124,6 +141,10 @@ import {
   getWorkspaceDiff,
   cancelRun,
   clearSessionChat,
+  clearLetterPending,
+  clearDeleteFilePending,
+  fetchLetterPending,
+  respondDeleteFile,
   respondApproval,
   revertWorkspace,
   sendMessage,
@@ -139,7 +160,7 @@ function isShortcutBlockedTarget(target: EventTarget | null): boolean {
     target instanceof HTMLElement &&
     Boolean(
       target.closest(
-        ".session-tab-rename-input, .attachment-modal-backdrop, .command-panel-root",
+        ".session-tab-rename-input, .attachment-modal-backdrop, .letter-modal-backdrop, .command-panel-root",
       ),
     )
   );
@@ -346,7 +367,8 @@ export const ChatView = forwardRef<
   const [groceryWeekNumber, setGroceryWeekNumber] = useState(() => formatCurrentGroceryWeekNumber());
   const groceryWeekTouchedRef = useRef(false);
   const groceryWeekTagRef = useRef<GroceryWeekTagHandle>(null);
-  const [letterAwaitingConfirm, setLetterAwaitingConfirm] = useState(false);
+  const [letterUploadModalOpen, setLetterUploadModalOpen] = useState(false);
+  const letterPdfInputRef = useRef<HTMLInputElement>(null);
   const {
     enqueueReveal,
     markPresentationActive,
@@ -366,6 +388,12 @@ export const ChatView = forwardRef<
     },
   });
   const letterConfirmActivatedRef = useRef(new Set<string>());
+  const letterConfirmFinishedRef = useRef(new Set<string>());
+  const [deleteConfirmResolved, setDeleteConfirmResolved] = useState<
+    Record<string, { confirmed: boolean }>
+  >({});
+  const deleteConfirmResolvedRef = useRef(deleteConfirmResolved);
+  deleteConfirmResolvedRef.current = deleteConfirmResolved;
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   busyRef.current = busy;
@@ -432,7 +460,9 @@ export const ChatView = forwardRef<
   }, [composerQuickActionId]);
 
   pendingAttachmentsRef.current = pendingAttachments;
-  const handleSendRef = useRef<(messageText?: string, quickActionId?: string) => Promise<void>>(
+  const handleSendRef = useRef<
+    (messageText?: string, quickActionId?: string, attachmentOverride?: PendingAttachment[]) => Promise<void>
+  >(
     async () => {},
   );
   const fallbackTts = useTts();
@@ -540,7 +570,7 @@ export const ChatView = forwardRef<
     clearPendingReveals();
     setComposerQuickActionId(null);
     automation.clearRegisteredAutomationState();
-    setLetterAwaitingConfirm(false);
+    setLetterUploadModalOpen(false);
   }, [automation, clearPendingReveals]);
 
   const cancelAutomationFlow = useCallback(() => {
@@ -548,6 +578,12 @@ export const ChatView = forwardRef<
     if (!flow) return false;
 
     clearAutomationFlowState();
+    if (flow === "letter") {
+      void clearLetterPending(sessionId).catch(() => undefined);
+    }
+    if (flow === "delete-file") {
+      void clearDeleteFilePending(sessionId).catch(() => undefined);
+    }
     setInput("");
     stickToBottomRef.current = true;
     setMessages((current) => [
@@ -563,10 +599,108 @@ export const ChatView = forwardRef<
     composerFocusSuspendedRef.current = false;
     focusComposer();
     return true;
-  }, [clearAutomationFlowState, focusComposer]);
+  }, [clearAutomationFlowState, focusComposer, sessionId]);
 
   const cancelAutomationFlowRef = useRef(cancelAutomationFlow);
   cancelAutomationFlowRef.current = cancelAutomationFlow;
+
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
+
+  const resolveActiveDeleteConfirmRunId = useCallback(
+    () =>
+      findActiveDeleteConfirmRunId(
+        messagesRef.current,
+        runsRef.current,
+        deleteConfirmResolvedRef.current,
+      ),
+    [],
+  );
+
+  const handleDeleteFileConfirm = useCallback(
+    async (runId: string) => {
+      if (busyRef.current) return;
+      setBusy(true);
+      try {
+        const result = await respondDeleteFile(sessionId, "confirm");
+        setDeleteConfirmResolved((current) => ({
+          ...current,
+          [runId]: { confirmed: true },
+        }));
+        setComposerQuickActionId(null);
+        stickToBottomRef.current = true;
+        setMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            text: DELETE_FILE_CONFIRM_USER_MESSAGE,
+            quickActionId: DELETE_FILE_ACTION_ID,
+            flowVariant: "delete-file",
+            createdAt: Date.now(),
+          },
+          createFlowAssistantMessage({
+            text: formatDeleteFileAssistantReply(result.response),
+            flowVariant: "delete-file",
+            flowRunId: runId,
+            presentation: "backster",
+          }),
+        ]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Delete failed";
+        setError(message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [sessionId],
+  );
+
+  const handleDeleteFileReturn = useCallback(
+    async (runId: string) => {
+      if (busyRef.current) return;
+      setBusy(true);
+      try {
+        const result = await respondDeleteFile(sessionId, "return");
+        setDeleteConfirmResolved((current) => ({
+          ...current,
+          [runId]: { confirmed: false },
+        }));
+        setComposerQuickActionId(null);
+        stickToBottomRef.current = true;
+        setMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            text: DELETE_FILE_DECLINE_USER_MESSAGE,
+            quickActionId: DELETE_FILE_ACTION_ID,
+            flowVariant: "delete-file",
+            createdAt: Date.now(),
+          },
+          createFlowAssistantMessage({
+            text: formatDeleteFileAssistantReply(result.response),
+            flowVariant: "delete-file",
+            flowRunId: runId,
+            presentation: "backster",
+          }),
+        ]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not cancel delete";
+        setError(message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [sessionId],
+  );
+
+  const handleDeleteFileConfirmRef = useRef(handleDeleteFileConfirm);
+  handleDeleteFileConfirmRef.current = handleDeleteFileConfirm;
+  const handleDeleteFileReturnRef = useRef(handleDeleteFileReturn);
+  handleDeleteFileReturnRef.current = handleDeleteFileReturn;
+  const resolveActiveDeleteConfirmRunIdRef = useRef(resolveActiveDeleteConfirmRunId);
+  resolveActiveDeleteConfirmRunIdRef.current = resolveActiveDeleteConfirmRunId;
 
   useEffect(() => {
     if (!voiceModeEnabled || !isActive) return;
@@ -722,6 +856,20 @@ export const ChatView = forwardRef<
           return;
         }
         void handleInterrupt();
+      }
+
+      if (key === "d") {
+        const activeDeleteConfirmRunId = resolveActiveDeleteConfirmRunIdRef.current();
+        if (!activeDeleteConfirmRunId) return;
+        event.preventDefault();
+        void handleDeleteFileConfirmRef.current(activeDeleteConfirmRunId);
+      }
+
+      if (key === "n") {
+        const activeDeleteConfirmRunId = resolveActiveDeleteConfirmRunIdRef.current();
+        if (!activeDeleteConfirmRunId) return;
+        event.preventDefault();
+        void handleDeleteFileReturnRef.current(activeDeleteConfirmRunId);
       }
     }
 
@@ -881,13 +1029,40 @@ export const ChatView = forwardRef<
       if (run?.status !== "finished") continue;
 
       letterConfirmActivatedRef.current.add(message.runId);
-      setComposerQuickActionId(LETTER_ACTION_ID);
-      setLetterAwaitingConfirm(true);
+      setComposerQuickActionId(LETTER_CONFIRM_ACTION_ID);
       scheduleComposerFocus(() => {
         composerRef.current?.focus();
       });
     }
   }, [messages, runs]);
+
+  useEffect(() => {
+    for (const message of messages) {
+      if (!isLetterConfirmMessage(message.quickActionId) || !message.runId) continue;
+      if (letterConfirmFinishedRef.current.has(message.runId)) continue;
+
+      const run = runs[message.runId];
+      if (run?.status !== "finished" && run?.status !== "error") continue;
+
+      letterConfirmFinishedRef.current.add(message.runId);
+      void fetchLetterPending(sessionId)
+        .then(({ pending }) => {
+          if (pending) {
+            setComposerQuickActionId(LETTER_CONFIRM_ACTION_ID);
+            scheduleComposerFocus(() => {
+              composerRef.current?.focus();
+            });
+            return;
+          }
+
+          setComposerQuickActionId(null);
+          setLetterUploadModalOpen(false);
+        })
+        .catch(() => {
+          setComposerQuickActionId(LETTER_CONFIRM_ACTION_ID);
+        });
+    }
+  }, [messages, runs, sessionId]);
 
   async function handleClearChat() {
     void stopSpeaking();
@@ -910,11 +1085,13 @@ export const ChatView = forwardRef<
       resetTtsRunTracking();
       setComposerQuickActionId(null);
       automation.clearRegisteredAutomationState();
-      setLetterAwaitingConfirm(false);
+      setLetterUploadModalOpen(false);
       clearPendingReveals();
       resetPacing();
       automation.clearEnqueuedFollowUps();
       letterConfirmActivatedRef.current.clear();
+      letterConfirmFinishedRef.current.clear();
+      void clearLetterPending(sessionId).catch(() => undefined);
       liveRunIdRef.current = null;
       titleUpdatedRef.current = false;
       stickToBottomRef.current = true;
@@ -939,8 +1116,13 @@ export const ChatView = forwardRef<
     [automation, markPresentationComplete],
   );
 
-  async function handleSend(messageText?: string, quickActionId?: string) {
+  async function handleSend(
+    messageText?: string,
+    quickActionId?: string,
+    attachmentOverride?: PendingAttachment[],
+  ) {
     const rawText = (messageText ?? input).trim();
+    const composerAttachments = attachmentOverride ?? pendingAttachmentsRef.current;
 
     if (parseChatCommand(rawText) === "clear") {
       if (!messageText) {
@@ -976,13 +1158,18 @@ export const ChatView = forwardRef<
         setInput("");
         setComposerQuickActionId(null);
       }
-      setLetterAwaitingConfirm(false);
+      if (!pendingAttachmentsRef.current.some(isPdfPendingAttachment)) {
+        setLetterUploadModalOpen(true);
+        return;
+      }
+      setLetterUploadModalOpen(false);
       await handleSendRef.current(LETTER_MESSAGE, LETTER_ACTION_ID);
       return;
     }
 
     const dcShortcut = parseDailyCaptureShortcut(rawText);
     const grShortcut = parseGroceryShortcut(rawText);
+    const deleteShortcut = parseDeleteShortcut(rawText);
 
     if (dcShortcut?.kind === "activate") {
       if (!messageText) {
@@ -1000,12 +1187,29 @@ export const ChatView = forwardRef<
       return;
     }
 
+    if (deleteShortcut?.kind === "activate") {
+      if (!messageText) {
+        setInput("");
+      }
+      activateDeleteFileMode();
+      return;
+    }
+
+    const autoDeleteIntent =
+      !composerQuickActionId &&
+      !deleteShortcut &&
+      detectDeleteFileIntent(rawText);
+
     const text =
       dcShortcut?.kind === "send"
         ? dcShortcut.body
         : grShortcut?.kind === "send"
           ? grShortcut.body
-          : rawText;
+          : deleteShortcut?.kind === "send"
+            ? deleteShortcut.body
+            : rawText;
+    const inLetterUploadMode = composerQuickActionId === LETTER_ACTION_ID;
+    const inLetterConfirmMode = isLetterConfirmComposerMode(composerQuickActionId);
     const inLetterMode = isLetterComposerMode(composerQuickActionId);
     const isVoiceSend = messageText !== undefined;
 
@@ -1018,7 +1222,7 @@ export const ChatView = forwardRef<
       !activeComposerFlow.isInitialRun(quickActionId) &&
       !(activeComposerFlow.trigger.shortcut?.test(rawText.trim()) ?? false)
     ) {
-      if (!text && pendingAttachments.length === 0) return;
+      if (!text && composerAttachments.length === 0) return;
       if (busy && !isVoiceSend) return;
 
       void stopSpeaking();
@@ -1053,18 +1257,23 @@ export const ChatView = forwardRef<
         awaitingState: automation.awaitingState,
         quickActionId,
         inLetterMode,
-        letterAwaitingConfirm,
+        letterAwaitingConfirm: inLetterConfirmMode,
         letterConfirmQuickActionId: LETTER_CONFIRM_ACTION_ID,
         dailyCaptureQuickActionId: DAILY_CAPTURE_ACTION_ID,
         isDailyCaptureShortcutSend: dcShortcut?.kind === "send",
         groceryListQuickActionId: GROCERY_LIST_ACTION_ID,
         isGroceryListShortcutSend: grShortcut?.kind === "send",
+        deleteFileQuickActionId: DELETE_FILE_ACTION_ID,
+        isDeleteFileShortcutSend: deleteShortcut?.kind === "send" || autoDeleteIntent,
         questionnaireSubmitPayload,
       });
 
-    const effectiveQuickActionId = registeredEffectiveQuickActionId;
+    const effectiveQuickActionId =
+      registeredEffectiveQuickActionId ??
+      (autoDeleteIntent ? DELETE_FILE_ACTION_ID : undefined);
     const isDailyCapture = isDailyCaptureMessage(effectiveQuickActionId);
     const isGroceryList = isGroceryListMessage(effectiveQuickActionId);
+    const isDeleteFile = isDeleteFileMessage(effectiveQuickActionId);
     const isGoodMorningFeel = isGoodMorningFeelMessage(effectiveQuickActionId);
     const isGoodNightReflection = isGoodNightReflectionMessage(effectiveQuickActionId);
 
@@ -1080,9 +1289,12 @@ export const ChatView = forwardRef<
       return;
     }
 
+    if (autoDeleteIntent || isDeleteFileComposerMode(composerQuickActionId) || deleteShortcut?.kind === "send") {
+      setComposerQuickActionId(DELETE_FILE_ACTION_ID);
+    }
+
     if (
-      inLetterMode &&
-      !letterAwaitingConfirm &&
+      inLetterUploadMode &&
       !isLetterMessage(quickActionId) &&
       !parseLetterShortcut(rawText)
     ) {
@@ -1130,7 +1342,7 @@ export const ChatView = forwardRef<
       automation.clearQuestionnaireSubmitPayload();
     }
 
-    if (!text && pendingAttachments.length === 0 && !questionnaireSubmitPayload) return;
+    if (!text && composerAttachments.length === 0 && !questionnaireSubmitPayload) return;
     if (busy && !isVoiceSend) return;
 
     if (isVoiceSend && busy) {
@@ -1140,22 +1352,24 @@ export const ChatView = forwardRef<
     void stopSpeaking();
 
     const attachmentsToSend = shouldSendComposerAttachments(messageText, quickActionId)
-      ? [...pendingAttachments]
+      ? [...composerAttachments]
       : messageText
         ? []
-        : [...pendingAttachments];
+        : [...composerAttachments];
     setBusy(true);
     setError(null);
     setCommittedTools(resolveToolSelection(agentText, toolPins));
+    if (attachmentsToSend.length > 0) {
+      pendingAttachmentsRef.current = [];
+      setPendingAttachments([]);
+    }
     if (!messageText) {
       setInput("");
-      setPendingAttachments([]);
       if (
         isDailyCapture ||
         isGroceryList ||
         isGoodMorningFeel ||
-        isGoodNightReflection ||
-        isLetterConfirmMessage(effectiveQuickActionId)
+        isGoodNightReflection
       ) {
         setComposerQuickActionId(null);
         if (isDailyCapture) {
@@ -1170,9 +1384,6 @@ export const ChatView = forwardRef<
         if (isGoodNightReflection) {
           automation.resetAwaitingFollowUp("good-night");
         }
-        if (isLetterConfirmMessage(effectiveQuickActionId)) {
-          setLetterAwaitingConfirm(false);
-        }
       }
     }
     const pinsForSend = { ...toolPins };
@@ -1186,9 +1397,11 @@ export const ChatView = forwardRef<
         ? "good-night"
         : isGoodNightMessage(effectiveQuickActionId)
           ? "good-night"
-          : isLetterFlowMessage(effectiveQuickActionId)
-            ? "letter"
-            : undefined);
+          : isDeleteFileMessage(effectiveQuickActionId)
+            ? "delete-file"
+            : isLetterFlowMessage(effectiveQuickActionId)
+              ? "letter"
+              : undefined);
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -1314,6 +1527,7 @@ export const ChatView = forwardRef<
     } catch (err) {
       if (!streamController?.signal.aborted) {
         setError(err instanceof Error ? err.message : "Failed to send message");
+        pendingAttachmentsRef.current = attachmentsToSend;
         setPendingAttachments(attachmentsToSend);
       }
     } finally {
@@ -1351,6 +1565,12 @@ export const ChatView = forwardRef<
     focusComposer();
   }
 
+  function activateDeleteFileMode() {
+    setComposerQuickActionId(DELETE_FILE_ACTION_ID);
+    setInput("");
+    focusComposer();
+  }
+
   function handleComposerInputChange(next: string) {
     if (/^\/dc\s$/i.test(next)) {
       activateDailyCaptureMode();
@@ -1358,6 +1578,10 @@ export const ChatView = forwardRef<
     }
     if (/^\/(?:gr|grocery)\s$/i.test(next)) {
       activateGroceryListMode();
+      return;
+    }
+    if (shouldActivateDeleteFileFromComposerInput(next)) {
+      activateDeleteFileMode();
       return;
     }
     if (/^\/gm\s$/i.test(next)) {
@@ -1382,7 +1606,8 @@ export const ChatView = forwardRef<
       isGroceryListComposerMode(composerQuickActionId) ||
       isGoodMorningComposerMode(composerQuickActionId) ||
       isGoodNightComposerMode(composerQuickActionId) ||
-      isLetterComposerMode(composerQuickActionId)
+      isLetterComposerMode(composerQuickActionId) ||
+      isDeleteFileComposerMode(composerQuickActionId)
     ) {
       return;
     }
@@ -1396,11 +1621,27 @@ export const ChatView = forwardRef<
       isDailyCaptureComposerMode(composerQuickActionId) ||
       isGoodMorningComposerMode(composerQuickActionId) ||
       isGoodNightComposerMode(composerQuickActionId) ||
-      isLetterComposerMode(composerQuickActionId)
+      isLetterComposerMode(composerQuickActionId) ||
+      isDeleteFileComposerMode(composerQuickActionId)
     ) {
       return;
     }
     activateGroceryListMode();
+  }
+
+  function handleActivateDeleteFileShortcut() {
+    if (
+      busy ||
+      isDeleteFileComposerMode(composerQuickActionId) ||
+      isDailyCaptureComposerMode(composerQuickActionId) ||
+      isGroceryListComposerMode(composerQuickActionId) ||
+      isGoodMorningComposerMode(composerQuickActionId) ||
+      isGoodNightComposerMode(composerQuickActionId) ||
+      isLetterComposerMode(composerQuickActionId)
+    ) {
+      return;
+    }
+    activateDeleteFileMode();
   }
 
   function handleClearDailyCaptureMode() {
@@ -1417,6 +1658,13 @@ export const ChatView = forwardRef<
     resetGroceryWeekNumber();
   }
 
+  function handleClearDeleteFileMode() {
+    clearPendingReveals();
+    setComposerQuickActionId(null);
+    automation.resetAwaitingFollowUp("delete-file");
+    void clearDeleteFilePending(sessionId).catch(() => undefined);
+  }
+
   function handleClearGoodMorningMode() {
     clearPendingReveals();
     setComposerQuickActionId(null);
@@ -1431,7 +1679,8 @@ export const ChatView = forwardRef<
 
   function handleClearLetterMode() {
     setComposerQuickActionId(null);
-    setLetterAwaitingConfirm(false);
+    setLetterUploadModalOpen(false);
+    void clearLetterPending(sessionId).catch(() => undefined);
   }
 
   function handleTriggerGoodMorningShortcut() {
@@ -1452,19 +1701,46 @@ export const ChatView = forwardRef<
 
   function handleTriggerLetterShortcut() {
     if (busy || isLetterComposerMode(composerQuickActionId)) return;
-    const hasPdf = pendingAttachmentsRef.current.some(
-      (attachment) =>
-        attachment.mimeType === "application/pdf" ||
-        attachment.name.toLowerCase().endsWith(".pdf"),
-    );
-    if (!hasPdf) {
-      setError("Attach a PDF letter before running /letter.");
+    if (!pendingAttachmentsRef.current.some(isPdfPendingAttachment)) {
+      setLetterUploadModalOpen(true);
       return;
     }
+    void startLetterFlow();
+  }
+
+  function startLetterFlow(attachments?: PendingAttachment[]) {
     setComposerQuickActionId(null);
-    setLetterAwaitingConfirm(false);
+    setLetterUploadModalOpen(false);
     setInput("");
-    void handleSendRef.current(LETTER_MESSAGE, LETTER_ACTION_ID);
+    void handleSendRef.current(LETTER_MESSAGE, LETTER_ACTION_ID, attachments);
+  }
+
+  function handleLetterUploadCancel() {
+    setLetterUploadModalOpen(false);
+    setInput("");
+    focusComposer();
+  }
+
+  function handleLetterUploadPick() {
+    letterPdfInputRef.current?.click();
+  }
+
+  async function handleLetterPdfSelected(files: FileList | null) {
+    const pdfs = Array.from(files ?? []).filter(isPdfAttachmentFile);
+    if (pdfs.length === 0) {
+      setError("Only PDF letters can be filed with /letter.");
+      return;
+    }
+
+    const prepared = await prepareFilesForUpload([pdfs[0]!]);
+    const file = prepared[0];
+    if (!file) return;
+
+    const attachment = createPendingAttachment(file);
+    setError(null);
+    setLetterUploadModalOpen(false);
+    setInput("");
+    void startLetterFlow([attachment]);
   }
 
   function handleSlashCommandSelect(command: SlashCommandDefinition) {
@@ -1474,6 +1750,9 @@ export const ChatView = forwardRef<
         return;
       case "grocery-list":
         handleActivateGroceryListShortcut();
+        return;
+      case "delete-file":
+        handleActivateDeleteFileShortcut();
         return;
       case "good-morning":
         void handleTriggerGoodMorningShortcut();
@@ -1543,6 +1822,21 @@ export const ChatView = forwardRef<
           focusComposer();
         }}
       />
+      <LetterUploadModal
+        open={letterUploadModalOpen}
+        onCancel={handleLetterUploadCancel}
+        onUpload={handleLetterUploadPick}
+      />
+      <input
+        ref={letterPdfInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="composer-file-input"
+        onChange={(event) => {
+          void handleLetterPdfSelected(event.target.files);
+          event.target.value = "";
+        }}
+      />
 
       <div
         className={`chat-content ${isDragging ? "chat-content-dragging" : ""}`}
@@ -1585,7 +1879,24 @@ export const ChatView = forwardRef<
           return (
             <div key={message.id} className="chat-turn">
               <div className={`chat-message ${message.role === "user" ? "user" : "assistant"}`}>
-                {message.text && (
+                {message.role === "user" && isLetterMessage(message.quickActionId) ? (
+                  <div className="chat-letter-user-message">
+                    <span className="chat-quick-action-tag chat-quick-action-tag-letter">
+                      {LETTER_LABEL}
+                    </span>
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="message-attachments">
+                        {message.attachments.map((attachment) => (
+                          <AttachmentChip
+                            key={`${message.id}-${attachment.name}-${attachment.vaultPath ?? "local"}`}
+                            attachment={attachment}
+                            onOpen={() => setPreviewTarget(toAttachmentPreviewTarget(attachment))}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : message.text && (
                   <>
                     {message.role === "assistant" ? (
                       isFlowAssistantMessage ? (
@@ -1658,9 +1969,14 @@ export const ChatView = forwardRef<
                           </>
                         );
                       })()
+                    ) : isDeleteFileMessage(message.quickActionId) ? (
+                      <>
+                        <div className="bubble">{message.text}</div>
+                        <MessageActions text={message.text} />
+                      </>
                     ) : (
                       <>
-                        {isLetterFlow && (
+                        {isLetterConfirmMessage(message.quickActionId) && (
                           <span className="chat-quick-action-tag chat-quick-action-tag-letter">
                             {LETTER_LABEL}
                           </span>
@@ -1679,8 +1995,6 @@ export const ChatView = forwardRef<
                             ? MORNING_REVIEW_MESSAGE
                             : isGoodNightMessage(message.quickActionId)
                               ? GOOD_NIGHT_MESSAGE
-                              : isLetterMessage(message.quickActionId)
-                                ? LETTER_MESSAGE
                               : message.text}
                         </div>
                         {!isGoodMorningMessage(message.quickActionId) &&
@@ -1692,7 +2006,9 @@ export const ChatView = forwardRef<
                     )}
                   </>
                 )}
-                {message.attachments && message.attachments.length > 0 && (
+                {message.attachments &&
+                  message.attachments.length > 0 &&
+                  !isLetterMessage(message.quickActionId) && (
                   <div className="message-attachments">
                     {message.attachments.map((attachment) => (
                       <AttachmentChip
@@ -1719,8 +2035,12 @@ export const ChatView = forwardRef<
                     isGoodNightFlowMessage(message.quickActionId) ||
                     isDailyCaptureMessage(message.quickActionId) ||
                     isGroceryListMessage(message.quickActionId) ||
+                    isDeleteFileFlowMessage(message.quickActionId) ||
+                    isLetterFlowMessage(message.quickActionId) ||
                     message.flowVariant === "daily-capture" ||
-                    message.flowVariant === "grocery-list"
+                    message.flowVariant === "grocery-list" ||
+                    message.flowVariant === "delete-file" ||
+                    message.flowVariant === "letter"
                       ? "backster"
                       : undefined
                   }
@@ -1749,8 +2069,12 @@ export const ChatView = forwardRef<
                       ? () => handleRunPresentationComplete(message.runId!, message.quickActionId)
                       : undefined
                   }
+                  onDeleteFileConfirm={(runId) => void handleDeleteFileConfirm(runId)}
+                  onDeleteFileReturn={(runId) => void handleDeleteFileReturn(runId)}
+                  deleteConfirmResolved={deleteConfirmResolved}
                 />
               )}
+
             </div>
           );
         })}
@@ -1852,7 +2176,9 @@ export const ChatView = forwardRef<
                     ? { onClear: handleClearGoodNightMode }
                     : isLetterComposerMode(composerQuickActionId)
                       ? { onClear: handleClearLetterMode }
-                      : undefined
+                      : isDeleteFileComposerMode(composerQuickActionId)
+                        ? { onClear: handleClearDeleteFileMode }
+                        : undefined
             }
             composerAutomationFlow={resolveActiveAutomationFlow(composerQuickActionId)}
             dailyCaptureTime={

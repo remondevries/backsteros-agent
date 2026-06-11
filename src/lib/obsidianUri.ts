@@ -6,6 +6,14 @@ function basename(path: string): string {
   return index >= 0 ? normalized.slice(index + 1) : normalized;
 }
 
+export function normalizeObsidianFilePath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (normalized.toLowerCase().endsWith(".md")) {
+    return normalized.slice(0, -3);
+  }
+  return normalized;
+}
+
 export function getVaultName(notesPath: string, override?: string | null): string {
   const trimmed = override?.trim();
   if (trimmed) {
@@ -15,11 +23,8 @@ export function getVaultName(notesPath: string, override?: string | null): strin
 }
 
 export function buildObsidianUri(vaultName: string, filePath: string): string {
-  const params = new URLSearchParams({
-    vault: vaultName,
-    file: filePath.replace(/\\/g, "/"),
-  });
-  return `obsidian://open?${params.toString()}`;
+  const file = normalizeObsidianFilePath(filePath);
+  return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(file)}`;
 }
 
 export function isObsidianUrl(href: string): boolean {

@@ -51,7 +51,3 @@ export async function transcribeAudio(pcm: Float32Array): Promise<string> {
 }
 
 export { SAMPLE_RATE as STT_SAMPLE_RATE };
-
-void warmupStt().catch(() => {
-  // Warmup is best-effort; first transcribe will retry initialization.
-});

@@ -10,6 +10,7 @@ import {
 } from "./inlineContentTokens";
 import { EmphasisLabel, WhoopSleepDurationLabel } from "./EmphasisLabel";
 import { LinearIssueLinkLabel } from "./LinearIssueLinkLabel";
+import { VaultNoteLinkLabel } from "./VaultNoteLinkLabel";
 import { LinearIssuesCountLabel } from "./LinearIssuesCountLabel";
 import { WhoopSleepScoreLabel } from "./WhoopSleepScoreLabel";
 import { WhoopRecoveryScoreLabel } from "./WhoopRecoveryScoreLabel";
@@ -78,6 +79,16 @@ function renderInlineParts(
       );
     }
 
+    if (part.type === "vault-note-link" && part.path) {
+      return (
+        <VaultNoteLinkLabel
+          key={`vault-note-link-${index}-${part.path}`}
+          label={part.label}
+          path={part.path}
+        />
+      );
+    }
+
     if (part.type === "emphasis") {
       return <EmphasisLabel key={`emphasis-${index}-${part.text}`} text={part.text} />;
     }
@@ -126,10 +137,10 @@ function renderInlineParts(
   });
 }
 
-const LINEAR_ISSUE_LINK_ONLY_RE = /^\{\{linear-issue-link:[^}]+\}\}$/;
+const INLINE_LINK_ONLY_RE = /^\{\{(?:linear-issue-link|vault-note-link):[^}]+\}\}$/;
 
-function isLinearIssueLinkOnlyLine(line: string): boolean {
-  return LINEAR_ISSUE_LINK_ONLY_RE.test(line.trim());
+function isInlineLinkOnlyLine(line: string): boolean {
+  return INLINE_LINK_ONLY_RE.test(line.trim());
 }
 
 function InlineParagraph({
@@ -155,7 +166,7 @@ function InlineParagraph({
             key={`line-${lineIndex}`}
             className={[
               "assistant-inline-paragraph",
-              isLinearIssueLinkOnlyLine(line) ? "assistant-inline-paragraph--issue-link" : "",
+              isInlineLinkOnlyLine(line) ? "assistant-inline-paragraph--issue-link" : "",
             ]
               .filter(Boolean)
               .join(" ")}

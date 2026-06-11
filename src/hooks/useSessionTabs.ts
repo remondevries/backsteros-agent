@@ -3,11 +3,13 @@ import type { ChatMessage, RunViewModel } from "../chat/types";
 import {
   createSession,
   deleteSession,
+  getSessionState,
   listSessions,
   saveSessionState,
   setActiveSession,
   updateSessionTitle,
   type SessionRecordResponse,
+  type SessionSummaryResponse,
 } from "../lib/api";
 
 export type SessionTab = {
@@ -15,16 +17,21 @@ export type SessionTab = {
   title: string;
   initialMessages: ChatMessage[];
   initialRuns: Record<string, RunViewModel>;
+  stateLoaded: boolean;
 };
 
 const DEFAULT_TITLE = "New Chat";
 
-function toSessionTab(session: SessionRecordResponse): SessionTab {
+function toSessionTab(
+  summary: SessionSummaryResponse,
+  state?: SessionRecordResponse | null,
+): SessionTab {
   return {
-    sessionId: session.sessionId,
-    title: session.title || DEFAULT_TITLE,
-    initialMessages: session.messages ?? [],
-    initialRuns: session.runs ?? {},
+    sessionId: summary.sessionId,
+    title: summary.title || DEFAULT_TITLE,
+    initialMessages: state?.messages ?? [],
+    initialRuns: state?.runs ?? {},
+    stateLoaded: Boolean(state),
   };
 }
 
@@ -42,6 +49,7 @@ function normalizeManualTitle(title: string): string {
 export function useSessionTabs(enabled: boolean) {
   const [tabs, setTabs] = useState<SessionTab[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [mountedSessionIds, setMountedSessionIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const saveTimersRef = useRef<Map<string, number>>(new Map());
   const tabsRef = useRef(tabs);
@@ -51,22 +59,65 @@ export function useSessionTabs(enabled: boolean) {
     activeSessionIdRef.current = activeSessionId;
   }, [tabs, activeSessionId]);
 
+  const markSessionMounted = useCallback((sessionId: string) => {
+    setMountedSessionIds((current) =>
+      current.includes(sessionId) ? current : [...current, sessionId],
+    );
+  }, []);
+
+  const hydrateTabState = useCallback(async (sessionId: string) => {
+    const tab = tabsRef.current.find((entry) => entry.sessionId === sessionId);
+    if (!tab || tab.stateLoaded) {
+      return;
+    }
+
+    try {
+      const state = await getSessionState(sessionId);
+      setTabs((current) =>
+        current.map((entry) =>
+          entry.sessionId === sessionId
+            ? {
+                ...entry,
+                initialMessages: state.messages ?? [],
+                initialRuns: state.runs ?? {},
+                stateLoaded: true,
+              }
+            : entry,
+        ),
+      );
+    } catch {
+      // Ignore transient load errors; the tab stays empty until retry.
+    }
+  }, []);
+
   const loadTabs = useCallback(async () => {
     const result = await listSessions();
-    let nextTabs = result.sessions.map(toSessionTab);
+    let summaries = result.sessions;
 
-    if (nextTabs.length === 0) {
+    if (summaries.length === 0) {
       const created = await createSession();
-      nextTabs = [toSessionTab(created)];
+      const tab = toSessionTab(created, created);
+      setTabs([tab]);
+      setActiveSessionId(tab.sessionId);
+      setMountedSessionIds([tab.sessionId]);
+      return { tabs: [tab], activeSessionId: tab.sessionId };
     }
 
     const activeId =
-      result.activeSessionId && nextTabs.some((tab) => tab.sessionId === result.activeSessionId)
+      result.activeSessionId && summaries.some((tab) => tab.sessionId === result.activeSessionId)
         ? result.activeSessionId
-        : nextTabs[0]?.sessionId ?? null;
+        : summaries[0]?.sessionId ?? null;
+
+    const activeState = activeId ? await getSessionState(activeId) : null;
+    const nextTabs = summaries.map((summary) =>
+      toSessionTab(summary, summary.sessionId === activeId ? activeState : null),
+    );
 
     setTabs(nextTabs);
     setActiveSessionId(activeId);
+    if (activeId) {
+      setMountedSessionIds([activeId]);
+    }
     return { tabs: nextTabs, activeSessionId: activeId };
   }, []);
 
@@ -85,20 +136,26 @@ export function useSessionTabs(enabled: boolean) {
     })();
   }, [enabled, loadTabs]);
 
-  const selectTab = useCallback((sessionId: string) => {
-    setActiveSessionId(sessionId);
-    void setActiveSession(sessionId).catch(() => {
-      // Ignore transient persistence errors.
-    });
-  }, []);
+  const selectTab = useCallback(
+    (sessionId: string) => {
+      setActiveSessionId(sessionId);
+      markSessionMounted(sessionId);
+      void setActiveSession(sessionId).catch(() => {
+        // Ignore transient persistence errors.
+      });
+      void hydrateTabState(sessionId);
+    },
+    [hydrateTabState, markSessionMounted],
+  );
 
   const newTab = useCallback(async () => {
     const created = await createSession();
-    const tab = toSessionTab(created);
+    const tab = toSessionTab(created, created);
     setTabs((current) => [...current, tab]);
     setActiveSessionId(tab.sessionId);
+    markSessionMounted(tab.sessionId);
     return tab;
-  }, []);
+  }, [markSessionMounted]);
 
   const closeTab = useCallback(async (sessionId: string) => {
     const currentTabs = tabsRef.current;
@@ -119,7 +176,7 @@ export function useSessionTabs(enabled: boolean) {
     let nextTabs = currentTabs.filter((tab) => tab.sessionId !== sessionId);
 
     if (result.createdSession) {
-      nextTabs = [toSessionTab(result.createdSession)];
+      nextTabs = [toSessionTab(result.createdSession, result.createdSession)];
     }
 
     const nextActiveId =
@@ -130,9 +187,17 @@ export function useSessionTabs(enabled: boolean) {
 
     setTabs(nextTabs);
     setActiveSessionId(nextActiveId);
+    setMountedSessionIds((current) => {
+      const remaining = new Set(nextTabs.map((tab) => tab.sessionId));
+      return current.filter((id) => remaining.has(id));
+    });
+    if (nextActiveId) {
+      markSessionMounted(nextActiveId);
+      void hydrateTabState(nextActiveId);
+    }
 
     return { nextActiveId };
-  }, []);
+  }, [hydrateTabState, markSessionMounted]);
 
   const selectRelativeTab = useCallback(
     (direction: -1 | 1) => {
@@ -189,7 +254,7 @@ export function useSessionTabs(enabled: boolean) {
       setTabs((current) =>
         current.map((tab) =>
           tab.sessionId === sessionId
-            ? { ...tab, initialMessages: [], initialRuns: {} }
+            ? { ...tab, initialMessages: [], initialRuns: {}, stateLoaded: true }
             : tab,
         ),
       );
@@ -240,6 +305,7 @@ export function useSessionTabs(enabled: boolean) {
   return {
     tabs,
     activeSessionId,
+    mountedSessionIds,
     loading,
     selectTab,
     newTab,

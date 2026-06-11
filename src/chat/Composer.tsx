@@ -27,6 +27,7 @@ import {
   parseSlashCommandInput,
   type SlashCommandDefinition,
 } from "./slashCommands";
+import { DotScrollLoader } from "./DotScrollLoader";
 import type { PendingAttachment } from "./types";
 
 export type ComposerHandle = {
@@ -324,7 +325,10 @@ export const Composer = forwardRef<
                 ? "composer-input-shell--daily-capture"
                 : composerAutomationFlow === "grocery-list"
                   ? "composer-input-shell--grocery-list"
-                  : "",
+                  : composerAutomationFlow === "delete-file"
+                    ? "composer-input-shell--delete-file"
+                    : "",
+              disabled || voiceMode ? "composer-input-shell--inactive" : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -385,11 +389,17 @@ export const Composer = forwardRef<
                 onPaste={handlePaste}
                 onFocus={() => onComposerFocus?.()}
                 placeholder={
-                  composerAutomationFlow === "grocery-list"
-                    ? "milk, eggs, bread…"
-                    : composerAutomationFlow === "daily-capture"
-                      ? "What happened?"
-                      : "Reply…"
+                  disabled || voiceMode
+                    ? ""
+                    : composerAutomationFlow === "grocery-list"
+                      ? "milk, eggs, bread…"
+                      : composerAutomationFlow === "daily-capture"
+                        ? "What happened?"
+                        : composerAutomationFlow === "letter"
+                          ? "Confirm or correct: from, organization, received date, status…"
+                          : composerAutomationFlow === "delete-file"
+                            ? "Which file should I delete?"
+                            : "Reply…"
                 }
                 disabled={disabled || voiceMode}
                 tabIndex={voiceMode ? -1 : 0}
@@ -522,7 +532,14 @@ export const Composer = forwardRef<
                 )}
                 <button
                   type="button"
-                  className={`composer-icon-button composer-send ${running ? "composer-send-stop" : ""}`}
+                  className={[
+                    "composer-icon-button",
+                    "composer-send",
+                    running ? "composer-send-stop" : "",
+                    disabled ? "composer-send-busy" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => {
                     if (running) {
                       onCancel?.();
@@ -531,10 +548,21 @@ export const Composer = forwardRef<
                     onSend();
                   }}
                   disabled={!running && disabled}
-                  aria-label={running ? "Stop message" : "Send message"}
-                  title={running ? "Stop (Ctrl+C)" : "Send message"}
+                  aria-label={
+                    disabled ? "Working" : running ? "Stop message" : "Send message"
+                  }
+                  title={disabled ? "Working" : running ? "Stop (Ctrl+C)" : "Send message"}
                 >
-                  {running ? <ComposerStopIcon /> : <ComposerSendIcon />}
+                  {disabled ? (
+                    <DotScrollLoader
+                      className="composer-send-loader"
+                      aria-label="Working"
+                    />
+                  ) : running ? (
+                    <ComposerStopIcon />
+                  ) : (
+                    <ComposerSendIcon />
+                  )}
                 </button>
               </div>
             </div>

@@ -28,6 +28,8 @@ src-tauri/binaries/agent-server-*
 
 # Sidecar data
 .sidecar-data
+sidecar/tools/macos-pdf-ocr
+src-tauri/resources/sidecar/tools/macos-pdf-ocr
 
 # Voice models (downloaded via npm run download:tts / download:stt)
 sidecar/tts/

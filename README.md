@@ -31,16 +31,14 @@ Open http://localhost:5173 — the Vite dev server proxies API calls to the side
 
 ## Development (Tauri app)
 
-Terminal 1:
+```bash
+npm run tauri:dev
+```
+
+This runs the sidecar and Vite dev server together (`dev:all`), then opens the desktop window. To run only the sidecar (e.g. for API debugging):
 
 ```bash
 npm run dev:sidecar
-```
-
-Terminal 2:
-
-```bash
-npm run tauri dev
 ```
 
 Global shortcut: **Cmd+Shift+A** toggles the window.
@@ -68,20 +66,20 @@ This compiles the Bun sidecar into `src-tauri/binaries/` and builds the `.app` b
 
 ## Notes workspace
 
-On first launch, pick a folder for markdown notes. The app initializes git (if missing), a slim `AGENTS.md` for your personal vault conventions, and approval hooks in `.cursor/hooks.json`.
+On first launch, pick a folder for markdown notes. The app initializes git (if missing), a vault `AGENTS.md` index, an `Agent/` folder with starter guides, and approval hooks in `.cursor/hooks.json`.
 
 ### Lazy agent context
 
 BacksterOS Agent does not load all workspace rules on every turn. Instead, the sidecar injects guidance only for the services a message needs:
 
-- **Obsidian** — workspace tools, folder-specific rules (Daily, Projects, Inbox, etc.), and your vault `AGENTS.md`
+- **Obsidian** — workspace tools, folder-specific rules (Daily, Projects, Inbox, etc.), vault `AGENTS.md`, and every guide under `Agent/`
 - **Linear** — focused issue lookup/update behavior
 - **Google Calendar** — account and OAuth guidance
 - **Whoop** — recovery/sleep/strain behavior, with daily-note crossover rules when both Whoop and notes are active
 
 General knowledge questions stay lean because no service context is injected unless the message matches that service.
 
-Put long-lived vault preferences in `AGENTS.md`. BacksterOS Agent reads that file only on note-related turns.
+Put long-lived vault preferences in `Agent/*.md` guides and link them from `AGENTS.md`. Backster loads the index and all guides under `Agent/` on note-related turns.
 
 ## User profile
 
@@ -97,7 +95,7 @@ Both files can be edited from **Settings → Profiles** in the app.
 
 On every message, BacksterOS Agent also injects a small `[Now]` block (date and weekday in your timezone). When a turn uses Obsidian, Linear, Calendar, or Whoop, the sidecar adds:
 
-- **Obsidian** — vault path, vault name, workspace tools, folder rules, and vault `AGENTS.md` (truncated if very large)
+- **Obsidian** — vault path, vault name, workspace tools, folder rules, vault `AGENTS.md`, and all `Agent/` guides (truncated if very large)
 - **Integrations** — setup hints when a service is selected but not configured or authenticated
 - **Service guidance** — the focused behavior rules for each active integration
 

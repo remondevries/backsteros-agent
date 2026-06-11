@@ -56,6 +56,12 @@ export function useSessionTabShortcuts(
       }
 
       if (key === "r") {
+        if (
+          event.target instanceof HTMLElement &&
+          event.target.closest(".letter-filing-panel")
+        ) {
+          return;
+        }
         event.preventDefault();
         handlers.onRenameTab();
         return;

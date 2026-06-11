@@ -25,6 +25,8 @@ export function resolveAutomationFlowForOutgoingMessage({
   isDailyCaptureShortcutSend,
   groceryListQuickActionId,
   isGroceryListShortcutSend,
+  deleteFileQuickActionId,
+  isDeleteFileShortcutSend,
   questionnaireSubmitPayload,
 }: {
   composerQuickActionId: string | null;
@@ -37,6 +39,8 @@ export function resolveAutomationFlowForOutgoingMessage({
   isDailyCaptureShortcutSend: boolean;
   groceryListQuickActionId?: string;
   isGroceryListShortcutSend: boolean;
+  deleteFileQuickActionId?: string;
+  isDeleteFileShortcutSend: boolean;
   questionnaireSubmitPayload?: string | null;
 }): {
   effectiveQuickActionId: string | undefined;
@@ -65,9 +69,11 @@ export function resolveAutomationFlowForOutgoingMessage({
       ? dailyCaptureQuickActionId
       : isGroceryListShortcutSend
         ? groceryListQuickActionId
-        : inLetterMode && letterAwaitingConfirm
-          ? letterConfirmQuickActionId
-          : awaitingAnswerQuickActionId ?? composerQuickActionId) ??
+        : isDeleteFileShortcutSend
+          ? deleteFileQuickActionId
+          : inLetterMode && letterAwaitingConfirm
+            ? letterConfirmQuickActionId
+            : awaitingAnswerQuickActionId ?? composerQuickActionId) ??
     undefined;
 
   return {
@@ -91,6 +97,14 @@ export function shouldBlockRegisteredAutomationComposerSend({
 }): boolean {
   const definition = resolveAutomationFlowByComposerMode(composerQuickActionId);
   if (!definition) return false;
+
+  const confirmationStep = definition.steps.find((step) => step.kind === "confirmationRun");
+  if (
+    confirmationStep &&
+    composerQuickActionId === confirmationStep.answerQuickActionId
+  ) {
+    return false;
+  }
 
   if (!getInitialRunStep(definition)) {
     return false;

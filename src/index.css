@@ -1212,6 +1212,18 @@ textarea {
   border: 1px solid color-mix(in srgb, var(--letter-tag-accent) var(--letter-tag-border-opacity), transparent);
 }
 
+.chat-letter-user-message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+
+.chat-letter-user-message .message-attachments {
+  margin-top: 0;
+}
+
 .run-block-morning-review {
   gap: 12px;
 }
@@ -3002,6 +3014,68 @@ textarea {
   border-color: rgba(74, 222, 128, 0.55);
 }
 
+.run-deferred-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  width: 100%;
+  transition:
+    grid-template-rows 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.34s ease;
+}
+
+.run-deferred-content--revealed {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.run-deferred-content-inner {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.delete-file-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+.delete-file-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.delete-file-confirm-hotkey {
+  font-size: 0.72rem;
+  opacity: 0.72;
+}
+
+.delete-file-confirm-btn-return:hover {
+  background: var(--hover-overlay);
+  border-color: var(--border);
+}
+
+.delete-file-confirm-btn-confirm {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.delete-file-confirm-btn-confirm:hover {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
 .tool-result-card {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -3590,10 +3664,17 @@ button.composer-tool-indicator:hover {
   border-radius: 16px;
   background: var(--bg-surface);
   overflow: hidden;
-  transition: border-color 180ms ease;
+  opacity: 1;
+  transition:
+    opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease;
 }
 
-/* Automation composer border pulse is intentional mode feedback — not gated by prefers-reduced-motion. */
+.composer-input-shell--inactive {
+  opacity: 0.74;
+}
+
+/* Automation composer border pulse is intentional mode feedback — forced on even when reduced motion is active. */
 .composer-input-shell--automation {
   border-color: transparent;
   background:
@@ -3620,6 +3701,12 @@ button.composer-tool-indicator:hover {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .composer-input-shell--automation {
+    animation: automation-composer-border-flow 2.8s ease-in-out infinite !important;
+  }
+}
+
 .composer-input-shell--automation.composer-input-shell--daily-capture {
   background:
     linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box,
@@ -3641,6 +3728,18 @@ button.composer-tool-indicator:hover {
       color-mix(in srgb, var(--grocery-list-tag-accent) 52%, transparent),
       color-mix(in srgb, var(--grocery-list-tag-accent) 16%, transparent),
       color-mix(in srgb, var(--grocery-list-tag-accent) 52%, transparent)
+    ) border-box;
+}
+
+.composer-input-shell--automation.composer-input-shell--delete-file {
+  background:
+    linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box,
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--delete-file-composer-border) 16%, transparent),
+      color-mix(in srgb, var(--delete-file-composer-border) 52%, transparent),
+      color-mix(in srgb, var(--delete-file-composer-border) 16%, transparent),
+      color-mix(in srgb, var(--delete-file-composer-border) 52%, transparent)
     ) border-box;
 }
 
@@ -3937,6 +4036,131 @@ button.composer-tool-indicator:hover {
   color: var(--text-secondary);
 }
 
+.letter-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.letter-modal {
+  width: min(480px, 100%);
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-elevated);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  padding: 20px;
+}
+
+.letter-modal-title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.letter-modal-body {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.letter-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.letter-modal-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.letter-modal-button-primary {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.letter-modal-button-secondary {
+  background: transparent;
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.letter-modal-hotkey,
+.letter-filing-hotkey {
+  font-size: 11px;
+  opacity: 0.7;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.letter-filing-panel {
+  margin: 8px 0 0 44px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-muted, rgba(255, 255, 255, 0.03));
+}
+
+.letter-filing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.letter-filing-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.letter-filing-field-full {
+  grid-column: 1 / -1;
+}
+
+.letter-filing-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.letter-filing-control {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.letter-filing-note {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.letter-filing-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .run-ui-preview-overlay {
   position: fixed;
   inset: 0;
@@ -4164,10 +4388,18 @@ button.composer-tool-indicator:hover {
   display: none;
 }
 
-.composer-send {
+.composer-icon-button.composer-send {
   border: none;
+  /* 14px = full circle on the 28px button; px values animate smoothly unlike 50%. */
+  border-radius: 14px;
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
+  transition:
+    border-radius 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.38s ease,
+    color 0.38s ease,
+    opacity 0.38s ease;
 }
 
 .composer-send-icon {
@@ -4180,8 +4412,25 @@ button.composer-tool-indicator:hover {
   cursor: pointer;
 }
 
-.composer-send:hover:not(:disabled),
-.composer-send-stop:hover:not(:disabled) {
+.composer-icon-button.composer-send.composer-send-busy {
+  border-radius: 12px;
+  background: #ffffff;
+  border: none;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.composer-icon-button.composer-send.composer-send-busy.composer-send-stop {
+  cursor: pointer;
+}
+
+.composer-send-loader {
+  color: #3a3a3c;
+  opacity: 0.88;
+}
+
+.composer-icon-button.composer-send:hover:not(:disabled):not(.composer-send-busy),
+.composer-icon-button.composer-send.composer-send-stop:hover:not(:disabled):not(.composer-send-busy) {
   opacity: 0.92;
 }
 

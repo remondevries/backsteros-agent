@@ -3,6 +3,7 @@ import { GOOD_MORNING_FEEL_ACTION_ID, GOOD_MORNING_ACTION_ID } from "../morningR
 import { DAILY_CAPTURE_ACTION_ID } from "../dailyCapture";
 import { GROCERY_LIST_ACTION_ID } from "../groceryList";
 import { GOOD_NIGHT_ACTION_ID, GOOD_NIGHT_REFLECTION_ACTION_ID } from "../goodNight";
+import { LETTER_CONFIRM_ACTION_ID } from "../letter";
 import {
   resolveAutomationFlowForOutgoingMessage,
   resolveAutomationFlowVariant,
@@ -103,6 +104,33 @@ describe("automation orchestration", () => {
     ).toBe(false);
   });
 
+  test("routes letter confirm replies through letter-confirm quick action", () => {
+    const result = resolveAutomationFlowForOutgoingMessage({
+      composerQuickActionId: LETTER_CONFIRM_ACTION_ID,
+      awaitingState: {},
+      quickActionId: undefined,
+      inLetterMode: true,
+      letterAwaitingConfirm: true,
+      letterConfirmQuickActionId: LETTER_CONFIRM_ACTION_ID,
+      isDailyCaptureShortcutSend: false,
+      isGroceryListShortcutSend: false,
+    });
+
+    expect(result.effectiveQuickActionId).toBe(LETTER_CONFIRM_ACTION_ID);
+    expect(result.awaitingFlowId).toBe("letter");
+  });
+
+  test("allows letter confirm messages while composer mode is active", () => {
+    expect(
+      shouldBlockRegisteredAutomationComposerSend({
+        composerQuickActionId: LETTER_CONFIRM_ACTION_ID,
+        awaitingState: {},
+        quickActionId: undefined,
+        rawText: "assigned is Remon de Vries",
+      }),
+    ).toBe(false);
+  });
+
   test("resolves flow variants for initial and follow-up quick actions", () => {
     expect(resolveAutomationFlowVariant(GOOD_MORNING_ACTION_ID)).toBe("good-morning");
     expect(resolveAutomationFlowVariant(GOOD_MORNING_FEEL_ACTION_ID)).toBe("good-morning");
@@ -110,5 +138,6 @@ describe("automation orchestration", () => {
     expect(resolveAutomationFlowVariant(GOOD_NIGHT_REFLECTION_ACTION_ID)).toBe("good-night");
     expect(resolveAutomationFlowVariant(DAILY_CAPTURE_ACTION_ID)).toBe("daily-capture");
     expect(resolveAutomationFlowVariant(GROCERY_LIST_ACTION_ID)).toBe("grocery-list");
+    expect(resolveAutomationFlowVariant(LETTER_CONFIRM_ACTION_ID)).toBe("letter");
   });
 });
