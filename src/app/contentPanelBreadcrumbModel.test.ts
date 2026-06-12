@@ -67,7 +67,7 @@ describe("contentPanelBreadcrumbModel", () => {
     ]);
   });
 
-  test("includes active vault document in breadcrumbs", () => {
+  test("includes active linear document in breadcrumbs", () => {
     const onClear = () => {};
     expect(
       buildContentPanelBreadcrumbSegments({
@@ -78,15 +78,15 @@ describe("contentPanelBreadcrumbModel", () => {
         sidebarSegments: [{ id: "linear-view-projects", label: "Projects" }],
         linearSelection: { kind: "project", id: "proj-1", name: "Backster OS" },
         linearWorkspaceView: "documents",
-        activeVaultDocument: { path: "Organizations/team/proj/note.md", title: "Untitled note" },
-        onClearActiveVaultDocument: onClear,
+        activeLinearDocument: { id: "doc-1", title: "Untitled note" },
+        onClearActiveLinearDocument: onClear,
       }),
     ).toEqual([
       { id: "nav-projects", label: "Linear", kind: "linear-logo" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS", onActivate: onClear },
       { id: "linear-tab-project-documents", label: "Documents", onActivate: onClear },
-      { id: "vault-doc-Organizations/team/proj/note.md", label: "Untitled note" },
+      { id: "linear-doc-doc-1", label: "Untitled note" },
     ]);
   });
 

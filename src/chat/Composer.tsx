@@ -78,6 +78,7 @@ export const Composer = forwardRef<
     savingComposerMode?: boolean;
     inputModeControls?: ComposerInputModeControls;
     voiceMode?: boolean;
+    hideToolIndicators?: boolean;
     toolIndicators?: ToolSelection;
     toolPins?: ToolPinSelection;
     onDismissTool?: (tool: keyof ToolSelection) => void;
@@ -129,6 +130,7 @@ export const Composer = forwardRef<
     savingComposerMode,
     inputModeControls,
     voiceMode = false,
+    hideToolIndicators = false,
     toolIndicators,
     toolPins,
     onDismissTool,
@@ -241,7 +243,8 @@ export const Composer = forwardRef<
     calendar: false,
     whoop: false,
   };
-  const showToolIndicators = Object.values(activeTools).some(Boolean);
+  const showToolIndicators =
+    !hideToolIndicators && Object.values(activeTools).some(Boolean);
   const showFooter = Boolean(
     inputModeControls?.textVoice?.supported || (composerMode && onComposerModeChange),
   );

@@ -1,18 +1,46 @@
 import type { ReactNode } from "react";
+import type { AppView } from "./appViews";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
+import { ContentPanelEmptyState } from "./ContentPanelEmptyState";
+import { shouldShowPrimaryNavEmptyState } from "./sidebarNavConfig";
+import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { LinearIssueView } from "./project-issues/LinearIssueView";
 import { LinearProjectContent } from "./LinearProjectContent";
 import { LinearDocumentView } from "./project-documents/LinearDocumentView";
+import { LinearProjectsTableView } from "./projects/LinearProjectsTableView";
 import { VaultDocumentView } from "./project-documents/VaultDocumentView";
+
+export function shouldHideDefaultMainContent({
+  activeVaultNavItem,
+  activeView,
+  linearSelection,
+  hasFocusedContent,
+}: {
+  activeVaultNavItem: SidebarNavItemId | null;
+  activeView: AppView;
+  linearSelection: unknown;
+  hasFocusedContent: boolean;
+}): boolean {
+  return (
+    activeVaultNavItem === "projects" &&
+    linearSelection === null &&
+    !hasFocusedContent &&
+    (activeView === "chat" || activeView === "lookup")
+  );
+}
 
 export function ContentPanelMainSlot({
   children,
   settingsOpen,
   vaultStructureEnabled,
+  activeVaultNavItem,
+  activeView,
 }: {
   children: ReactNode;
   settingsOpen: boolean;
   vaultStructureEnabled: boolean;
+  activeVaultNavItem: SidebarNavItemId | null;
+  activeView: AppView;
 }) {
   const { linearSelection, activeVaultDocument, activeLinearDocument, activeLinearIssue } =
     useContentPanelNavigation();
@@ -27,17 +55,45 @@ export function ContentPanelMainSlot({
     !showVaultDocument &&
     !showLinearDocument &&
     !showLinearIssue;
+  const hasFocusedContent =
+    showVaultDocument || showLinearDocument || showLinearIssue || showLinearWorkspace;
+  const showVaultEmptyState =
+    !settingsOpen &&
+    vaultStructureEnabled &&
+    activeVaultNavItem !== null &&
+    shouldShowPrimaryNavEmptyState(activeVaultNavItem) &&
+    !hasFocusedContent;
+  const hideDefaultMainContent = shouldHideDefaultMainContent({
+    activeVaultNavItem,
+    activeView,
+    linearSelection,
+    hasFocusedContent,
+  });
+  const showProjectsBrowse =
+    !settingsOpen &&
+    activeVaultNavItem === "projects" &&
+    linearSelection === null &&
+    !hasFocusedContent &&
+    (activeView === "chat" || activeView === "lookup");
   const showDefault =
     !settingsOpen &&
-    !showLinearWorkspace &&
-    !showVaultDocument &&
-    !showLinearDocument &&
-    !showLinearIssue;
+    !hasFocusedContent &&
+    !showVaultEmptyState &&
+    activeVaultNavItem !== "daily" &&
+    !hideDefaultMainContent;
 
   return (
     <div className="content-panel-slot-stack">
+      <div className="content-panel-main-slot" hidden={!showProjectsBrowse}>
+        <LinearProjectsTableView enabled={vaultStructureEnabled} />
+      </div>
       <div className="content-panel-main-slot" hidden={!showDefault}>
         {children}
+      </div>
+      <div className="content-panel-main-slot" hidden={!showVaultEmptyState}>
+        {activeVaultNavItem && showVaultEmptyState ? (
+          <ContentPanelEmptyState activeVaultNavItem={activeVaultNavItem} />
+        ) : null}
       </div>
       <div className="content-panel-main-slot" hidden={!showLinearWorkspace}>
         {linearSelection ? (

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
+import { resolveTodayDailyNoteDocument } from "../lib/resolveTodayDailyNoteDocument";
 import { SIDEBAR_VAULT_NAV_ITEM_IDS, isSidebarPrimaryNavItem } from "./sidebarNavConfig";
 import { LinearWorkspacePanel } from "./LinearWorkspacePanel";
 import { VaultFolderExplorer } from "./VaultFolderExplorer";
@@ -14,22 +15,40 @@ export function ContentPanelSidebar({
 }) {
   const {
     clearActiveVaultDocument,
+    clearActiveLinearDocument,
     clearActiveLinearIssue,
+    setActiveVaultDocument,
     setLinearSelection,
   } = useContentPanelNavigation();
   const showEmptyState = !activeVaultNavItem;
 
   useEffect(() => {
     if (!vaultExplorerEnabled || !activeVaultNavItem) return;
-    clearActiveVaultDocument();
+
     if (isSidebarPrimaryNavItem(activeVaultNavItem)) {
       setLinearSelection(null);
+      clearActiveLinearDocument();
       clearActiveLinearIssue();
     }
+
+    if (activeVaultNavItem === "daily") {
+      let cancelled = false;
+      void resolveTodayDailyNoteDocument().then((document) => {
+        if (cancelled || !document) return;
+        setActiveVaultDocument(document);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    clearActiveVaultDocument();
   }, [
     activeVaultNavItem,
+    clearActiveLinearDocument,
     clearActiveLinearIssue,
     clearActiveVaultDocument,
+    setActiveVaultDocument,
     setLinearSelection,
     vaultExplorerEnabled,
   ]);

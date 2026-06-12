@@ -1,9 +1,18 @@
 import { linearGraphqlRequest } from "./graphql.ts";
 
+export type LinearProjectHealth = "onTrack" | "atRisk" | "offTrack";
+
 export type LinearProjectSummary = {
   id: string;
   name: string;
   slugId?: string;
+  icon?: string | null;
+  priority?: number;
+  priorityLabel?: string;
+  startDate?: string | null;
+  issueCount?: number;
+  progress?: number;
+  health?: LinearProjectHealth | null;
   status?: {
     id: string;
     name: string;
@@ -30,6 +39,13 @@ const PROJECTS_PAGE_QUERY = `
         id
         name
         slugId
+        icon
+        priority
+        priorityLabel
+        startDate
+        issueCount
+        progress
+        health
         status {
           id
           name
@@ -51,6 +67,13 @@ const PROJECT_BY_ID_QUERY = `
       id
       name
       slugId
+      icon
+      priority
+      priorityLabel
+      startDate
+      issueCount
+      progress
+      health
       status {
         id
         name
@@ -94,27 +117,53 @@ function normalizeProjectStatus(
   };
 }
 
-function normalizeProjectNodes(
-  nodes:
-    | Array<{
-        id?: string;
-        name?: string;
-        slugId?: string;
-        status?: { id?: string; name?: string; type?: string; position?: number } | null;
-      }>
-    | undefined,
-): LinearProjectSummary[] {
+function normalizeProjectHealth(value: string | null | undefined): LinearProjectHealth | null {
+  const health = value?.trim();
+  if (health === "onTrack" || health === "atRisk" || health === "offTrack") {
+    return health;
+  }
+  return null;
+}
+
+type GraphqlProjectNode = {
+  id?: string;
+  name?: string;
+  slugId?: string;
+  icon?: string | null;
+  priority?: number | null;
+  priorityLabel?: string | null;
+  startDate?: string | null;
+  issueCount?: number | null;
+  progress?: number | null;
+  health?: string | null;
+  status?: { id?: string; name?: string; type?: string; position?: number } | null;
+};
+
+function normalizeProjectNode(node: GraphqlProjectNode): LinearProjectSummary | null {
+  const id = node.id?.trim();
+  const name = node.name?.trim();
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    slugId: node.slugId?.trim() || undefined,
+    icon: node.icon ?? null,
+    priority: node.priority ?? undefined,
+    priorityLabel: node.priorityLabel?.trim() || undefined,
+    startDate: node.startDate ?? null,
+    issueCount: Number.isFinite(node.issueCount) ? Number(node.issueCount) : undefined,
+    progress: Number.isFinite(node.progress) ? Number(node.progress) : undefined,
+    health: normalizeProjectHealth(node.health),
+    status: normalizeProjectStatus(node.status),
+  };
+}
+
+function normalizeProjectNodes(nodes: GraphqlProjectNode[] | undefined): LinearProjectSummary[] {
   const projects: LinearProjectSummary[] = [];
   for (const node of nodes ?? []) {
-    const id = node.id?.trim();
-    const name = node.name?.trim();
-    if (!id || !name) continue;
-    projects.push({
-      id,
-      name,
-      slugId: node.slugId?.trim() || undefined,
-      status: normalizeProjectStatus(node.status),
-    });
+    const project = normalizeProjectNode(node);
+    if (project) projects.push(project);
   }
   return projects;
 }
@@ -130,12 +179,7 @@ export async function fetchLinearProjectsPage(options: {
 
   const data = await linearGraphqlRequest<{
     projects?: {
-      nodes?: Array<{
-        id?: string;
-        name?: string;
-        slugId?: string;
-        status?: { id?: string; name?: string; type?: string; position?: number } | null;
-      }>;
+      nodes?: GraphqlProjectNode[];
       pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
     };
   }>(PROJECTS_PAGE_QUERY, {
@@ -159,23 +203,12 @@ export async function fetchLinearProjectById(projectId: string): Promise<LinearP
   if (!id) return null;
 
   const data = await linearGraphqlRequest<{
-    project?: {
-      id?: string;
-      name?: string;
-      slugId?: string;
-      status?: { id?: string; name?: string; type?: string; position?: number } | null;
-    } | null;
+    project?: GraphqlProjectNode | null;
   }>(PROJECT_BY_ID_QUERY, { id });
 
   const project = data.project;
-  if (!project?.id || !project.name?.trim()) return null;
-
-  return {
-    id: project.id,
-    name: project.name.trim(),
-    slugId: project.slugId?.trim() || undefined,
-    status: normalizeProjectStatus(project.status),
-  };
+  if (!project) return null;
+  return normalizeProjectNode(project);
 }
 
 /** @deprecated Prefer paginated {@link fetchLinearProjectsPage}. */

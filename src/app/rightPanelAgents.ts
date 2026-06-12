@@ -19,6 +19,10 @@ export function showsBacksterComposerOptions(
   return layout !== "panel" || panelComposerVariant !== "linear";
 }
 
+export function isLinearOnlyComposer(panelComposerVariant?: PanelChatComposerVariant): boolean {
+  return panelComposerVariant === "linear";
+}
+
 export type ResolvedRightPanelAgent = {
   requested: RightPanelAgentId;
   active: RightPanelAgentId;

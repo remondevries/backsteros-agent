@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createLinearIssueComment } from "../../lib/api";
 import { useLinearIssueCommentThreads } from "../../hooks/useLinearIssueCommentThreads";
+import { composerContextItems as buildComposerContextItems } from "../../lib/chatFocusContext";
+import type { AppView } from "../appViews";
+import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { LinearIssueThreadChat } from "./LinearIssueThreadChat";
 import { LinearIssueThreadList } from "./LinearIssueThreadList";
 import { ThreadHistoryIcon } from "./ThreadHistoryIcon";
@@ -31,14 +34,13 @@ function writeStoredThreadId(issueId: string, threadId: string | null) {
 
 export function LinearIssueAgentPanel({
   issueId,
-  identifier,
-  title,
+  onNavigateToView,
 }: {
   issueId: string;
-  identifier: string;
-  title: string;
+  onNavigateToView?: (view: AppView) => void;
 }) {
   const { threads, loading, error, refresh } = useLinearIssueCommentThreads(issueId);
+  const { activeLinearIssue, focusContentSnapshot } = useContentPanelNavigation();
   const [panelMode, setPanelMode] = useState<PanelMode>("chat");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() =>
     readStoredThreadId(issueId),
@@ -106,14 +108,27 @@ export function LinearIssueAgentPanel({
     }
   }, [creatingThread, issueId, refresh]);
 
-  const headerSubtitle = `${identifier} ${title}`;
+  const composerContextItems = useMemo(() => {
+    if (!activeLinearIssue || activeLinearIssue.id !== issueId) return [];
+    return buildComposerContextItems({
+      kind: "linear_issue",
+      issueId: activeLinearIssue.id,
+      identifier: activeLinearIssue.identifier,
+      title: activeLinearIssue.title,
+      description:
+        focusContentSnapshot?.kind === "linear_issue"
+          ? focusContentSnapshot.description
+          : undefined,
+      status: activeLinearIssue.status,
+      stateType: activeLinearIssue.stateType,
+    });
+  }, [activeLinearIssue, focusContentSnapshot, issueId]);
 
   return (
     <div className="right-side-panel-chat">
       <header className="right-side-panel-chat-header">
         <div className="right-side-panel-chat-header-text">
           <h2 className="right-side-panel-chat-title">Linear agent</h2>
-          <p className="right-side-panel-chat-subtitle">{headerSubtitle}</p>
         </div>
         <div className="right-side-panel-chat-header-actions">
           <button
@@ -151,7 +166,12 @@ export function LinearIssueAgentPanel({
             creatingThread={creatingThread}
           />
         ) : activeThreadId ? (
-          <LinearIssueThreadChat issueId={issueId} threadId={activeThreadId} />
+          <LinearIssueThreadChat
+            issueId={issueId}
+            threadId={activeThreadId}
+            composerContextItems={composerContextItems}
+            onNavigateToView={onNavigateToView}
+          />
         ) : (
           <div className="linear-thread-empty-chat">
             <p className="linear-thread-list-status">

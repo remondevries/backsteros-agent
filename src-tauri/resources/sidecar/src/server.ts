@@ -636,11 +636,6 @@ app.post("/linear/issues/:issueId/comment-threads", async (c) => {
 });
 
 app.get("/linear/projects/:projectId/documents", async (c) => {
-  const notesPath = resolveNotesPath();
-  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
-    return c.json({ error: "Notes folder does not exist", documents: [] }, 400);
-  }
-
   if (!getLinearAuthToken()) {
     return c.json(
       {
@@ -657,7 +652,7 @@ app.get("/linear/projects/:projectId/documents", async (c) => {
   }
 
   try {
-    const documents = await fetchLinearProjectDocuments(notesPath, projectId);
+    const documents = await fetchLinearProjectDocuments(projectId);
     return c.json({ documents });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load project documents";
@@ -666,11 +661,6 @@ app.get("/linear/projects/:projectId/documents", async (c) => {
 });
 
 app.post("/linear/projects/:projectId/documents", async (c) => {
-  const notesPath = resolveNotesPath();
-  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
-    return c.json({ error: "Notes folder does not exist", document: null }, 400);
-  }
-
   if (!getLinearAuthToken()) {
     return c.json(
       {
@@ -687,7 +677,7 @@ app.post("/linear/projects/:projectId/documents", async (c) => {
   }
 
   try {
-    const document = await createProjectDocument(notesPath, projectId);
+    const document = await createProjectDocument(projectId);
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create project document";
@@ -696,9 +686,14 @@ app.post("/linear/projects/:projectId/documents", async (c) => {
 });
 
 app.get("/linear/teams/:teamId/documents", async (c) => {
-  const notesPath = resolveNotesPath();
-  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
-    return c.json({ error: "Notes folder does not exist", documents: [] }, 400);
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        documents: [],
+      },
+      400,
+    );
   }
 
   const teamId = c.req.param("teamId")?.trim();
@@ -707,11 +702,100 @@ app.get("/linear/teams/:teamId/documents", async (c) => {
   }
 
   try {
-    const documents = await fetchLinearTeamDocuments(notesPath, teamId);
+    const documents = await fetchLinearTeamDocuments(teamId);
     return c.json({ documents });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load team documents";
     return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
+app.get("/linear/documents/:documentId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        document: null,
+      },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  if (!documentId) {
+    return c.json({ error: "documentId is required", document: null }, 400);
+  }
+
+  try {
+    const document = await fetchLinearDocument(documentId);
+    if (!document) {
+      return c.json({ error: "Document not found", document: null }, 404);
+    }
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load document";
+    return c.json({ error: message, document: null }, 500);
+  }
+});
+
+app.patch("/linear/documents/:documentId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        document: null,
+      },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  if (!documentId) {
+    return c.json({ error: "documentId is required", document: null }, 400);
+  }
+
+  const body = (await c.req.json()) as { title?: string; content?: string; body?: string };
+  const title = body.title?.trim();
+  const content = body.content ?? body.body;
+
+  if (title === undefined && content === undefined) {
+    return c.json({ error: "title or content is required", document: null }, 400);
+  }
+
+  try {
+    const document = await updateLinearDocument(documentId, {
+      ...(title !== undefined ? { title } : {}),
+      ...(content !== undefined ? { content } : {}),
+    });
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update document";
+    return c.json({ error: message, document: null }, 500);
+  }
+});
+
+app.delete("/linear/documents/:documentId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        ok: false,
+      },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  if (!documentId) {
+    return c.json({ error: "documentId is required", ok: false }, 400);
+  }
+
+  try {
+    await deleteLinearDocument(documentId);
+    return c.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete document";
+    return c.json({ error: message, ok: false }, 500);
   }
 });
 

@@ -27,6 +27,15 @@ export type ChatFocusContentSnapshot =
       description: string | null;
     };
 
+export type ComposerContextItem = {
+  id: string;
+  label: string;
+  status?: string;
+  stateType?: string;
+  issueIdentifier?: string;
+  issueTitle?: string;
+};
+
 export type ChatFocusContext =
   | {
       kind: "linear_issue";
@@ -34,6 +43,8 @@ export type ChatFocusContext =
       identifier: string;
       title: string;
       description?: string | null;
+      status?: string;
+      stateType?: string;
     }
   | {
       kind: "linear_document";
@@ -84,6 +95,8 @@ export function buildChatFocusContext(options: {
       identifier: activeLinearIssue.identifier,
       title: activeLinearIssue.title,
       description: snapshot?.description,
+      status: activeLinearIssue.status,
+      stateType: activeLinearIssue.stateType,
     };
   }
 
@@ -143,11 +156,18 @@ export function chatFocusContextLabel(context: ChatFocusContext): string {
   return `${context.name} · ${viewLabel}`;
 }
 
-export function composerContextItems(
-  context: ChatFocusContext,
-): Array<{ id: string; label: string }> {
+export function composerContextItems(context: ChatFocusContext): ComposerContextItem[] {
   if (context.kind === "linear_issue") {
-    return [{ id: context.issueId, label: `${context.identifier} · ${context.title}` }];
+    return [
+      {
+        id: context.issueId,
+        label: `${context.identifier} · ${context.title}`,
+        issueIdentifier: context.identifier,
+        issueTitle: context.title,
+        status: context.status,
+        stateType: context.stateType,
+      },
+    ];
   }
   if (context.kind === "linear_document") {
     return [{ id: context.documentId, label: context.title }];

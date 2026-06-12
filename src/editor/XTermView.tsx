@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 function readThemeColors() {
   const styles = getComputedStyle(document.documentElement);
   return {
-    background: styles.getPropertyValue("--bg-app").trim() || "#111214",
+    background: styles.getPropertyValue("--bg-app").trim() || "#070707",
     foreground: styles.getPropertyValue("--text-primary").trim() || "#f5f5f7",
     cursor: styles.getPropertyValue("--text-primary").trim() || "#f5f5f7",
     selectionBackground: styles.getPropertyValue("--surface-2").trim() || "#2a2b30",

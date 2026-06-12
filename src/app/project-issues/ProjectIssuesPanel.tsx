@@ -35,6 +35,8 @@ export function ProjectIssuesPanel({
         id: issue.id,
         identifier: issue.identifier ?? issue.id,
         title: issue.title,
+        status: issue.status,
+        stateType: issue.stateType,
       });
     },
     [setActiveLinearIssue],

@@ -118,6 +118,34 @@ describe("isChatFocusContextLoading", () => {
 });
 
 describe("composerContextItems", () => {
+  test("includes linear status icon metadata for issues", () => {
+    const context = buildChatFocusContext({
+      activeLinearIssue: {
+        id: "issue-1",
+        identifier: "BOS-70",
+        title: "Spec",
+        status: "In Progress",
+        stateType: "started",
+      },
+      activeLinearDocument: null,
+      activeVaultDocument: null,
+      linearSelection: null,
+      linearWorkspaceView: null,
+      focusContentSnapshot: null,
+    });
+
+    expect(context && composerContextItems(context)).toEqual([
+      {
+        id: "issue-1",
+        label: "BOS-70 · Spec",
+        issueIdentifier: "BOS-70",
+        issueTitle: "Spec",
+        status: "In Progress",
+        stateType: "started",
+      },
+    ]);
+  });
+
   test("uses linear document id for linear documents", () => {
     const context = buildChatFocusContext({
       activeLinearIssue: null,

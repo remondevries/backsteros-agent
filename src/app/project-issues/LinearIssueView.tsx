@@ -23,6 +23,8 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     updateActiveLinearIssue({
       identifier: issue.identifier,
       title: issue.title,
+      status: issue.status,
+      stateType: issue.stateType,
     });
     setFocusContentSnapshot({
       kind: "linear_issue",

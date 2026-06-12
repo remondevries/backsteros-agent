@@ -173,6 +173,7 @@ export function ContentPanel({
         settingsOpen={settingsOpen}
         vaultStructureEnabled={vaultExplorerEnabled}
         activeVaultNavItem={activeVaultNavItem}
+        activeView={activeView}
       >
         {children}
       </ContentPanelMainSlot>

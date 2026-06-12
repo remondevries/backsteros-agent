@@ -75,6 +75,11 @@ export function isSidebarPrimaryNavItem(
   return SIDEBAR_PRIMARY_NAV_ITEM_IDS.has(id as (typeof SIDEBAR_PRIMARY_ITEMS)[number]["id"]);
 }
 
+/** Primary nav sections that show the content empty state until the user picks an item. */
+export function shouldShowPrimaryNavEmptyState(id: SidebarNavItemId): boolean {
+  return isSidebarPrimaryNavItem(id) && id !== "daily";
+}
+
 export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
   {
     id: "workspace",

@@ -4,6 +4,7 @@ import {
   resolveRightPanelAgent,
   showsBacksterComposerOptions,
   supportsLinearPanelAgent,
+  isLinearOnlyComposer,
 } from "./rightPanelAgents";
 import type { IntegrationsStatus } from "../lib/api";
 
@@ -113,5 +114,11 @@ describe("panel chat composer variants", () => {
     expect(showsBacksterComposerOptions("panel", "linear")).toBe(false);
     expect(showsBacksterComposerOptions("panel", "backster")).toBe(true);
     expect(showsBacksterComposerOptions("default", "linear")).toBe(true);
+  });
+
+  test("linear-only composer suppresses service tool blocks", () => {
+    expect(isLinearOnlyComposer("linear")).toBe(true);
+    expect(isLinearOnlyComposer("backster")).toBe(false);
+    expect(isLinearOnlyComposer(undefined)).toBe(false);
   });
 });

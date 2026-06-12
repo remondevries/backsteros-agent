@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { showsBacksterComposerOptions } from "../app/rightPanelAgents";
+import { showsBacksterComposerOptions, isLinearOnlyComposer } from "../app/rightPanelAgents";
 import type { PanelChatComposerVariant } from "../app/rightPanelAgents";
 import { ChatTurn } from "./ChatTurn";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
@@ -15,6 +15,7 @@ import {
 } from "./attachments";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ComposerContextCard } from "./ComposerContextCard";
+import type { ComposerContextItem } from "../lib/chatFocusContext";
 import { VoiceTurnBubble } from "./VoiceTurnBubble";
 import { parseChatCommand } from "./chatCommands";
 import {
@@ -325,7 +326,7 @@ export const ChatView = forwardRef<
     onNavigateToView?: (view: AppView) => void;
     layout?: "default" | "panel";
     focusContext?: import("../lib/chatFocusContext").ChatFocusContext | null;
-    composerContextItems?: Array<{ id: string; label: string }>;
+    composerContextItems?: ComposerContextItem[];
     composerContextLoading?: boolean;
     composerPlaceholder?: string;
     panelComposerVariant?: PanelChatComposerVariant;
@@ -354,6 +355,7 @@ export const ChatView = forwardRef<
     layout,
     panelComposerVariant,
   );
+  const linearOnlyComposer = isLinearOnlyComposer(panelComposerVariant);
 
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const messagesRef = useRef(messages);
@@ -751,6 +753,9 @@ export const ChatView = forwardRef<
   }, [handleCancelRun, interruptVoice]);
 
   const composerTools = useMemo(() => {
+    if (linearOnlyComposer) {
+      return EMPTY_TOOLS;
+    }
     if (input.trim()) {
       return resolveToolSelection(input, toolPins);
     }
@@ -759,7 +764,7 @@ export const ChatView = forwardRef<
     }
     if (committedTools) return committedTools;
     return EMPTY_TOOLS;
-  }, [committedTools, input, toolPins]);
+  }, [committedTools, input, linearOnlyComposer, toolPins]);
 
   const handleDismissTool = useCallback((tool: keyof ToolSelection) => {
     setToolPins((current) => ({
@@ -767,6 +772,12 @@ export const ChatView = forwardRef<
       [tool]: "off",
     }));
   }, []);
+
+  useEffect(() => {
+    if (!linearOnlyComposer) return;
+    setToolPins(EMPTY_TOOL_PINS);
+    setCommittedTools(null);
+  }, [focusContext, linearOnlyComposer]);
 
   useEffect(() => {
     if (!showBacksterComposerOptions) return;
@@ -1375,7 +1386,9 @@ export const ChatView = forwardRef<
         : [...composerAttachments];
     setBusy(true);
     setError(null);
-    setCommittedTools(resolveToolSelection(agentText, toolPins));
+    setCommittedTools(
+      linearOnlyComposer ? null : resolveToolSelection(agentText, toolPins),
+    );
     if (attachmentsToSend.length > 0) {
       pendingAttachmentsRef.current = [];
       setPendingAttachments([]);
@@ -1407,9 +1420,12 @@ export const ChatView = forwardRef<
     const pinsForSend = focusContext
       ? {
           linear: "on" as const,
-          ...(focusContext.kind === "vault_document" ? { obsidian: "on" as const } : {}),
+          obsidian:
+            focusContext.kind === "vault_document" ? ("on" as const) : ("off" as const),
         }
-      : { ...toolPins };
+      : linearOnlyComposer
+        ? { linear: "on" as const, obsidian: "off" as const }
+        : { ...toolPins };
     if (!focusContext) {
       setToolPins(EMPTY_TOOL_PINS);
     }
@@ -2031,6 +2047,7 @@ export const ChatView = forwardRef<
             savingComposerMode={showBacksterComposerOptions ? savingComposerMode : undefined}
             inputModeControls={showBacksterComposerOptions ? inputModeControls : undefined}
             voiceMode={showBacksterComposerOptions ? voiceModeEnabled : false}
+            hideToolIndicators={linearOnlyComposer}
             toolIndicators={composerTools}
             toolPins={toolPins}
             onDismissTool={handleDismissTool}

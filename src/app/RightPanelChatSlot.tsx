@@ -5,7 +5,6 @@ import type { AppView } from "./appViews";
 import type { IntegrationsStatus } from "../lib/api";
 import {
   buildChatFocusContext,
-  chatFocusContextLabel,
   composerContextItems as buildComposerContextItems,
   composerPlaceholderForFocus,
   isChatFocusContextLoading,
@@ -103,8 +102,7 @@ export function RightPanelChatSlot({
     return (
       <LinearIssueAgentPanel
         issueId={focusContext.issueId}
-        identifier={focusContext.identifier}
-        title={focusContext.title}
+        onNavigateToView={onNavigateToView}
       />
     );
   }
@@ -113,9 +111,7 @@ export function RightPanelChatSlot({
     ? resolvedAgent.fallbackReason
     : resolvedAgent.requested !== resolvedAgent.active
       ? `Requested ${resolvedAgent.requested} agent`
-      : focusContext
-        ? chatFocusContextLabel(focusContext)
-        : undefined;
+      : undefined;
 
   if (resolvedAgent.active === "cursor" || resolvedAgent.active === "linear") {
     return (

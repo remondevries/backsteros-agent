@@ -547,10 +547,19 @@ export async function updateProfileContent(kind: ProfileKind, content: string) {
   });
 }
 
+export type LinearProjectHealth = "onTrack" | "atRisk" | "offTrack";
+
 export type LinearProjectSummary = {
   id: string;
   name: string;
   slugId?: string;
+  icon?: string | null;
+  priority?: number;
+  priorityLabel?: string;
+  startDate?: string | null;
+  issueCount?: number;
+  progress?: number;
+  health?: LinearProjectHealth | null;
   status?: {
     id: string;
     name: string;

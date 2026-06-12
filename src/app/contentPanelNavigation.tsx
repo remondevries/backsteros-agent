@@ -26,6 +26,8 @@ export type ActiveLinearIssue = {
   id: string;
   identifier: string;
   title: string;
+  status?: string;
+  stateType?: string;
 };
 
 export type ActiveLinearDocument = {
