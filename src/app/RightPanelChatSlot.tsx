@@ -3,10 +3,20 @@ import { ChatView } from "../chat/ChatView";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import type { AppView } from "./appViews";
 import type { IntegrationsStatus } from "../lib/api";
-import { buildChatFocusContext, chatFocusContextLabel } from "../lib/chatFocusContext";
+import {
+  buildChatFocusContext,
+  chatFocusContextLabel,
+  composerContextItems as buildComposerContextItems,
+  composerPlaceholderForFocus,
+  isChatFocusContextLoading,
+} from "../lib/chatFocusContext";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
 import { LinearIssueAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
-import { resolveRightPanelAgent } from "./rightPanelAgents";
+import {
+  panelChatComposerVariant,
+  resolveRightPanelAgent,
+  supportsLinearPanelAgent,
+} from "./rightPanelAgents";
 
 type RightPanelSession = {
   sessionId: string;
@@ -15,13 +25,11 @@ type RightPanelSession = {
 };
 
 export function RightPanelChatSlot({
-  activeView,
   integrationsStatus,
   session,
   onNavigateToView,
   onSaveState,
 }: {
-  activeView: AppView;
   integrationsStatus: IntegrationsStatus | null;
   session: RightPanelSession;
   onNavigateToView: (view: AppView) => void;
@@ -31,31 +39,65 @@ export function RightPanelChatSlot({
     runs: Record<string, RunViewModel>,
   ) => void;
 }) {
-  const { activeLinearIssue, activeVaultDocument, focusContentSnapshot } =
-    useContentPanelNavigation();
+  const {
+    activeLinearIssue,
+    activeLinearDocument,
+    activeVaultDocument,
+    focusContentSnapshot,
+    linearSelection,
+    linearWorkspaceView,
+  } = useContentPanelNavigation();
 
   const focusContext = useMemo(
     () =>
       buildChatFocusContext({
         activeLinearIssue,
+        activeLinearDocument,
         activeVaultDocument,
+        linearSelection,
+        linearWorkspaceView,
         focusContentSnapshot,
       }),
-    [activeLinearIssue, activeVaultDocument, focusContentSnapshot],
+    [
+      activeLinearDocument,
+      activeLinearIssue,
+      activeVaultDocument,
+      focusContentSnapshot,
+      linearSelection,
+      linearWorkspaceView,
+    ],
+  );
+
+  const composerContextLoading = useMemo(
+    () =>
+      focusContext
+        ? isChatFocusContextLoading(focusContext, focusContentSnapshot)
+        : false,
+    [focusContext, focusContentSnapshot],
+  );
+
+  const contextCardItems = useMemo(
+    () => (focusContext ? buildComposerContextItems(focusContext) : []),
+    [focusContext],
   );
 
   const resolvedAgent = useMemo(
     () =>
       resolveRightPanelAgent({
-        activeView,
         integrationsStatus,
-        hasLinearFocus: focusContext !== null,
+        activeLinearIssue,
+        activeLinearDocument,
       }),
-    [activeView, focusContext, integrationsStatus],
+    [activeLinearDocument, activeLinearIssue, integrationsStatus],
   );
 
+  const linearPanelAgentActive = supportsLinearPanelAgent({
+    activeLinearIssue,
+    activeLinearDocument,
+  });
+
   const isLinearIssueThreadMode =
-    resolvedAgent.active === "linear" && focusContext?.kind === "linear_issue";
+    linearPanelAgentActive && focusContext?.kind === "linear_issue";
 
   if (isLinearIssueThreadMode) {
     return (
@@ -94,6 +136,13 @@ export function RightPanelChatSlot({
             initialMessages={session.initialMessages}
             initialRuns={session.initialRuns}
             focusContext={focusContext}
+            composerContextItems={contextCardItems}
+            composerContextLoading={composerContextLoading}
+            composerPlaceholder={composerPlaceholderForFocus(
+              focusContext,
+              resolvedAgent.active,
+            )}
+            panelComposerVariant={panelChatComposerVariant(resolvedAgent.active)}
             onStateChange={(messages, runs) => onSaveState(session.sessionId, messages, runs)}
             onNavigateToView={onNavigateToView}
           />

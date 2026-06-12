@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { WhoopMetricDots } from "../chat/WhoopMetricDots";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
-import { resolveTodayDailyNoteDocument } from "../lib/resolveTodayDailyNoteDocument";
+import { isDailyVaultNotePath } from "../lib/vaultNotePaths";
 import { whoopSnapshotFromStats } from "../lib/whoopSnapshotFromStats";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
 import {
@@ -30,20 +30,6 @@ export function VaultFolderExplorer({
   useEffect(() => {
     setRelativePath(vaultNavItemLabel(activeNavItem));
   }, [activeNavItem]);
-
-  useEffect(() => {
-    if (!enabled || activeNavItem !== "daily") return;
-
-    let cancelled = false;
-    void resolveTodayDailyNoteDocument().then((document) => {
-      if (cancelled || !document) return;
-      setActiveVaultDocument(document);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeNavItem, enabled, setActiveVaultDocument]);
 
   const openVaultNote = (path: string, title: string) => {
     setActiveVaultDocument({ path, title });
@@ -75,7 +61,7 @@ export function VaultFolderExplorer({
           <ul className="vault-folder-explorer-list">
             {entries.map((entry) => {
               const whoopSnapshot =
-                entry.kind === "file" && entry.date && entry.whoop
+                entry.kind === "file" && isDailyVaultNotePath(entry.path) && entry.date && entry.whoop
                   ? whoopSnapshotFromStats(entry.date, entry.whoop)
                   : null;
               const displayName = formatVaultNoteDisplayName(entry.name);

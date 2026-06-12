@@ -103,55 +103,11 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_
         : error instanceof Error
           ? error.message
           : "failed";
-    // #region agent log
-    if (path.includes("/vault/documents")) {
-      fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "49b1ec",
-        },
-        body: JSON.stringify({
-          sessionId: "49b1ec",
-          location: "api.ts:request",
-          message: "Vault document request failed before response",
-          data: { path, method: init?.method ?? "GET", error: message },
-          hypothesisId: "H1",
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     throw new Error(`Cannot reach agent server at ${connection.baseUrl}: ${message}`);
   }
 
   if (!response.ok) {
-    const errorMessage = await readErrorMessage(response);
-    // #region agent log
-    if (path.includes("/vault/documents")) {
-      fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "49b1ec",
-        },
-        body: JSON.stringify({
-          sessionId: "49b1ec",
-          location: "api.ts:request",
-          message: "Vault document request returned error response",
-          data: {
-            path,
-            method: init?.method ?? "GET",
-            status: response.status,
-            error: errorMessage,
-          },
-          hypothesisId: "H1",
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
-    throw new Error(errorMessage);
+    throw new Error(await readErrorMessage(response));
   }
 
   const text = await response.text();
@@ -759,6 +715,42 @@ export async function createLinearProjectDocument(projectId: string) {
   return request<{ document: ProjectDocumentEntity | null; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/documents`,
     { method: "POST" },
+  );
+}
+
+export type LinearDocumentContent = {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  projectId?: string;
+  projectName?: string;
+};
+
+export async function fetchLinearDocument(documentId: string) {
+  return request<{ document: LinearDocumentContent | null; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}`,
+  );
+}
+
+export async function updateLinearDocument(
+  documentId: string,
+  updates: { title?: string; content?: string; body?: string },
+) {
+  return request<{ document: LinearDocumentContent | null; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    },
+  );
+}
+
+export async function deleteLinearDocument(documentId: string) {
+  return request<{ ok: boolean; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}`,
+    { method: "DELETE" },
   );
 }
 

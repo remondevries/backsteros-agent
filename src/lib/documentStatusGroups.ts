@@ -11,7 +11,9 @@ export type DocumentStatusGroup = (typeof DOCUMENT_STATUS_ORDER)[number];
 
 export interface ProjectDocumentEntity {
   id: string;
-  path: string;
+  linearDocumentId: string;
+  projectId: string;
+  projectName: string;
   title: string;
   status: string;
   statusGroup: DocumentStatusGroup;
@@ -19,6 +21,7 @@ export interface ProjectDocumentEntity {
   owner: string;
   category: string;
   date: string | null;
+  updatedAt: string;
 }
 
 export interface DocumentStatusGroupBucket {
@@ -77,6 +80,12 @@ export function groupDocumentsByStatus(
 }
 
 function documentTimestamp(document: ProjectDocumentEntity): number {
+  const updatedAt = document.updatedAt?.trim() ?? "";
+  if (updatedAt) {
+    const parsed = new Date(updatedAt);
+    if (Number.isFinite(parsed.getTime())) return parsed.getTime();
+  }
+
   const date = document.date?.trim().slice(0, 10) ?? "";
   if (date) {
     const parsed = new Date(date);
@@ -89,5 +98,5 @@ export function compareDocumentsNewestFirst(
   left: ProjectDocumentEntity,
   right: ProjectDocumentEntity,
 ): number {
-  return documentTimestamp(right) - documentTimestamp(left) || right.path.localeCompare(left.path);
+  return documentTimestamp(right) - documentTimestamp(left) || right.title.localeCompare(left.title);
 }

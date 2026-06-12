@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { splitFrontmatter } from "../daily-note.ts";
 import type { LinearApiDocument } from "../linear/project-documents-api.ts";
@@ -200,6 +200,28 @@ export function syncLinearDocumentsToVault(
   return documents.map((document) =>
     upsertLinearDocumentInVault(notesPath, teamId, projectId, projectName, document),
   );
+}
+
+/** Removes legacy local-only project notes created before Linear sync (no linearDocumentId). */
+export function removeLocalOnlyProjectDocuments(
+  notesPath: string,
+  teamId: string,
+  projectId: string,
+): string[] {
+  const removed: string[] = [];
+
+  for (const path of listProjectFolderPaths(notesPath, teamId, projectId)) {
+    const linearId = readLinearDocumentIdFromVault(notesPath, path);
+    if (linearId) continue;
+
+    const abs = join(notesPath, path);
+    if (!existsSync(abs)) continue;
+
+    unlinkSync(abs);
+    removed.push(path);
+  }
+
+  return removed;
 }
 
 export function vaultBodyForLinearUpdate(title: string, body: string): string {

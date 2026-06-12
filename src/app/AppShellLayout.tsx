@@ -56,7 +56,7 @@ export function AppShellLayout({
     runs: Record<string, RunViewModel>,
   ) => void;
   activeVaultNavItem: SidebarNavItemId | null;
-  onVaultNavItemChange: (item: SidebarNavItemId) => void;
+  onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   vaultExplorerEnabled: boolean;
   activeSessionTitle?: string | null;
   children: ReactNode;
@@ -130,7 +130,6 @@ export function AppShellLayout({
           collapsed={!rightSidePanelOpen}
         >
           <RightSidePanel
-            activeView={activeView}
             chatEnabled={rightPanelChatEnabled}
             session={rightPanelSession}
             sessionLoading={rightPanelSessionLoading}

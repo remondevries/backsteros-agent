@@ -3,6 +3,7 @@ import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavIte
 import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
   mergeContentPanelBreadcrumbs,
+  type ActiveLinearDocument,
   type ActiveLinearIssue,
   type ActiveVaultDocument,
   type ContentPanelBreadcrumbSegment,
@@ -23,8 +24,10 @@ export function buildContentPanelBreadcrumbSegments(options: {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   linearSelection?: LinearWorkspaceSelection | null;
   activeVaultDocument?: ActiveVaultDocument | null;
+  activeLinearDocument?: ActiveLinearDocument | null;
   activeLinearIssue?: ActiveLinearIssue | null;
   onClearActiveVaultDocument?: () => void;
+  onClearActiveLinearDocument?: () => void;
   onClearActiveLinearIssue?: () => void;
   linearWorkspaceView?: LinearWorkspaceViewId | null;
 }): ContentPanelBreadcrumbSegment[] {
@@ -37,8 +40,10 @@ export function buildContentPanelBreadcrumbSegments(options: {
     sidebarSegments,
     linearSelection,
     activeVaultDocument,
+    activeLinearDocument,
     activeLinearIssue,
     onClearActiveVaultDocument,
+    onClearActiveLinearDocument,
     onClearActiveLinearIssue,
     linearWorkspaceView,
   } = options;
@@ -61,11 +66,13 @@ export function buildContentPanelBreadcrumbSegments(options: {
   const contentSegments: ContentPanelBreadcrumbSegment[] = [];
 
   if (linearSelection) {
-    const clearFocus = activeVaultDocument
-      ? onClearActiveVaultDocument
-      : activeLinearIssue
-        ? onClearActiveLinearIssue
-        : undefined;
+    const clearFocus = activeLinearDocument
+      ? onClearActiveLinearDocument
+      : activeVaultDocument
+        ? onClearActiveVaultDocument
+        : activeLinearIssue
+          ? onClearActiveLinearIssue
+          : undefined;
 
     contentSegments.push({
       id: linearWorkspaceSelectionId(linearSelection),
@@ -95,6 +102,13 @@ export function buildContentPanelBreadcrumbSegments(options: {
     }
   } else if (viewDefinition && !activeVaultNavItem) {
     contentSegments.push({ id: `view-${activeView}`, label: viewDefinition.label });
+  }
+
+  if (activeLinearDocument) {
+    contentSegments.push({
+      id: `linear-doc-${activeLinearDocument.id}`,
+      label: activeLinearDocument.title,
+    });
   }
 
   if (activeVaultDocument) {

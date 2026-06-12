@@ -8,6 +8,7 @@ import { ensureDocumentDateFrontmatter } from "./vault-frontmatter.ts";
 import { readLinearDocumentIdFromVault } from "./linear-document-sync.ts";
 import {
   hasWhoopMetrics,
+  isDailyVaultNotePath,
   readWhoopStatsFromContent,
   resolveVaultNoteDate,
   toVaultNoteWhoopStats,
@@ -71,12 +72,16 @@ export function readVaultDocument(notesPath: string, relativePath: string): Vaul
   const { frontmatter, body } = splitFrontmatter(raw);
   const parsed = titleFromBody(path, body);
   const date = resolveVaultNoteDate(path, raw);
-  const ownStats = readWhoopStatsFromContent(raw);
-  let whoop = ownStats;
-  if (!whoop && date) {
-    const dailyStats = readDailyNoteStats(notesPath, date);
-    if (dailyStats && hasWhoopMetrics(dailyStats)) {
-      whoop = toVaultNoteWhoopStats(dailyStats);
+  let whoop: VaultNoteWhoopStats | null = null;
+
+  if (isDailyVaultNotePath(path)) {
+    const ownStats = readWhoopStatsFromContent(raw);
+    whoop = ownStats;
+    if (!whoop && date) {
+      const dailyStats = readDailyNoteStats(notesPath, date);
+      if (dailyStats && hasWhoopMetrics(dailyStats)) {
+        whoop = toVaultNoteWhoopStats(dailyStats);
+      }
     }
   }
 

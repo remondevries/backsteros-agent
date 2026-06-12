@@ -1,29 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
-import { useVaultDocument } from "../../hooks/useVaultDocument";
-import { useVaultDocumentWhoopSnapshot } from "../../hooks/useVaultDocumentWhoopSnapshot";
-import { isDailyVaultNotePath } from "../../lib/vaultNotePaths";
+import { useLinearDocument } from "../../hooks/useLinearDocument";
+import { deleteLinearDocument } from "../../lib/api";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { DocumentNoteIcon } from "./DocumentNoteIcon";
-import { VaultDocumentWhoopHeader } from "./VaultDocumentWhoopHeader";
 
 const SAVE_DEBOUNCE_MS = 800;
 
-export function VaultDocumentView({ path }: { path: string }) {
-  const isDailyNote = isDailyVaultNotePath(path);
-  const { updateActiveVaultDocument, setFocusContentSnapshot } = useContentPanelNavigation();
-  const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
-  const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
-  const { snapshot: whoopSnapshot, loading: whoopLoading } = useVaultDocumentWhoopSnapshot(
-    isDailyNote ? document : null,
-    { refreshKey: whoopRefreshKey },
-  );
+export function LinearDocumentView({
+  documentId,
+  projectId,
+}: {
+  documentId: string;
+  projectId?: string;
+}) {
+  const { updateActiveLinearDocument, clearActiveLinearDocument, setFocusContentSnapshot } =
+    useContentPanelNavigation();
+  const { document, loading, refreshing, error, save, refresh } = useLinearDocument(documentId);
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(titleDraft);
   const bodyRef = useRef(bodyDraft);
@@ -32,59 +32,59 @@ export function VaultDocumentView({ path }: { path: string }) {
   bodyRef.current = bodyDraft;
 
   useContentPanelBarState({
-    saving,
+    saving: saving || deleting,
     dirty,
     error: saveError ?? error,
     loading: loading && !document,
     loadingMessage: "Loading document…",
     refreshing,
-    onRefresh: () => {
-      setWhoopRefreshKey((current) => current + 1);
-      void refresh();
-    },
+    onRefresh: refresh,
   });
 
   useEffect(() => {
     setDirty(false);
     setSaveError(null);
     userEditedRef.current = false;
-  }, [path]);
+  }, [documentId]);
 
   useEffect(() => {
-    if (!document || document.path !== path) return;
+    if (!document || document.id !== documentId) return;
     if (dirty || userEditedRef.current) return;
     setTitleDraft(document.title);
-    setBodyDraft(document.body);
-  }, [dirty, document, path]);
+    setBodyDraft(document.content);
+  }, [dirty, document, documentId]);
 
   useEffect(() => {
-    if (!document || document.path !== path) return;
+    if (!document || document.id !== documentId) return;
     setFocusContentSnapshot({
-      kind: "vault_document",
+      kind: "linear_document",
       title: titleDraft,
-      body: bodyDraft,
+      content: bodyDraft,
     });
-  }, [bodyDraft, document, path, setFocusContentSnapshot, titleDraft]);
+  }, [bodyDraft, document, documentId, setFocusContentSnapshot, titleDraft]);
 
   const persist = useCallback(
     async (title: string, body: string) => {
       setSaving(true);
       setSaveError(null);
       try {
-        const saveErrorMessage = await save({ title, body });
+        const saveErrorMessage = await save({ title, content: body });
         if (saveErrorMessage) {
           setSaveError(saveErrorMessage);
           return;
         }
         setDirty(false);
-        updateActiveVaultDocument({ title: title.trim() || document?.title || "Untitled" });
+        updateActiveLinearDocument({
+          title: title.trim() || document?.title || "Untitled",
+          projectId: projectId ?? document?.projectId,
+        });
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : "Failed to save document");
       } finally {
         setSaving(false);
       }
     },
-    [document?.title, save, updateActiveVaultDocument],
+    [document?.projectId, document?.title, projectId, save, updateActiveLinearDocument],
   );
 
   const scheduleSave = useCallback(
@@ -142,6 +142,24 @@ export function VaultDocumentView({ path }: { path: string }) {
     }
   };
 
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setSaveError(null);
+    try {
+      const result = await deleteLinearDocument(documentId);
+      if (result.error || !result.ok) {
+        setSaveError(result.error ?? "Failed to delete document.");
+        return;
+      }
+      clearActiveLinearDocument();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to delete document");
+    } finally {
+      setDeleting(false);
+    }
+  }, [clearActiveLinearDocument, deleting, documentId]);
+
   if (!document) {
     return <div className="vault-document-scroll" />;
   }
@@ -149,16 +167,10 @@ export function VaultDocumentView({ path }: { path: string }) {
   return (
     <div className="vault-document-scroll">
       <article className="vault-document">
-        {isDailyNote && whoopSnapshot ? <VaultDocumentWhoopHeader snapshot={whoopSnapshot} /> : null}
-        {isDailyNote && !whoopSnapshot && whoopLoading && document.date ? (
-          <p className="vault-document-whoop-status">Loading Whoop…</p>
-        ) : null}
         <header className="vault-document-header">
-          {!isDailyNote ? (
-            <div className="vault-document-icon" aria-hidden="true">
-              <DocumentNoteIcon size={16} />
-            </div>
-          ) : null}
+          <div className="vault-document-icon" aria-hidden="true">
+            <DocumentNoteIcon size={16} />
+          </div>
           <input
             type="text"
             className="vault-document-title"
@@ -169,6 +181,14 @@ export function VaultDocumentView({ path }: { path: string }) {
             placeholder="Untitled"
             aria-label="Document title"
           />
+          <button
+            type="button"
+            className="linear-document-delete-button"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+          >
+            Delete
+          </button>
         </header>
         <div className="vault-document-body-editor">
           <TiptapEditor

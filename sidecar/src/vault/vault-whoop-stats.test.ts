@@ -33,7 +33,7 @@ strain: 4.3
     });
   });
 
-  test("falls back to daily note stats by date frontmatter", () => {
+  test("does not attach daily whoop stats to non-daily notes", () => {
     const notesPath = mkdtempSync(join(tmpdir(), "backster-vault-whoop-"));
     try {
       mkdirSync(join(notesPath, "Inbox"), { recursive: true });
@@ -54,6 +54,26 @@ strain: 4.3
         "2026-06-12",
       );
       expect(resolveVaultNoteWhoopStats(notesPath, "Inbox/idea.md")).toEqual({
+        date: "2026-06-12",
+        whoop: null,
+      });
+    } finally {
+      rmSync(notesPath, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to daily note stats for Daily folder notes", () => {
+    const notesPath = mkdtempSync(join(tmpdir(), "backster-vault-whoop-"));
+    try {
+      mkdirSync(join(notesPath, "Daily"), { recursive: true });
+
+      writeFileSync(
+        join(notesPath, "Daily", "2026-06-12.md"),
+        "---\ndate: 2026-06-12\nsleep: 90\nrecovery: 80\nstrain: 5.1\n---\n\n## Day log\n",
+        "utf8",
+      );
+
+      expect(resolveVaultNoteWhoopStats(notesPath, "Daily/2026-06-12.md")).toEqual({
         date: "2026-06-12",
         whoop: { sleep: 90, recovery: 80, strain: 5.1 },
       });

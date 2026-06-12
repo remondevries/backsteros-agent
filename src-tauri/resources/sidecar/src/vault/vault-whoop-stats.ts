@@ -11,6 +11,10 @@ export type VaultNoteWhoopStats = {
 
 const DAILY_NOTE_PATH_PATTERN = /^Daily\/(\d{4}-\d{2}-\d{2})\.md$/i;
 
+export function isDailyVaultNotePath(relativePath: string): boolean {
+  return /^Daily\//i.test(relativePath.replace(/\\/g, "/"));
+}
+
 function parseFrontmatterFields(frontmatter: string): Map<string, string> {
   const fields = new Map<string, string>();
   const lines = frontmatter.split("\n");
@@ -99,6 +103,11 @@ export function resolveVaultNoteWhoopStats(
 ): { date: string | null; whoop: VaultNoteWhoopStats | null } {
   const content = readFileSync(join(notesPath, relativePath), "utf8");
   const date = resolveVaultNoteDate(relativePath, content);
+
+  if (!isDailyVaultNotePath(relativePath)) {
+    return { date, whoop: null };
+  }
+
   const ownStats = readWhoopStatsFromContent(content);
   if (ownStats) {
     return { date, whoop: ownStats };

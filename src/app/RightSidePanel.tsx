@@ -11,14 +11,12 @@ type RightPanelSession = {
 };
 
 export function RightSidePanel({
-  activeView,
   chatEnabled,
   session,
   sessionLoading,
   onNavigateToView,
   onSaveSessionState,
 }: {
-  activeView: AppView;
   chatEnabled: boolean;
   session: RightPanelSession | null;
   sessionLoading: boolean;
@@ -43,7 +41,6 @@ export function RightSidePanel({
   } else if (session) {
     body = (
       <RightPanelChatSlot
-        activeView={activeView}
         integrationsStatus={integrationsStatus}
         session={session}
         onNavigateToView={onNavigateToView}

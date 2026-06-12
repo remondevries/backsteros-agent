@@ -86,7 +86,7 @@ export function LeftSidePanel({
   onExitSettings?: () => void;
   savedNotesPath: string | null;
   activeVaultNavItem: SidebarNavItemId | null;
-  onVaultNavItemChange: (item: SidebarNavItemId) => void;
+  onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
 }) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     workspace: true,
@@ -166,7 +166,10 @@ export function LeftSidePanel({
               label={view.label}
               icon={view.icon}
               active={activeView === view.id}
-              onClick={() => onChange(view.id)}
+              onClick={() => {
+                onVaultNavItemChange(null);
+                onChange(view.id);
+              }}
             />
           ))}
           <LeftSidePanelNavItem

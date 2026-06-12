@@ -11,31 +11,61 @@ export function LinearIssueThreadList({
   loading,
   error,
   onSelect,
+  onCreateThread,
+  creatingThread = false,
 }: {
   threads: LinearCommentThreadSummary[];
   activeThreadId: string | null;
   loading: boolean;
   error: string | null;
   onSelect: (threadId: string) => void;
+  onCreateThread: () => void;
+  creatingThread?: boolean;
 }) {
   if (loading && threads.length === 0) {
-    return <p className="linear-thread-list-status">Loading threads…</p>;
+    return (
+      <div className="linear-thread-list-shell">
+        <button
+          type="button"
+          className="linear-thread-new-card"
+          onClick={onCreateThread}
+          disabled={creatingThread}
+        >
+          {creatingThread ? "Starting conversation…" : "Start a new conversation"}
+        </button>
+        <p className="linear-thread-list-status">Loading threads…</p>
+      </div>
+    );
   }
 
   if (error && threads.length === 0) {
-    return <p className="linear-thread-list-status linear-thread-list-status-error">{error}</p>;
-  }
-
-  if (threads.length === 0) {
     return (
-      <p className="linear-thread-list-status">
-        No threads yet. Start one with the plus button.
-      </p>
+      <div className="linear-thread-list-shell">
+        <button
+          type="button"
+          className="linear-thread-new-card"
+          onClick={onCreateThread}
+          disabled={creatingThread}
+        >
+          {creatingThread ? "Starting conversation…" : "Start a new conversation"}
+        </button>
+        <p className="linear-thread-list-status linear-thread-list-status-error">{error}</p>
+      </div>
     );
   }
 
   return (
     <ul className="linear-thread-list">
+      <li>
+        <button
+          type="button"
+          className="linear-thread-new-card"
+          onClick={onCreateThread}
+          disabled={creatingThread}
+        >
+          {creatingThread ? "Starting conversation…" : "Start a new conversation"}
+        </button>
+      </li>
       {threads.map((thread) => {
         const timestamp = formatLinearThreadCardTime(thread.createdAt);
         return (

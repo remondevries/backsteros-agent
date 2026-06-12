@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { resolveRightPanelAgent } from "./rightPanelAgents";
+import {
+  panelChatComposerVariant,
+  resolveRightPanelAgent,
+  showsBacksterComposerOptions,
+  supportsLinearPanelAgent,
+} from "./rightPanelAgents";
 import type { IntegrationsStatus } from "../lib/api";
 
 const baseStatus: IntegrationsStatus = {
@@ -20,53 +25,93 @@ const baseStatus: IntegrationsStatus = {
   },
 };
 
+const linearConnectedStatus: IntegrationsStatus = {
+  ...baseStatus,
+  linearApiKey: { configured: true },
+};
+
+describe("supportsLinearPanelAgent", () => {
+  test("requires an open issue or linear document", () => {
+    expect(
+      supportsLinearPanelAgent({ activeLinearIssue: null, activeLinearDocument: null }),
+    ).toBe(false);
+    expect(
+      supportsLinearPanelAgent({
+        activeLinearIssue: { id: "i1", identifier: "BOS-1", title: "Issue" },
+        activeLinearDocument: null,
+      }),
+    ).toBe(true);
+    expect(
+      supportsLinearPanelAgent({
+        activeLinearIssue: null,
+        activeLinearDocument: { id: "doc-1", title: "Doc" },
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("resolveRightPanelAgent", () => {
   test("uses cursor agent by default", () => {
     const resolved = resolveRightPanelAgent({
-      activeView: "chat",
       integrationsStatus: baseStatus,
+      activeLinearIssue: null,
+      activeLinearDocument: null,
     });
     expect(resolved.requested).toBe("cursor");
     expect(resolved.active).toBe("cursor");
   });
 
-  test("requests linear on linear view but falls back to cursor", () => {
+  test("uses cursor on project tabs even when linear is connected", () => {
     const resolved = resolveRightPanelAgent({
-      activeView: "linear",
+      integrationsStatus: linearConnectedStatus,
+      activeLinearIssue: null,
+      activeLinearDocument: null,
+    });
+    expect(resolved.requested).toBe("cursor");
+    expect(resolved.active).toBe("cursor");
+  });
+
+  test("uses linear agent when an issue is open and linear is connected", () => {
+    const resolved = resolveRightPanelAgent({
+      integrationsStatus: linearConnectedStatus,
+      activeLinearIssue: { id: "i1", identifier: "BOS-1", title: "Issue" },
+      activeLinearDocument: null,
+    });
+    expect(resolved.requested).toBe("linear");
+    expect(resolved.active).toBe("linear");
+  });
+
+  test("uses linear agent when a linear document is open and linear is connected", () => {
+    const resolved = resolveRightPanelAgent({
+      integrationsStatus: linearConnectedStatus,
+      activeLinearIssue: null,
+      activeLinearDocument: { id: "doc-1", title: "Doc" },
+    });
+    expect(resolved.requested).toBe("linear");
+    expect(resolved.active).toBe("linear");
+  });
+
+  test("falls back to cursor when linear is requested but not connected", () => {
+    const resolved = resolveRightPanelAgent({
       integrationsStatus: baseStatus,
+      activeLinearIssue: { id: "i1", identifier: "BOS-1", title: "Issue" },
+      activeLinearDocument: null,
     });
     expect(resolved.requested).toBe("linear");
     expect(resolved.active).toBe("cursor");
     expect(resolved.fallbackReason).toContain("Connect Linear");
   });
+});
 
-  test("uses linear agent when linear focus is active and linear is connected", () => {
-    const resolved = resolveRightPanelAgent({
-      activeView: "chat",
-      integrationsStatus: {
-        ...baseStatus,
-        linearApiKey: { configured: true },
-      },
-      hasLinearFocus: true,
-    });
-    expect(resolved.requested).toBe("linear");
-    expect(resolved.active).toBe("linear");
+describe("panel chat composer variants", () => {
+  test("linear agent maps to linear composer variant", () => {
+    expect(panelChatComposerVariant("linear")).toBe("linear");
+    expect(panelChatComposerVariant("cursor")).toBe("backster");
   });
 
-  test("uses linear agent on linear view when oauth is connected", () => {
-    const resolved = resolveRightPanelAgent({
-      activeView: "linear",
-      integrationsStatus: {
-        ...baseStatus,
-        linear: {
-          credentialsConfigured: true,
-          authenticated: true,
-          clientId: { configured: true },
-          clientSecret: { configured: true },
-        },
-      },
-    });
-    expect(resolved.requested).toBe("linear");
-    expect(resolved.active).toBe("linear");
+  test("backster composer options are hidden on linear panel", () => {
+    expect(showsBacksterComposerOptions("panel", "linear")).toBe(false);
+    expect(showsBacksterComposerOptions("panel", "backster")).toBe(true);
+    expect(showsBacksterComposerOptions("default", "linear")).toBe(true);
   });
 });

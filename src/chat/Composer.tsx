@@ -108,6 +108,7 @@ export const Composer = forwardRef<
     onCancelAutomationFlow?: () => boolean;
     onEscapeBlur?: () => void;
     onComposerFocus?: () => void;
+    focusPlaceholder?: string;
   }
 >(function Composer(
   {
@@ -144,6 +145,7 @@ export const Composer = forwardRef<
     onCancelAutomationFlow,
     onEscapeBlur,
     onComposerFocus,
+    focusPlaceholder,
   },
   ref,
 ) {
@@ -377,15 +379,16 @@ export const Composer = forwardRef<
                 placeholder={
                   disabled || voiceMode
                     ? ""
-                    : composerAutomationFlow === "grocery-list"
-                      ? "milk, eggs, bread…"
-                      : composerAutomationFlow === "daily-capture"
-                        ? "What happened?"
-                        : composerAutomationFlow === "letter"
-                          ? "Confirm or correct: from, organization, received date, status…"
-                          : composerAutomationFlow === "delete-file"
-                            ? "Which file should I delete?"
-                            : "Reply…"
+                    : focusPlaceholder ??
+                      (composerAutomationFlow === "grocery-list"
+                        ? "milk, eggs, bread…"
+                        : composerAutomationFlow === "daily-capture"
+                          ? "What happened?"
+                          : composerAutomationFlow === "letter"
+                            ? "Confirm or correct: from, organization, received date, status…"
+                            : composerAutomationFlow === "delete-file"
+                              ? "Which file should I delete?"
+                              : "Reply…")
                 }
                 disabled={disabled || voiceMode}
                 tabIndex={voiceMode ? -1 : 0}

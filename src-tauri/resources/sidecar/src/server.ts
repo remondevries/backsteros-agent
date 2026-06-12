@@ -84,11 +84,13 @@ import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear
 import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
 import {
   createProjectDocument,
+  deleteLinearDocument,
+  fetchLinearDocument,
   fetchLinearProjectDocuments,
   fetchLinearTeamDocuments,
+  updateLinearDocument,
 } from "./vault/project-documents.ts";
 import { readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
-import { debugLog } from "./debug-log.ts";
 import { fetchLinearIssueDetail } from "./linear/issue-detail.ts";
 import {
   createLinearAgentThread,
@@ -1400,25 +1402,9 @@ app.patch("/vault/documents", async (c) => {
 
   try {
     const document = await updateVaultDocument(notesPath, path, { title, body: content });
-    // #region agent log
-    debugLog(
-      "server.ts:PATCH /vault/documents",
-      "Vault document patched successfully",
-      { path, hasTitle: title !== undefined, hasBody: content !== undefined },
-      "H1",
-    );
-    // #endregion
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update document";
-    // #region agent log
-    debugLog(
-      "server.ts:PATCH /vault/documents",
-      "Vault document patch failed",
-      { path, error: message },
-      "H1",
-    );
-    // #endregion
     return c.json({ error: message }, 400);
   }
 });

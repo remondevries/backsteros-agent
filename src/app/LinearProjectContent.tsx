@@ -3,6 +3,7 @@ import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { linearWorkspaceSelectionId } from "./linearWorkspaceSelection";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
 import { useEnsureLinearWorkspaceVaultStructure } from "../hooks/useEnsureLinearWorkspaceVaultStructure";
+import { useLinearWorkspaceFocusSnapshot } from "../hooks/useLinearWorkspaceFocusSnapshot";
 import { ProjectDocumentsPanel } from "./project-documents/ProjectDocumentsPanel";
 import { ProjectIssuesPanel } from "./project-issues/ProjectIssuesPanel";
 import { ProjectOverviewPanel } from "./project-overview/ProjectOverviewPanel";
@@ -72,6 +73,7 @@ export function LinearProjectContent({
   );
 
   useEnsureLinearWorkspaceVaultStructure(selection, vaultStructureEnabled);
+  useLinearWorkspaceFocusSnapshot();
 
   useEffect(() => {
     setActiveView(defaultLinearWorkspaceViewId(selection.kind));

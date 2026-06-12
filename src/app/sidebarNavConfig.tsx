@@ -65,6 +65,16 @@ export const SIDEBAR_PRIMARY_ITEMS: SidebarNavItemDefinition[] = [
   navItem("workouts"),
 ];
 
+const SIDEBAR_PRIMARY_NAV_ITEM_IDS = new Set(
+  SIDEBAR_PRIMARY_ITEMS.map((item) => item.id),
+);
+
+export function isSidebarPrimaryNavItem(
+  id: SidebarNavItemId,
+): id is (typeof SIDEBAR_PRIMARY_ITEMS)[number]["id"] {
+  return SIDEBAR_PRIMARY_NAV_ITEM_IDS.has(id as (typeof SIDEBAR_PRIMARY_ITEMS)[number]["id"]);
+}
+
 export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
   {
     id: "workspace",

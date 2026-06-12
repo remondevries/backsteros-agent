@@ -1,7 +1,23 @@
-import type { AppView } from "./appViews";
+import type { ActiveLinearDocument, ActiveLinearIssue } from "./contentPanelNavigation";
 import type { IntegrationsStatus } from "../lib/api";
 
 export type RightPanelAgentId = "cursor" | "linear";
+
+/** UI variant for the right-panel composer — Backster vs Linear are separate surfaces. */
+export type PanelChatComposerVariant = "backster" | "linear";
+
+export function panelChatComposerVariant(
+  activeAgent: RightPanelAgentId,
+): PanelChatComposerVariant {
+  return activeAgent === "linear" ? "linear" : "backster";
+}
+
+export function showsBacksterComposerOptions(
+  layout: "default" | "panel",
+  panelComposerVariant?: PanelChatComposerVariant,
+): boolean {
+  return layout !== "panel" || panelComposerVariant !== "linear";
+}
 
 export type ResolvedRightPanelAgent = {
   requested: RightPanelAgentId;
@@ -28,8 +44,16 @@ export function isCursorAgentAvailable(status: IntegrationsStatus | null): boole
   return Boolean(status?.cursorApiKey.configured);
 }
 
-function requestAgentForView(activeView: AppView, hasLinearFocus: boolean): RightPanelAgentId {
-  if (activeView === "linear" || hasLinearFocus) return "linear";
+/** Linear agent requires an open issue or document — not project/team tabs alone. */
+export function supportsLinearPanelAgent(input: {
+  activeLinearIssue: ActiveLinearIssue | null;
+  activeLinearDocument: ActiveLinearDocument | null;
+}): boolean {
+  return Boolean(input.activeLinearIssue || input.activeLinearDocument);
+}
+
+function requestAgentForView(hasLinearAgentFocus: boolean): RightPanelAgentId {
+  if (hasLinearAgentFocus) return "linear";
   return "cursor";
 }
 
@@ -47,11 +71,16 @@ function isAgentAvailable(
 }
 
 export function resolveRightPanelAgent(input: {
-  activeView: AppView;
   integrationsStatus: IntegrationsStatus | null;
-  hasLinearFocus?: boolean;
+  activeLinearIssue: ActiveLinearIssue | null;
+  activeLinearDocument: ActiveLinearDocument | null;
 }): ResolvedRightPanelAgent {
-  const requested = requestAgentForView(input.activeView, Boolean(input.hasLinearFocus));
+  const requested = requestAgentForView(
+    supportsLinearPanelAgent({
+      activeLinearIssue: input.activeLinearIssue,
+      activeLinearDocument: input.activeLinearDocument,
+    }),
+  );
   const label = AGENT_LABELS[requested];
 
   if (

@@ -81,8 +81,10 @@ function ContentPanelWithBreadcrumbs({
     sidebarSegments,
     linearSelection,
     activeVaultDocument,
+    activeLinearDocument,
     activeLinearIssue,
     clearActiveVaultDocument,
+    clearActiveLinearDocument,
     clearActiveLinearIssue,
     linearWorkspaceView,
   } = useContentPanelNavigation();
@@ -97,18 +99,22 @@ function ContentPanelWithBreadcrumbs({
         sidebarSegments,
         linearSelection,
         activeVaultDocument,
+        activeLinearDocument,
         activeLinearIssue,
         onClearActiveVaultDocument: clearActiveVaultDocument,
+        onClearActiveLinearDocument: clearActiveLinearDocument,
         onClearActiveLinearIssue: clearActiveLinearIssue,
         linearWorkspaceView,
       }),
     [
       activeLinearIssue,
+      activeLinearDocument,
       activeSessionTitle,
       activeSettingsTab,
       activeVaultDocument,
       activeVaultNavItem,
       activeView,
+      clearActiveLinearDocument,
       clearActiveLinearIssue,
       clearActiveVaultDocument,
       linearSelection,
@@ -166,6 +172,7 @@ export function ContentPanel({
       <ContentPanelMainSlot
         settingsOpen={settingsOpen}
         vaultStructureEnabled={vaultExplorerEnabled}
+        activeVaultNavItem={activeVaultNavItem}
       >
         {children}
       </ContentPanelMainSlot>

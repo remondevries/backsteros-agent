@@ -79,8 +79,20 @@ describe("vault-document", () => {
     const document = readVaultDocument(notesPath, relativePath);
 
     expect(document.body.trimEnd()).toBe("Updated body");
-    expect(readVaultNoteDateFromContent(readFileSync(join(notesPath, "Inbox", "existing.md"), "utf8"))).toBe(
-      "2025-03-04",
+    expect(document.date).toBe("2025-03-04");
+  });
+
+  test("includes whoop stats from frontmatter", () => {
+    const notesPath = makeNotesDir();
+    mkdirSync(join(notesPath, "Daily"), { recursive: true });
+    writeFileSync(
+      join(notesPath, "Daily", "2026-06-12.md"),
+      "---\ndate: 2026-06-12\nsleep: 84\nrecovery: 71\nstrain: 4.3\n---\n\n## Day log\n",
+      "utf8",
     );
+
+    const document = readVaultDocument(notesPath, "Daily/2026-06-12.md");
+    expect(document.date).toBe("2026-06-12");
+    expect(document.whoop).toEqual({ sleep: 84, recovery: 71, strain: 4.3 });
   });
 });

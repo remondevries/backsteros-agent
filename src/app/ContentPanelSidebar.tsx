@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
-import { SIDEBAR_VAULT_NAV_ITEM_IDS } from "./sidebarNavConfig";
+import { SIDEBAR_VAULT_NAV_ITEM_IDS, isSidebarPrimaryNavItem } from "./sidebarNavConfig";
 import { LinearWorkspacePanel } from "./LinearWorkspacePanel";
 import { VaultFolderExplorer } from "./VaultFolderExplorer";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
@@ -12,14 +12,27 @@ export function ContentPanelSidebar({
   activeVaultNavItem: SidebarNavItemId | null;
   vaultExplorerEnabled: boolean;
 }) {
-  const { clearActiveVaultDocument } = useContentPanelNavigation();
+  const {
+    clearActiveVaultDocument,
+    clearActiveLinearIssue,
+    setLinearSelection,
+  } = useContentPanelNavigation();
   const showEmptyState = !activeVaultNavItem;
 
   useEffect(() => {
     if (!vaultExplorerEnabled || !activeVaultNavItem) return;
-    if (activeVaultNavItem === "daily") return;
     clearActiveVaultDocument();
-  }, [activeVaultNavItem, clearActiveVaultDocument, vaultExplorerEnabled]);
+    if (isSidebarPrimaryNavItem(activeVaultNavItem)) {
+      setLinearSelection(null);
+      clearActiveLinearIssue();
+    }
+  }, [
+    activeVaultNavItem,
+    clearActiveLinearIssue,
+    clearActiveVaultDocument,
+    setLinearSelection,
+    vaultExplorerEnabled,
+  ]);
 
   return (
     <div className="content-panel-sidebar">

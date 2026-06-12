@@ -147,6 +147,8 @@ export function LinearIssueAgentPanel({
             loading={loading}
             error={error}
             onSelect={handleSelectThread}
+            onCreateThread={() => void handleCreateThread()}
+            creatingThread={creatingThread}
           />
         ) : activeThreadId ? (
           <LinearIssueThreadChat issueId={issueId} threadId={activeThreadId} />

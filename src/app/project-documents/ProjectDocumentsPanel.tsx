@@ -24,7 +24,7 @@ export function ProjectDocumentsPanel({
   teamId?: string | null;
   enabled: boolean;
 }) {
-  const { setActiveVaultDocument } = useContentPanelNavigation();
+  const { setActiveLinearDocument } = useContentPanelNavigation();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const { documents, loading, refreshing, error, refresh } = useLinearProjectDocuments({
@@ -56,16 +56,17 @@ export function ProjectDocumentsPanel({
 
       expandGroup(INBOX_GROUP_KEY);
       await refresh();
-      setActiveVaultDocument({
-        path: result.document.path,
+      setActiveLinearDocument({
+        id: result.document.linearDocumentId,
         title: result.document.title,
+        projectId: result.document.projectId,
       });
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create document.");
     } finally {
       setCreating(false);
     }
-  }, [creating, expandGroup, projectId, refresh, setActiveVaultDocument]);
+  }, [creating, expandGroup, projectId, refresh, setActiveLinearDocument]);
 
   const groups = useMemo(() => {
     const sorted = [...documents].sort(compareDocumentsNewestFirst);
@@ -129,9 +130,10 @@ export function ProjectDocumentsPanel({
             document={document}
             grouped
             onClick={() => {
-              setActiveVaultDocument({
-                path: document.path,
+              setActiveLinearDocument({
+                id: document.linearDocumentId,
                 title: document.title,
+                projectId: document.projectId,
               });
             }}
           />

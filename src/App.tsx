@@ -125,6 +125,7 @@ export default function App() {
   const handleAppViewChange = useCallback(
     (nextView: AppView) => {
       setAppView(nextView);
+      setActiveVaultNavItem(null);
       setCommandPanelOpen(false);
       if (nextView === "chat") {
         focusActiveComposer();

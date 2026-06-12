@@ -28,15 +28,31 @@ export type ActiveLinearIssue = {
   title: string;
 };
 
+export type ActiveLinearDocument = {
+  id: string;
+  title: string;
+  projectId?: string;
+};
+
 export type FocusContentSnapshot =
   | {
       kind: "linear_issue";
       description: string | null;
     }
   | {
+      kind: "linear_document";
+      title: string;
+      content: string;
+    }
+  | {
       kind: "vault_document";
       title: string;
       body: string;
+    }
+  | {
+      kind: "linear_workspace";
+      summary: string | null;
+      description: string | null;
     };
 
 export type ContentPanelBarState = {
@@ -55,12 +71,21 @@ type ContentPanelNavigationContextValue = {
   setActiveVaultDocument: (document: ActiveVaultDocument | null) => void;
   updateActiveVaultDocument: (patch: Partial<ActiveVaultDocument>) => void;
   clearActiveVaultDocument: () => void;
+  activeLinearDocument: ActiveLinearDocument | null;
+  setActiveLinearDocument: (document: ActiveLinearDocument | null) => void;
+  updateActiveLinearDocument: (patch: Partial<ActiveLinearDocument>) => void;
+  clearActiveLinearDocument: () => void;
   activeLinearIssue: ActiveLinearIssue | null;
   setActiveLinearIssue: (issue: ActiveLinearIssue | null) => void;
   updateActiveLinearIssue: (patch: Partial<ActiveLinearIssue>) => void;
   clearActiveLinearIssue: () => void;
   focusContentSnapshot: FocusContentSnapshot | null;
-  setFocusContentSnapshot: (snapshot: FocusContentSnapshot | null) => void;
+  setFocusContentSnapshot: (
+    snapshot:
+      | FocusContentSnapshot
+      | null
+      | ((current: FocusContentSnapshot | null) => FocusContentSnapshot | null),
+  ) => void;
   linearWorkspaceView: LinearWorkspaceViewId | null;
   setLinearWorkspaceView: (view: LinearWorkspaceViewId | null) => void;
   contentPanelBarState: ContentPanelBarState | null;
@@ -82,6 +107,9 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     null,
   );
   const [activeLinearIssue, setActiveLinearIssueState] = useState<ActiveLinearIssue | null>(null);
+  const [activeLinearDocument, setActiveLinearDocumentState] = useState<ActiveLinearDocument | null>(
+    null,
+  );
   const [focusContentSnapshot, setFocusContentSnapshotState] = useState<FocusContentSnapshot | null>(
     null,
   );
@@ -98,6 +126,7 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   useEffect(() => {
     setActiveVaultDocumentState(null);
+    setActiveLinearDocumentState(null);
     setActiveLinearIssueState(null);
     setFocusContentSnapshotState(null);
     setLinearWorkspaceViewState(null);
@@ -116,6 +145,7 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setActiveVaultDocumentState(document);
     if (document) {
       setActiveLinearIssueState(null);
+      setActiveLinearDocumentState(null);
     }
   }, []);
 
@@ -130,10 +160,30 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     );
   }, []);
 
+  const setActiveLinearDocument = useCallback((document: ActiveLinearDocument | null) => {
+    setActiveLinearDocumentState(document);
+    if (document) {
+      setActiveLinearIssueState(null);
+      setActiveVaultDocumentState(null);
+    }
+  }, []);
+
+  const updateActiveLinearDocument = useCallback((patch: Partial<ActiveLinearDocument>) => {
+    setActiveLinearDocumentState((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  const clearActiveLinearDocument = useCallback(() => {
+    setActiveLinearDocumentState(null);
+    setFocusContentSnapshotState((current) =>
+      current?.kind === "linear_document" ? null : current,
+    );
+  }, []);
+
   const setActiveLinearIssue = useCallback((issue: ActiveLinearIssue | null) => {
     setActiveLinearIssueState(issue);
     if (issue) {
       setActiveVaultDocumentState(null);
+      setActiveLinearDocumentState(null);
     }
   }, []);
 
@@ -146,9 +196,17 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setFocusContentSnapshotState((current) => (current?.kind === "linear_issue" ? null : current));
   }, []);
 
-  const setFocusContentSnapshot = useCallback((snapshot: FocusContentSnapshot | null) => {
-    setFocusContentSnapshotState(snapshot);
-  }, []);
+  const setFocusContentSnapshot = useCallback(
+    (
+      snapshot:
+        | FocusContentSnapshot
+        | null
+        | ((current: FocusContentSnapshot | null) => FocusContentSnapshot | null),
+    ) => {
+      setFocusContentSnapshotState(snapshot);
+    },
+    [],
+  );
 
   const setLinearWorkspaceView = useCallback((view: LinearWorkspaceViewId | null) => {
     setLinearWorkspaceViewState(view);
@@ -168,6 +226,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setActiveVaultDocument,
       updateActiveVaultDocument,
       clearActiveVaultDocument,
+      activeLinearDocument,
+      setActiveLinearDocument,
+      updateActiveLinearDocument,
+      clearActiveLinearDocument,
       activeLinearIssue,
       setActiveLinearIssue,
       updateActiveLinearIssue,
@@ -180,14 +242,17 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setContentPanelBarState,
     }),
     [
+      activeLinearDocument,
       activeLinearIssue,
       activeVaultDocument,
+      clearActiveLinearDocument,
       clearActiveLinearIssue,
       clearActiveVaultDocument,
       contentPanelBarState,
       focusContentSnapshot,
       linearSelection,
       linearWorkspaceView,
+      setActiveLinearDocument,
       setActiveLinearIssue,
       setActiveVaultDocument,
       setContentPanelBarState,
@@ -196,6 +261,7 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setLinearWorkspaceView,
       sidebarSegments,
       setSidebarSegments,
+      updateActiveLinearDocument,
       updateActiveLinearIssue,
       updateActiveVaultDocument,
     ],

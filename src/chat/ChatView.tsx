@@ -1,4 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { showsBacksterComposerOptions } from "../app/rightPanelAgents";
+import type { PanelChatComposerVariant } from "../app/rightPanelAgents";
 import { ChatTurn } from "./ChatTurn";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import {
@@ -12,6 +14,7 @@ import {
   validateAttachment,
 } from "./attachments";
 import { Composer, type ComposerHandle } from "./Composer";
+import { ComposerContextCard } from "./ComposerContextCard";
 import { VoiceTurnBubble } from "./VoiceTurnBubble";
 import { parseChatCommand } from "./chatCommands";
 import {
@@ -322,6 +325,10 @@ export const ChatView = forwardRef<
     onNavigateToView?: (view: AppView) => void;
     layout?: "default" | "panel";
     focusContext?: import("../lib/chatFocusContext").ChatFocusContext | null;
+    composerContextItems?: Array<{ id: string; label: string }>;
+    composerContextLoading?: boolean;
+    composerPlaceholder?: string;
+    panelComposerVariant?: PanelChatComposerVariant;
   }
 >(function ChatView(
   {
@@ -336,9 +343,18 @@ export const ChatView = forwardRef<
     onNavigateToView,
     layout = "default",
     focusContext = null,
+    composerContextItems = [],
+    composerContextLoading = false,
+    composerPlaceholder,
+    panelComposerVariant,
   },
   ref,
 ) {
+  const showBacksterComposerOptions = showsBacksterComposerOptions(
+    layout,
+    panelComposerVariant,
+  );
+
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -464,7 +480,7 @@ export const ChatView = forwardRef<
     interruptVoice,
     inputModeControls,
   } = useTextVoiceInput({
-    isActive,
+    isActive: isActive && showBacksterComposerOptions,
     onTranscript: async (text) => {
       await handleSendRef.current(text);
     },
@@ -753,6 +769,8 @@ export const ChatView = forwardRef<
   }, []);
 
   useEffect(() => {
+    if (!showBacksterComposerOptions) return;
+
     void (async () => {
       try {
         const settings = await getSettings();
@@ -771,7 +789,7 @@ export const ChatView = forwardRef<
         // Model toggle falls back to auto when settings are unavailable.
       }
     })();
-  }, []);
+  }, [showBacksterComposerOptions]);
 
   useEffect(() => {
     if (!isActive || voiceModeEnabled) return;
@@ -1424,8 +1442,15 @@ export const ChatView = forwardRef<
               id:
                 focusContext.kind === "linear_issue"
                   ? focusContext.identifier
-                  : focusContext.path,
-              title: focusContext.title,
+                  : focusContext.kind === "linear_document"
+                    ? focusContext.documentId
+                    : focusContext.kind === "vault_document"
+                      ? focusContext.path
+                      : focusContext.workspaceId,
+              title:
+                focusContext.kind === "linear_workspace"
+                  ? focusContext.name
+                  : focusContext.title,
               entityType: focusContext.kind,
             },
           ]
@@ -1965,8 +1990,14 @@ export const ChatView = forwardRef<
         )}
 
         <div
-          className={`composer-stack ${voiceModeEnabled ? "composer-stack-voice-mode" : ""}`}
+          className={`composer-stack ${voiceModeEnabled ? "composer-stack-voice-mode" : ""} ${composerContextItems.length > 0 ? "composer-stack--has-context" : ""}`}
         >
+          {layout === "panel" && composerContextItems.length > 0 ? (
+            <ComposerContextCard
+              items={composerContextItems}
+              loading={composerContextLoading}
+            />
+          ) : null}
           <Composer
             ref={composerRef}
             value={input}
@@ -1990,12 +2021,16 @@ export const ChatView = forwardRef<
               setPreviewTarget(toAttachmentPreviewTarget(attachment))
             }
             isDragging={isDragging}
-            composerMode={composerMode}
-            composerModeLabel={composerModeLabel}
-            onComposerModeChange={(mode) => void handleComposerModeChange(mode)}
-            savingComposerMode={savingComposerMode}
-            inputModeControls={inputModeControls}
-            voiceMode={voiceModeEnabled}
+            composerMode={showBacksterComposerOptions ? composerMode : undefined}
+            composerModeLabel={showBacksterComposerOptions ? composerModeLabel : undefined}
+            onComposerModeChange={
+              showBacksterComposerOptions
+                ? (mode) => void handleComposerModeChange(mode)
+                : undefined
+            }
+            savingComposerMode={showBacksterComposerOptions ? savingComposerMode : undefined}
+            inputModeControls={showBacksterComposerOptions ? inputModeControls : undefined}
+            voiceMode={showBacksterComposerOptions ? voiceModeEnabled : false}
             toolIndicators={composerTools}
             toolPins={toolPins}
             onDismissTool={handleDismissTool}
@@ -2042,6 +2077,7 @@ export const ChatView = forwardRef<
             onTriggerGoodNightShortcut={handleTriggerGoodNightShortcut}
             onTriggerLetterShortcut={handleTriggerLetterShortcut}
             onSlashCommandSelect={handleSlashCommandSelect}
+            focusPlaceholder={composerPlaceholder}
           />
         </div>
       </div>
