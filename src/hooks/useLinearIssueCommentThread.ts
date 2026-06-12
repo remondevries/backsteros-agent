@@ -12,6 +12,9 @@ export function useLinearIssueCommentThread(
   issueId: string,
   threadId: string | null,
   enabled = true,
+  options?: {
+    onAgentPollSettled?: () => void;
+  },
 ) {
   const [comments, setComments] = useState<LinearComment[]>([]);
   const [viewerId, setViewerId] = useState<string | null>(null);
@@ -19,6 +22,9 @@ export function useLinearIssueCommentThread(
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollUntilRef = useRef(0);
+  const pollSettledRef = useRef(false);
+  const onAgentPollSettledRef = useRef(options?.onAgentPollSettled);
+  onAgentPollSettledRef.current = options?.onAgentPollSettled;
 
   const refresh = useCallback(async () => {
     if (!enabled || !issueId || !threadId) {
@@ -67,7 +73,14 @@ export function useLinearIssueCommentThread(
     if (!enabled || !issueId || !threadId) return;
 
     const interval = window.setInterval(() => {
-      if (Date.now() > pollUntilRef.current) return;
+      if (Date.now() > pollUntilRef.current) {
+        if (pollUntilRef.current > 0 && !pollSettledRef.current) {
+          pollSettledRef.current = true;
+          onAgentPollSettledRef.current?.();
+        }
+        pollUntilRef.current = 0;
+        return;
+      }
       void refresh();
     }, POLL_INTERVAL_MS);
 
@@ -95,6 +108,7 @@ export function useLinearIssueCommentThread(
         }
 
         pollUntilRef.current = Date.now() + POLL_DURATION_MS;
+        pollSettledRef.current = false;
         await refresh();
         return true;
       } catch {

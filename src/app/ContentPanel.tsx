@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ContentPanelBreadcrumbBar } from "./ContentPanelBreadcrumbBar";
+import { ContentPanelTabsBar } from "./ContentPanelTabsBar";
 import { ContentPanelSidebar } from "./ContentPanelSidebar";
 import { ResizablePanel } from "./ResizablePanel";
 import type { AppView } from "./appViews";
 import { buildContentPanelBreadcrumbSegments } from "./contentPanelBreadcrumbModel";
 import {
+  type ContentPanelTabSnapshot,
   useContentPanelNavigation,
 } from "./contentPanelNavigation";
 import { ContentPanelMainSlot } from "./ContentPanelMainSlot";
@@ -29,8 +31,96 @@ function ContentPanelFrame({
   breadcrumbSegments: ReturnType<typeof buildContentPanelBreadcrumbSegments>;
   children: ReactNode;
 }) {
+  const {
+    sidebarSegments,
+    linearSelection,
+    activeVaultDocument,
+    activeLinearDocument,
+    activeLinearIssue,
+    focusContentSnapshot,
+    linearWorkspaceView,
+    restoreContentPanelTabSnapshot,
+  } = useContentPanelNavigation();
+
+  const captureSnapshot = useCallback((): ContentPanelTabSnapshot => {
+    return {
+      sidebarSegments: sidebarSegments.map((segment) => ({ ...segment })),
+      linearSelection: linearSelection ? { ...linearSelection } : null,
+      activeVaultDocument: activeVaultDocument ? { ...activeVaultDocument } : null,
+      activeLinearDocument: activeLinearDocument ? { ...activeLinearDocument } : null,
+      activeLinearIssue: activeLinearIssue ? { ...activeLinearIssue } : null,
+      focusContentSnapshot: focusContentSnapshot ? { ...focusContentSnapshot } : null,
+      linearWorkspaceView,
+    };
+  }, [
+    activeLinearDocument,
+    activeLinearIssue,
+    activeVaultDocument,
+    focusContentSnapshot,
+    linearSelection,
+    linearWorkspaceView,
+    sidebarSegments,
+  ]);
+
+  const createEmptySnapshot = useCallback(
+    (): ContentPanelTabSnapshot => ({
+      sidebarSegments: [],
+      linearSelection: null,
+      activeVaultDocument: null,
+      activeLinearDocument: null,
+      activeLinearIssue: null,
+      focusContentSnapshot: null,
+      linearWorkspaceView: null,
+    }),
+    [],
+  );
+
+  const [tabs, setTabs] = useState<Array<{ id: string; label: string; snapshot: ContentPanelTabSnapshot }>>(
+    () => [{ id: "content-tab-1", label: "Clients", snapshot: createEmptySnapshot() }],
+  );
+  const [activeTabId, setActiveTabId] = useState<string | null>("content-tab-1");
+  const nextTabNumberRef = useRef(1);
+
+  const handleSelectTab = useCallback((tabId: string) => {
+    if (tabId === activeTabId) return;
+    const nextTab = tabs.find((tab) => tab.id === tabId);
+    if (!nextTab) return;
+    const currentSnapshot = captureSnapshot();
+    setTabs((current) =>
+      current.map((tab) => {
+        if (tab.id === activeTabId) return { ...tab, snapshot: currentSnapshot };
+        return tab;
+      }),
+    );
+    restoreContentPanelTabSnapshot(nextTab.snapshot);
+    setActiveTabId(tabId);
+  }, [activeTabId, captureSnapshot, restoreContentPanelTabSnapshot, tabs]);
+
+  const handleAddTab = useCallback(() => {
+    const currentSnapshot = captureSnapshot();
+    const nextSnapshot = createEmptySnapshot();
+    nextTabNumberRef.current += 1;
+    const number = nextTabNumberRef.current;
+    const tabId = `content-tab-${number}`;
+    const tabLabel = number === 1 ? "Clients" : `Clients ${number}`;
+    setTabs((current) => [
+      ...current.map((tab) =>
+        tab.id === activeTabId ? { ...tab, snapshot: currentSnapshot } : tab,
+      ),
+      { id: tabId, label: tabLabel, snapshot: nextSnapshot },
+    ]);
+    restoreContentPanelTabSnapshot(nextSnapshot);
+    setActiveTabId(tabId);
+  }, [activeTabId, captureSnapshot, createEmptySnapshot, restoreContentPanelTabSnapshot]);
+
   return (
     <div className="content-panel">
+      <ContentPanelTabsBar
+        tabs={tabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+        activeTabId={activeTabId}
+        onSelectTab={handleSelectTab}
+        onAddTab={handleAddTab}
+      />
       <ContentPanelBreadcrumbBar segments={breadcrumbSegments} />
       <div className="content-panel-main">
         {!hideSidebar ? (
@@ -173,7 +263,6 @@ export function ContentPanel({
         settingsOpen={settingsOpen}
         vaultStructureEnabled={vaultExplorerEnabled}
         activeVaultNavItem={activeVaultNavItem}
-        activeView={activeView}
       >
         {children}
       </ContentPanelMainSlot>

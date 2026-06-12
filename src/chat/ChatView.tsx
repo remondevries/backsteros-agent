@@ -139,7 +139,6 @@ import {
   updateSettings,
 } from "../lib/api";
 import { subscribeToRunWithAuth } from "../lib/sse";
-import { setTrafficLightsVisible } from "../lib/traffic-lights";
 
 const EMPTY_TOOLS: ToolSelection = { obsidian: false, linear: false, calendar: false, whoop: false };
 
@@ -821,8 +820,6 @@ export const ChatView = forwardRef<
         getCurrentWindow().onFocusChanged(({ payload: focused }) => {
           if (focused && isActive && !voiceModeFocusGuardRef.current) {
             focusComposer();
-          } else if (!focused) {
-            void setTrafficLightsVisible(false);
           }
         }),
       )

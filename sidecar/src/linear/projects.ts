@@ -43,7 +43,7 @@ const PROJECTS_PAGE_QUERY = `
         priority
         priorityLabel
         startDate
-        issueCount
+        issueCountHistory
         progress
         health
         status {
@@ -71,7 +71,7 @@ const PROJECT_BY_ID_QUERY = `
       priority
       priorityLabel
       startDate
-      issueCount
+      issueCountHistory
       progress
       health
       status {
@@ -117,6 +117,12 @@ function normalizeProjectStatus(
   };
 }
 
+function latestIssueCount(history: number[] | null | undefined): number | undefined {
+  if (!history?.length) return undefined;
+  const count = history[history.length - 1];
+  return Number.isFinite(count) ? Number(count) : undefined;
+}
+
 function normalizeProjectHealth(value: string | null | undefined): LinearProjectHealth | null {
   const health = value?.trim();
   if (health === "onTrack" || health === "atRisk" || health === "offTrack") {
@@ -134,6 +140,7 @@ type GraphqlProjectNode = {
   priorityLabel?: string | null;
   startDate?: string | null;
   issueCount?: number | null;
+  issueCountHistory?: number[] | null;
   progress?: number | null;
   health?: string | null;
   status?: { id?: string; name?: string; type?: string; position?: number } | null;
@@ -152,7 +159,7 @@ function normalizeProjectNode(node: GraphqlProjectNode): LinearProjectSummary | 
     priority: node.priority ?? undefined,
     priorityLabel: node.priorityLabel?.trim() || undefined,
     startDate: node.startDate ?? null,
-    issueCount: Number.isFinite(node.issueCount) ? Number(node.issueCount) : undefined,
+    issueCount: latestIssueCount(node.issueCountHistory),
     progress: Number.isFinite(node.progress) ? Number(node.progress) : undefined,
     health: normalizeProjectHealth(node.health),
     status: normalizeProjectStatus(node.status),

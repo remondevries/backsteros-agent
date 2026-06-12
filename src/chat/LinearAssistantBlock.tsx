@@ -3,6 +3,8 @@ import { ActivityHeader, ActivityStepRow, ActivityTimeline } from "./ActivityTim
 import { LinearBrand } from "./LinearBrand";
 import { MessageActions } from "./MessageActions";
 import { TerminalTypingText } from "./TerminalTypingText";
+import { UpdateConfirmationPresentation } from "./UpdateConfirmationPresentation";
+import { parseUpdateConfirmationToken } from "./updateConfirmation";
 
 const LINEAR_ASSISTANT_ACTIVITY_DURATION_MS = 1000;
 const LINEAR_ASSISTANT_ACTIVITY_STEP_LABEL = "Generate response";
@@ -23,6 +25,7 @@ export function LinearAssistantBlock({
   canSpeak,
   onOpenLinearDashboard,
   onOpenWhoopDashboard,
+  onAgentReplyComplete,
 }: {
   messageId: string;
   text: string;
@@ -31,26 +34,45 @@ export function LinearAssistantBlock({
   canSpeak?: boolean;
   onOpenLinearDashboard?: () => void;
   onOpenWhoopDashboard?: () => void;
+  onAgentReplyComplete?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [typingComplete, setTypingComplete] = useState(!animate);
+  const updateConfirmation = parseUpdateConfirmationToken(text);
+
+  const handleTypingComplete = () => {
+    setTypingComplete(true);
+    onAgentReplyComplete?.();
+  };
 
   return (
     <div className="run-block">
       <LinearBrandHeader />
       <div className="run-text-block">
-        <TerminalTypingText
-          key={messageId}
-          text={text}
-          running={false}
-          startedAt={sentAt}
-          animate={animate}
-          onTypingComplete={() => {
-            setTypingComplete(true);
-          }}
-          onOpenLinearDashboard={onOpenLinearDashboard}
-          onOpenWhoopDashboard={onOpenWhoopDashboard}
-        />
+        {updateConfirmation ? (
+          <UpdateConfirmationPresentation
+            what={updateConfirmation.what}
+            where={updateConfirmation.where}
+            message={updateConfirmation.message}
+            running={false}
+            startedAt={sentAt}
+            animate={animate}
+            onTypingComplete={handleTypingComplete}
+            onOpenLinearDashboard={onOpenLinearDashboard}
+            onOpenWhoopDashboard={onOpenWhoopDashboard}
+          />
+        ) : (
+          <TerminalTypingText
+            key={messageId}
+            text={text}
+            running={false}
+            startedAt={sentAt}
+            animate={animate}
+            onTypingComplete={handleTypingComplete}
+            onOpenLinearDashboard={onOpenLinearDashboard}
+            onOpenWhoopDashboard={onOpenWhoopDashboard}
+          />
+        )}
       </div>
       <div className="run-footer">
         <ActivityHeader

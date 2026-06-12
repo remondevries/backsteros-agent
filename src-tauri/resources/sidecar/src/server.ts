@@ -91,7 +91,7 @@ import {
   updateLinearDocument,
 } from "./vault/project-documents.ts";
 import { readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
-import { fetchLinearIssueDetail } from "./linear/issue-detail.ts";
+import { fetchLinearIssueDetail, updateLinearIssueDetail } from "./linear/issue-detail.ts";
 import {
   createLinearAgentThread,
   createLinearIssueComment,
@@ -546,6 +546,93 @@ app.get("/linear/issues/:issueId", async (c) => {
     return c.json({ issue });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load issue";
+    return c.json({ error: message, issue: null }, 500);
+  }
+});
+
+app.patch("/linear/issues/:issueId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        issue: null,
+      },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required", issue: null }, 400);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    stateId?: unknown;
+    priority?: unknown;
+    estimate?: unknown;
+    labelIds?: unknown;
+    description?: unknown;
+  };
+  const updates: {
+    stateId?: string;
+    priority?: number;
+    estimate?: number | null;
+    labelIds?: string[];
+    description?: string | null;
+  } = {};
+
+  if ("stateId" in body) {
+    if (typeof body.stateId !== "string" || !body.stateId.trim()) {
+      return c.json({ error: "stateId must be a non-empty string", issue: null }, 400);
+    }
+    updates.stateId = body.stateId.trim();
+  }
+
+  if ("priority" in body) {
+    if (typeof body.priority !== "number" || !Number.isFinite(body.priority)) {
+      return c.json({ error: "priority must be a number", issue: null }, 400);
+    }
+    updates.priority = Math.round(body.priority);
+  }
+
+  if ("estimate" in body) {
+    if (body.estimate !== null && (typeof body.estimate !== "number" || !Number.isFinite(body.estimate))) {
+      return c.json({ error: "estimate must be a number or null", issue: null }, 400);
+    }
+    updates.estimate = body.estimate === null ? null : Math.round(body.estimate);
+  }
+
+  if ("labelIds" in body) {
+    if (!Array.isArray(body.labelIds) || body.labelIds.some((labelId) => typeof labelId !== "string")) {
+      return c.json({ error: "labelIds must be an array of strings", issue: null }, 400);
+    }
+    updates.labelIds = Array.from(
+      new Set(body.labelIds.map((labelId) => labelId.trim()).filter((labelId) => labelId.length > 0)),
+    );
+  }
+
+  if ("description" in body) {
+    if (body.description !== null && typeof body.description !== "string") {
+      return c.json({ error: "description must be a string or null", issue: null }, 400);
+    }
+    updates.description = body.description;
+  }
+
+  if (!Object.keys(updates).length) {
+    return c.json(
+      { error: "stateId, priority, estimate, labelIds, or description is required", issue: null },
+      400,
+    );
+  }
+
+  try {
+    const issue = await updateLinearIssueDetail(issueId, updates);
+    if (!issue) {
+      return c.json({ error: "Issue not found", issue: null }, 404);
+    }
+    return c.json({ issue });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update issue";
     return c.json({ error: message, issue: null }, 500);
   }
 });

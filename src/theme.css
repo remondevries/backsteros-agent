@@ -107,6 +107,23 @@
   --gemini-logo-primary: #ffffff;
   --gemini-logo-secondary: #000000;
 
+  --cursor-logo-primary: #edecec;
+
+  --linear-issue-details-card-bg: #171718;
+  --linear-issue-details-card-border: #262629;
+
+  --searchable-dropdown-bg: #171718;
+  --searchable-dropdown-border: #1e1e20;
+
+  --linear-project-view-tab-bg: transparent;
+  --linear-project-view-tab-border: #2e2e2f;
+  --linear-project-view-tab-text: #949496;
+  --linear-project-view-tab-hover-border: #353536;
+  --linear-project-view-tab-hover-text: #ffffff;
+  --linear-project-view-tab-active-bg: #202021;
+  --linear-project-view-tab-active-border: #353536;
+  --linear-project-view-tab-active-text: #ffffff;
+
   --update-confirmation-check-color: #4ade80;
 
   --automation-composer-border: #4ade80;
@@ -228,6 +245,27 @@
 
     --gemini-logo-primary: #000000;
     --gemini-logo-secondary: #ffffff;
+
+    --cursor-logo-primary: #26251e;
+
+    --linear-issue-details-card-bg: var(--bg-surface-2);
+    --linear-issue-details-card-border: var(--border-subtle);
+
+    --searchable-dropdown-bg: var(--bg-elevated, var(--bg-surface));
+    --searchable-dropdown-border: var(--border-subtle);
+
+    --linear-project-view-tab-bg: transparent;
+    --linear-project-view-tab-border: var(--chrome-border);
+    --linear-project-view-tab-text: var(--text-subtle);
+    --linear-project-view-tab-hover-border: var(--border-hover);
+    --linear-project-view-tab-hover-text: var(--text-muted);
+    --linear-project-view-tab-active-bg: var(--bg-surface-3);
+    --linear-project-view-tab-active-border: color-mix(
+      in srgb,
+      var(--bg-surface-3) 70%,
+      var(--border-hover)
+    );
+    --linear-project-view-tab-active-text: var(--text-primary);
 
     --update-confirmation-check-color: #16a34a;
 

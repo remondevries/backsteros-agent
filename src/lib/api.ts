@@ -646,17 +646,50 @@ export type LinearIssueDetail = {
   description: string | null;
   url: string;
   status: string;
+  stateId: string | null;
   stateType?: string;
+  statusColor?: string;
   priority: number;
   priorityLabel: string;
   assigneeName: string | null;
+  assigneeUsername: string | null;
+  assigneeAvatarUrl: string | null;
   dueDate: string | null;
+  estimate: number | null;
+  branchName: string | null;
+  projectId: string | null;
   projectName: string | null;
+  labels: { id: string; name: string; color: string }[];
+  availableLabels: { id: string; name: string; color: string }[];
+  workflowStates: { id: string; name: string; type: string }[];
+  teamEstimation: {
+    issueEstimationType: string;
+    issueEstimationAllowZero: boolean;
+    issueEstimationExtended: boolean;
+  } | null;
 };
 
 export async function fetchLinearIssueDetail(issueId: string) {
   return request<{ issue: LinearIssueDetail | null; error?: string }>(
     `/linear/issues/${encodeURIComponent(issueId)}`,
+  );
+}
+
+export type LinearIssueDetailUpdates = {
+  stateId?: string;
+  priority?: number;
+  estimate?: number | null;
+  labelIds?: string[];
+  description?: string | null;
+};
+
+export async function updateLinearIssueDetail(issueId: string, updates: LinearIssueDetailUpdates) {
+  return request<{ issue: LinearIssueDetail | null; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    },
   );
 }
 

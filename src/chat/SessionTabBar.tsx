@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { scheduleHideTrafficLights, showTrafficLights } from "../lib/traffic-lights";
 
 type SessionTabBarProps = {
   tabs: Array<{ sessionId: string; title: string }>;
@@ -116,8 +115,6 @@ export function SessionTabBar({
       <div
         className="chat-header-traffic-hover"
         data-tauri-drag-region={false}
-        onMouseEnter={showTrafficLights}
-        onMouseLeave={scheduleHideTrafficLights}
       />
       <div className="session-chrome-drag" data-tauri-drag-region />
       {showTabStrip && (

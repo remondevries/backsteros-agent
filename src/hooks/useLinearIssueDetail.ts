@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchLinearIssueDetail, type LinearIssueDetail } from "../lib/api";
+import {
+  fetchLinearIssueDetail,
+  updateLinearIssueDetail as patchLinearIssueDetail,
+  type LinearIssueDetail,
+  type LinearIssueDetailUpdates,
+} from "../lib/api";
 
 export function useLinearIssueDetail(issueId: string, enabled = true) {
   const [issue, setIssue] = useState<LinearIssueDetail | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [refreshing, setRefreshing] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,9 +42,12 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
     };
   }, [enabled, issueId]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!enabled || !issueId) return;
-    setRefreshing(true);
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setRefreshing(true);
+    }
     setError(null);
     try {
       const result = await fetchLinearIssueDetail(issueId);
@@ -50,9 +59,32 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
         setError(null);
       }
     } finally {
-      setRefreshing(false);
+      if (!silent) {
+        setRefreshing(false);
+      }
     }
   }, [enabled, issueId]);
 
-  return { issue, loading, refreshing, error, refresh };
+  const updateIssue = useCallback(
+    async (updates: LinearIssueDetailUpdates): Promise<string | null> => {
+      if (!enabled || !issueId) return "Issue updates are disabled.";
+      setUpdating(true);
+      setError(null);
+      try {
+        const result = await patchLinearIssueDetail(issueId, updates);
+        if (result.error || !result.issue) {
+          const message = result.error ?? "Failed to update issue.";
+          setError(message);
+          return message;
+        }
+        setIssue(result.issue);
+        return null;
+      } finally {
+        setUpdating(false);
+      }
+    },
+    [enabled, issueId],
+  );
+
+  return { issue, loading, refreshing, updating, error, refresh, updateIssue };
 }

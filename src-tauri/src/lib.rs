@@ -53,7 +53,7 @@ pub fn run() {
                 let _ = window.set_theme(None);
                 let _ = window.show();
                 let _ = window.set_focus();
-                let _ = traffic_lights::set_visible(&window, false);
+                let _ = traffic_lights::set_visible(&window, true);
             }
 
             Ok(())

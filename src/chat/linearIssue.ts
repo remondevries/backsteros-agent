@@ -89,3 +89,31 @@ export function formatLinearDueDate(value?: string): string | null {
     year: parsed.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
   });
 }
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function formatLinearIssueDueDate(value?: string | null): string | null {
+  if (!value?.trim()) return null;
+
+  const parsed = startOfLocalDay(new Date(`${value.trim()}T12:00:00`));
+  if (Number.isNaN(parsed.getTime())) {
+    return formatLinearDueDate(value);
+  }
+
+  const today = startOfLocalDay(new Date());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (parsed.getTime() === today.getTime()) return "Today";
+  if (parsed.getTime() === tomorrow.getTime()) return "Tomorrow";
+
+  return formatLinearDueDate(value);
+}
+
+export function formatLinearEstimateLabel(estimate: number | null | undefined): string | null {
+  if (estimate == null || !Number.isFinite(estimate) || estimate <= 0) return null;
+  const rounded = Math.round(estimate);
+  return rounded === 1 ? "1 Point" : `${rounded} Points`;
+}

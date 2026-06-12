@@ -6,6 +6,8 @@ import type { AppView } from "../appViews";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { LinearIssueThreadChat } from "./LinearIssueThreadChat";
 import { LinearIssueThreadList } from "./LinearIssueThreadList";
+import { RightPanelChatHeader } from "../RightPanelChatHeader";
+import { getRightPanelAgentLabel } from "../rightPanelAgents";
 import { ThreadHistoryIcon } from "./ThreadHistoryIcon";
 import { ThreadPlusIcon } from "./ThreadPlusIcon";
 
@@ -126,33 +128,34 @@ export function LinearIssueAgentPanel({
 
   return (
     <div className="right-side-panel-chat">
-      <header className="right-side-panel-chat-header">
-        <div className="right-side-panel-chat-header-text">
-          <h2 className="right-side-panel-chat-title">Linear agent</h2>
-        </div>
-        <div className="right-side-panel-chat-header-actions">
-          <button
-            type="button"
-            className={`linear-thread-header-button${panelMode === "threads" ? " linear-thread-header-button-active" : ""}`}
-            onClick={handleToggleHistory}
-            aria-label={panelMode === "threads" ? "Back to thread chat" : "Show thread history"}
-            aria-pressed={panelMode === "threads"}
-            title={panelMode === "threads" ? "Back to chat" : "Thread history"}
-          >
-            <ThreadHistoryIcon />
-          </button>
-          <button
-            type="button"
-            className="linear-thread-header-button"
-            onClick={() => void handleCreateThread()}
-            disabled={creatingThread}
-            aria-label="Start new thread"
-            title="New thread"
-          >
-            <ThreadPlusIcon />
-          </button>
-        </div>
-      </header>
+      <RightPanelChatHeader
+        title={getRightPanelAgentLabel("linear")}
+        agentId="linear"
+        actions={
+          <>
+            <button
+              type="button"
+              className={`linear-thread-header-button${panelMode === "threads" ? " linear-thread-header-button-active" : ""}`}
+              onClick={handleToggleHistory}
+              aria-label={panelMode === "threads" ? "Back to thread chat" : "Show thread history"}
+              aria-pressed={panelMode === "threads"}
+              title={panelMode === "threads" ? "Back to chat" : "Thread history"}
+            >
+              <ThreadHistoryIcon />
+            </button>
+            <button
+              type="button"
+              className="linear-thread-header-button"
+              onClick={() => void handleCreateThread()}
+              disabled={creatingThread}
+              aria-label="Start new thread"
+              title="New thread"
+            >
+              <ThreadPlusIcon />
+            </button>
+          </>
+        }
+      />
       <div className="right-side-panel-chat-body">
         {actionError ? <p className="linear-thread-list-status linear-thread-list-status-error">{actionError}</p> : null}
         {panelMode === "threads" ? (

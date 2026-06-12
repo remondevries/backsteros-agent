@@ -11,6 +11,7 @@ import {
 } from "../lib/chatFocusContext";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
 import { LinearIssueAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
+import { RightPanelChatHeader } from "./RightPanelChatHeader";
 import {
   panelChatComposerVariant,
   resolveRightPanelAgent,
@@ -116,14 +117,11 @@ export function RightPanelChatSlot({
   if (resolvedAgent.active === "cursor" || resolvedAgent.active === "linear") {
     return (
       <div className="right-side-panel-chat">
-        <header className="right-side-panel-chat-header">
-          <div className="right-side-panel-chat-header-text">
-            <h2 className="right-side-panel-chat-title">{resolvedAgent.label}</h2>
-            {headerSubtitle ? (
-              <p className="right-side-panel-chat-subtitle">{headerSubtitle}</p>
-            ) : null}
-          </div>
-        </header>
+        <RightPanelChatHeader
+          title={resolvedAgent.label}
+          agentId={resolvedAgent.active}
+          subtitle={headerSubtitle}
+        />
         <div className="right-side-panel-chat-body">
           <ChatView
             sessionId={session.sessionId}
@@ -149,9 +147,7 @@ export function RightPanelChatSlot({
 
   return (
     <div className="right-side-panel-chat">
-      <header className="right-side-panel-chat-header">
-        <h2 className="right-side-panel-chat-title">{resolvedAgent.label}</h2>
-      </header>
+      <RightPanelChatHeader title={resolvedAgent.label} agentId={resolvedAgent.active} />
       <div className="right-side-panel-chat-body">
         <p className="right-side-panel-empty">This agent is not available yet.</p>
       </div>

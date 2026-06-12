@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -64,6 +65,16 @@ export type ContentPanelBarState = {
   onRefresh: (() => void) | null;
 };
 
+export type ContentPanelTabSnapshot = {
+  sidebarSegments: ContentPanelBreadcrumbSegment[];
+  linearSelection: LinearWorkspaceSelection | null;
+  activeVaultDocument: ActiveVaultDocument | null;
+  activeLinearDocument: ActiveLinearDocument | null;
+  activeLinearIssue: ActiveLinearIssue | null;
+  focusContentSnapshot: FocusContentSnapshot | null;
+  linearWorkspaceView: LinearWorkspaceViewId | null;
+};
+
 type ContentPanelNavigationContextValue = {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   setSidebarSegments: (segments: ContentPanelBreadcrumbSegment[]) => void;
@@ -92,6 +103,10 @@ type ContentPanelNavigationContextValue = {
   setLinearWorkspaceView: (view: LinearWorkspaceViewId | null) => void;
   contentPanelBarState: ContentPanelBarState | null;
   setContentPanelBarState: (state: ContentPanelBarState | null) => void;
+  restoreContentPanelTabSnapshot: (snapshot: ContentPanelTabSnapshot) => void;
+  linearIssueRefreshNonce: number;
+  requestLinearIssueRefresh: () => void;
+  resetProjectsOverview: () => void;
 };
 
 const ContentPanelNavigationContext = createContext<ContentPanelNavigationContextValue | null>(
@@ -121,12 +136,18 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   const [contentPanelBarState, setContentPanelBarStateState] = useState<ContentPanelBarState | null>(
     null,
   );
+  const [linearIssueRefreshNonce, setLinearIssueRefreshNonce] = useState(0);
+  const skipSelectionResetRef = useRef(false);
 
   const linearSelectionKey = linearSelection
     ? `${linearSelection.kind}:${linearSelection.id}`
     : null;
 
   useEffect(() => {
+    if (skipSelectionResetRef.current) {
+      skipSelectionResetRef.current = false;
+      return;
+    }
     setActiveVaultDocumentState(null);
     setActiveLinearDocumentState(null);
     setActiveLinearIssueState(null);
@@ -218,6 +239,43 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setContentPanelBarStateState(state);
   }, []);
 
+  const restoreContentPanelTabSnapshot = useCallback((snapshot: ContentPanelTabSnapshot) => {
+    const currentSelectionKey = linearSelection
+      ? `${linearSelection.kind}:${linearSelection.id}`
+      : null;
+    const nextSelectionKey = snapshot.linearSelection
+      ? `${snapshot.linearSelection.kind}:${snapshot.linearSelection.id}`
+      : null;
+    skipSelectionResetRef.current = currentSelectionKey !== nextSelectionKey;
+    setSidebarSegmentsState(snapshot.sidebarSegments);
+    setLinearSelectionState(snapshot.linearSelection);
+    setActiveVaultDocumentState(snapshot.activeVaultDocument);
+    setActiveLinearDocumentState(snapshot.activeLinearDocument);
+    setActiveLinearIssueState(snapshot.activeLinearIssue);
+    setFocusContentSnapshotState(snapshot.focusContentSnapshot);
+    setLinearWorkspaceViewState(snapshot.linearWorkspaceView);
+    setContentPanelBarStateState(null);
+  }, [linearSelection]);
+
+  const requestLinearIssueRefresh = useCallback(() => {
+    setLinearIssueRefreshNonce((current) => current + 1);
+  }, []);
+
+  const resetProjectsOverview = useCallback(() => {
+    setLinearSelectionState(null);
+    setActiveLinearDocumentState(null);
+    setActiveLinearIssueState(null);
+    setFocusContentSnapshotState((current) =>
+      current?.kind === "linear_issue" ||
+      current?.kind === "linear_document" ||
+      current?.kind === "linear_workspace"
+        ? null
+        : current,
+    );
+    setLinearWorkspaceViewState(null);
+    setContentPanelBarStateState(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       sidebarSegments,
@@ -242,6 +300,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setLinearWorkspaceView,
       contentPanelBarState,
       setContentPanelBarState,
+      restoreContentPanelTabSnapshot,
+      linearIssueRefreshNonce,
+      requestLinearIssueRefresh,
+      resetProjectsOverview,
     }),
     [
       activeLinearDocument,
@@ -252,8 +314,12 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       clearActiveVaultDocument,
       contentPanelBarState,
       focusContentSnapshot,
+      linearIssueRefreshNonce,
       linearSelection,
       linearWorkspaceView,
+      requestLinearIssueRefresh,
+      resetProjectsOverview,
+      restoreContentPanelTabSnapshot,
       setActiveLinearDocument,
       setActiveLinearIssue,
       setActiveVaultDocument,

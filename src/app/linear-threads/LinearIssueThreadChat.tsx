@@ -4,10 +4,12 @@ import { Composer, type ComposerHandle } from "../../chat/Composer";
 import { ComposerContextCard } from "../../chat/ComposerContextCard";
 import { LinearAssistantBlock } from "../../chat/LinearAssistantBlock";
 import type { ComposerContextItem } from "../../lib/chatFocusContext";
+import { shouldRefreshLinearIssueFromAgentReply } from "../../lib/linearIssueAgentRefresh";
 import { useLinearIssueCommentThread } from "../../hooks/useLinearIssueCommentThread";
 import { useTts } from "../../hooks/useTts";
 import type { ChatMessage } from "../../chat/types";
 import type { AppView } from "../appViews";
+import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { linearCommentToChatMessage } from "./linearThreadFormat";
 
 const noop = () => undefined;
@@ -23,8 +25,22 @@ export function LinearIssueThreadChat({
   composerContextItems?: ComposerContextItem[];
   onNavigateToView?: (view: AppView) => void;
 }) {
+  const { requestLinearIssueRefresh } = useContentPanelNavigation();
+  const awaitingAgentRef = useRef<{
+    assistantIds: Set<string>;
+    refreshedMessageIds: Set<string>;
+  } | null>(null);
+
+  const handleAgentPollSettled = useCallback(() => {
+    if (!awaitingAgentRef.current) return;
+    requestLinearIssueRefresh();
+    awaitingAgentRef.current = null;
+  }, [requestLinearIssueRefresh]);
+
   const { comments, viewerId, loading, sending, error, sendReply } =
-    useLinearIssueCommentThread(issueId, threadId);
+    useLinearIssueCommentThread(issueId, threadId, true, {
+      onAgentPollSettled: handleAgentPollSettled,
+    });
   const { supported: ttsSupported } = useTts({ isActive: true });
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -63,12 +79,48 @@ export function LinearIssueThreadChat({
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || sending) return;
+    awaitingAgentRef.current = {
+      assistantIds: new Set(
+        messages.filter((message) => message.role === "assistant").map((message) => message.id),
+      ),
+      refreshedMessageIds: new Set(),
+    };
     const sent = await sendReply(trimmed);
     if (sent) {
       setInput("");
       composerRef.current?.focus();
+      return;
     }
-  }, [input, sendReply, sending]);
+    awaitingAgentRef.current = null;
+  }, [input, messages, sendReply, sending]);
+
+  const maybeRefreshIssueFromAgentReply = useCallback(
+    (message: ChatMessage) => {
+      const pending = awaitingAgentRef.current;
+      if (!pending || message.role !== "assistant") return;
+      if (pending.assistantIds.has(message.id)) return;
+      if (pending.refreshedMessageIds.has(message.id)) return;
+      if (!shouldRefreshLinearIssueFromAgentReply(message.text)) return;
+
+      pending.refreshedMessageIds.add(message.id);
+      requestLinearIssueRefresh();
+    },
+    [requestLinearIssueRefresh],
+  );
+
+  useEffect(() => {
+    const pending = awaitingAgentRef.current;
+    if (!pending) return;
+
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      if (pending.assistantIds.has(message.id)) continue;
+      if (!shouldRefreshLinearIssueFromAgentReply(message.text)) continue;
+      if (pending.refreshedMessageIds.has(message.id)) continue;
+      pending.refreshedMessageIds.add(message.id);
+      requestLinearIssueRefresh();
+    }
+  }, [messages, requestLinearIssueRefresh]);
 
   const openLinearDashboard = useCallback(() => {
     onNavigateToView?.("linear");
@@ -99,6 +151,9 @@ export function LinearIssueThreadChat({
                       canSpeak={ttsSupported && message.text.trim().length > 0}
                       onOpenLinearDashboard={openLinearDashboard}
                       onOpenWhoopDashboard={openWhoopDashboard}
+                      onAgentReplyComplete={() => {
+                        maybeRefreshIssueFromAgentReply(message);
+                      }}
                     />
                   </div>
                 ) : (

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useCallback, useEffect } from "react";
 import { ContentPanel } from "./ContentPanel";
 import { ContentPanelNavigationProvider, useContentPanelNavigation } from "./contentPanelNavigation";
 import { LeftSidePanel } from "./LeftSidePanel";
@@ -10,6 +11,8 @@ import type { ChatMessage, RunViewModel } from "../chat/types";
 import { ResizablePanel } from "./ResizablePanel";
 import { useSidePanelToggleShortcuts } from "../hooks/useSidePanelToggleShortcuts";
 import { useSidePanelToggles } from "../hooks/useSidePanelToggles";
+import { showTrafficLights } from "../lib/traffic-lights";
+import { isTauriRuntime } from "../lib/tauriRuntime";
 
 const LEFT_SIDE_PANEL_WIDTH_KEY = "backsteros.layout.leftPanelWidth";
 const RIGHT_SIDE_PANEL_WIDTH_KEY = "backsteros.layout.rightPanelWidth";
@@ -73,9 +76,19 @@ function AppMainShell({
   toggleRightSidePanel: () => void;
   toggleContentPanelSidebar: () => void;
 }) {
-  const { activeLinearDocument } = useContentPanelNavigation();
+  const { activeLinearDocument, resetProjectsOverview } = useContentPanelNavigation();
   const showContentPanelSidebar =
     contentPanelSidebarOpen && activeLinearDocument === null;
+
+  const handleVaultNavItemChange = useCallback(
+    (item: SidebarNavItemId | null) => {
+      if (item === "projects") {
+        resetProjectsOverview();
+      }
+      onVaultNavItemChange(item);
+    },
+    [onVaultNavItemChange, resetProjectsOverview],
+  );
 
   useSidePanelToggleShortcuts({
     enabled: !settingsOpen,
@@ -84,8 +97,17 @@ function AppMainShell({
     onToggleContentPanelSidebar: toggleContentPanelSidebar,
   });
 
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    showTrafficLights();
+  }, []);
+
   return (
     <div className="app-main-shell">
+      <div className="app-window-chrome" aria-hidden="true">
+        <div className="app-window-traffic-safe" data-tauri-drag-region={false} />
+        <div className="app-window-drag" data-tauri-drag-region />
+      </div>
       <ResizablePanel
         side="left"
         className="app-resizable-panel-outer"
@@ -106,14 +128,14 @@ function AppMainShell({
           onExitSettings={onExitSettings}
           savedNotesPath={savedNotesPath}
           activeVaultNavItem={activeVaultNavItem}
-          onVaultNavItemChange={onVaultNavItemChange}
+          onVaultNavItemChange={handleVaultNavItemChange}
         />
       </ResizablePanel>
 
       <div className="content-panel-slot">
         <ContentPanel
           sidebarOpen={showContentPanelSidebar}
-          hideSidebar={settingsOpen}
+          hideSidebar={settingsOpen || activeVaultNavItem === "projects"}
           activeVaultNavItem={activeVaultNavItem}
           vaultExplorerEnabled={vaultExplorerEnabled}
           settingsOpen={settingsOpen}

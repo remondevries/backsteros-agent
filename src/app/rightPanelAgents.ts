@@ -32,7 +32,7 @@ export type ResolvedRightPanelAgent = {
 
 const AGENT_LABELS: Record<RightPanelAgentId, string> = {
   cursor: "Cursor agent",
-  linear: "Linear agent",
+  linear: "Linear",
 };
 
 /** Agents with a dedicated chat implementation in the right panel. */
