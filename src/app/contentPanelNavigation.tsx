@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 
 export type ContentPanelBreadcrumbSegment = {
   id: string;
@@ -17,27 +18,50 @@ export type ContentPanelBreadcrumbSegment = {
 type ContentPanelNavigationContextValue = {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   setSidebarSegments: (segments: ContentPanelBreadcrumbSegment[]) => void;
+  linearSelection: LinearWorkspaceSelection | null;
+  setLinearSelection: (selection: LinearWorkspaceSelection | null) => void;
 };
 
 const ContentPanelNavigationContext = createContext<ContentPanelNavigationContextValue | null>(
   null,
 );
 
-export function ContentPanelNavigationProvider({ children }: { children: ReactNode }) {
+export function ContentPanelNavigationProvider({
+  children,
+  projectsNavActive,
+}: {
+  children: ReactNode;
+  projectsNavActive: boolean;
+}) {
   const [sidebarSegments, setSidebarSegmentsState] = useState<ContentPanelBreadcrumbSegment[]>(
     [],
+  );
+  const [linearSelection, setLinearSelectionState] = useState<LinearWorkspaceSelection | null>(
+    null,
   );
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
     setSidebarSegmentsState(segments);
   }, []);
 
+  const setLinearSelection = useCallback((selection: LinearWorkspaceSelection | null) => {
+    setLinearSelectionState(selection);
+  }, []);
+
+  useEffect(() => {
+    if (!projectsNavActive) {
+      setLinearSelectionState(null);
+    }
+  }, [projectsNavActive]);
+
   const value = useMemo(
     () => ({
       sidebarSegments,
       setSidebarSegments,
+      linearSelection,
+      setLinearSelection,
     }),
-    [sidebarSegments, setSidebarSegments],
+    [linearSelection, setLinearSelection, sidebarSegments, setSidebarSegments],
   );
 
   return (

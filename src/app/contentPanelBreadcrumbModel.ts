@@ -5,6 +5,8 @@ import {
   mergeContentPanelBreadcrumbs,
   type ContentPanelBreadcrumbSegment,
 } from "./contentPanelNavigation";
+import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
+import { linearWorkspaceSelectionId } from "./linearWorkspaceSelection";
 
 export function buildContentPanelBreadcrumbSegments(options: {
   settingsOpen: boolean;
@@ -13,6 +15,7 @@ export function buildContentPanelBreadcrumbSegments(options: {
   activeView: AppView;
   activeSessionTitle?: string | null;
   sidebarSegments: ContentPanelBreadcrumbSegment[];
+  linearSelection?: LinearWorkspaceSelection | null;
 }): ContentPanelBreadcrumbSegment[] {
   const {
     settingsOpen,
@@ -21,6 +24,7 @@ export function buildContentPanelBreadcrumbSegments(options: {
     activeView,
     activeSessionTitle,
     sidebarSegments,
+    linearSelection,
   } = options;
 
   if (settingsOpen) {
@@ -38,7 +42,14 @@ export function buildContentPanelBreadcrumbSegments(options: {
   const viewDefinition = APP_VIEWS.find((view) => view.id === activeView);
   const contentSegments: ContentPanelBreadcrumbSegment[] = [];
 
-  if (viewDefinition && (activeView === "chat" || activeView === "lookup")) {
+  if (activeVaultNavItem === "projects") {
+    if (linearSelection) {
+      contentSegments.push({
+        id: linearWorkspaceSelectionId(linearSelection),
+        label: linearSelection.name,
+      });
+    }
+  } else if (viewDefinition && (activeView === "chat" || activeView === "lookup")) {
     contentSegments.push({ id: `view-${activeView}`, label: viewDefinition.label });
     const trimmedTitle = activeSessionTitle?.trim();
     if (trimmedTitle) {

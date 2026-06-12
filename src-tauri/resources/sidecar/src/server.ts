@@ -80,6 +80,7 @@ import {
   respondToPendingDeleteFile,
 } from "./delete-file.ts";
 import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
+import { fetchLinearProjectOverview } from "./linear/project-overview.ts";
 import { fetchLinearTeams } from "./linear/teams.ts";
 import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
 import { dispatchAutomationHandler } from "./automation/registry.ts";
@@ -142,6 +143,7 @@ import {
   listVaultDirectoryEntries,
   VAULT_NAV_FOLDER_NAMES,
 } from "./vault-nav-structure.ts";
+import { ensureLinearWorkspaceVaultStructure } from "./linear-workspace-vault-structure.ts";
 import type { LinearIssueEntity, MarkdownFileEntity, ToolCategory } from "./types.ts";
 import { ensureAgentProfile } from "./context/agent.ts";
 import { ensureUserProfile, loadUserFirstName, loadUserTimezone } from "./context/profile.ts";
@@ -448,9 +450,37 @@ app.get("/linear/teams", async (c) => {
   }
 });
 
+app.get("/linear/projects/:projectId/overview", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        overview: null,
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", overview: null }, 400);
+  }
+
+  try {
+    const overview = await fetchLinearProjectOverview(projectId);
+    if (!overview) {
+      return c.json({ error: "Project not found", overview: null }, 404);
+    }
+    return c.json({ overview });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load project overview";
+    return c.json({ error: message, overview: null }, 500);
+  }
+});
+
 app.get("/linear/projects/:projectId", async (c) => {
-  if (!getLinearApiKey()) {
-    return c.json({ error: "LINEAR_API_KEY is not configured" }, 400);
+  if (!getLinearAuthToken()) {
+    return c.json({ error: "Linear is not connected. Add an API key or connect OAuth in Settings." }, 400);
   }
 
   const projectId = c.req.param("projectId")?.trim();
@@ -999,6 +1029,26 @@ app.put("/settings", async (c) => {
 
 app.get("/vault/folders", (c) => {
   return c.json({ folders: VAULT_NAV_FOLDER_NAMES });
+});
+
+app.post("/vault/linear-workspace-structure", async (c) => {
+  const notesPath = resolveNotesPath();
+  const body = (await c.req.json().catch(() => ({}))) as {
+    teamId?: string | null;
+    projectId?: string | null;
+  };
+
+  try {
+    const created = await ensureLinearWorkspaceVaultStructure(notesPath, {
+      teamId: body.teamId,
+      projectId: body.projectId,
+    });
+    return c.json({ created });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to create Linear workspace folders";
+    return c.json({ error: message, created: [] }, 400);
+  }
 });
 
 app.get("/vault/entries", (c) => {

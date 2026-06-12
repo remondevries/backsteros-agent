@@ -47,7 +47,23 @@ describe("contentPanelBreadcrumbModel", () => {
     ).toEqual([
       { id: "nav-projects", label: "Projects" },
       { id: "linear-view-teams", label: "Teams" },
-      { id: "view-chat", label: "Backster" },
+    ]);
+  });
+
+  test("includes selected linear item in breadcrumbs", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "projects",
+        activeView: "chat",
+        sidebarSegments: [{ id: "linear-view-teams", label: "Teams" }],
+        linearSelection: { kind: "team", id: "team-1", name: "Engineering" },
+      }),
+    ).toEqual([
+      { id: "nav-projects", label: "Projects" },
+      { id: "linear-view-teams", label: "Teams" },
+      { id: "team-team-1", label: "Engineering" },
     ]);
   });
 });

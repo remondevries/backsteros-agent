@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShellLayout } from "./app/AppShellLayout";
+import { LinearWorkspaceContent } from "./app/LinearWorkspaceContent";
 import { CommandPanel } from "./app/CommandPanel";
 import type { AppView } from "./app/appViews";
 import { ChatView, type ChatViewHandle } from "./chat/ChatView";
@@ -594,6 +595,8 @@ export default function App() {
                   void handleSettingsUpdated(path, nextVaultName);
                 }}
               />
+            ) : activeVaultNavItem === "projects" ? (
+              <LinearWorkspaceContent vaultStructureEnabled={vaultExplorerEnabled} />
             ) : (
               <>
               {(appView === "chat" || appView === "lookup") && (

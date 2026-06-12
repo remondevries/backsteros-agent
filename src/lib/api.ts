@@ -467,6 +467,16 @@ export async function listVaultDirectory(path: string) {
   );
 }
 
+export async function ensureLinearWorkspaceVaultStructure(options: {
+  teamId?: string;
+  projectId?: string;
+}) {
+  return request<{ created: string[]; error?: string }>("/vault/linear-workspace-structure", {
+    method: "POST",
+    body: JSON.stringify(options),
+  });
+}
+
 export type ProfileKind = "user" | "agent";
 
 export async function getProfileContent(kind: ProfileKind) {
@@ -522,6 +532,28 @@ export async function fetchLinearProjectsPage(options: {
 export async function fetchLinearProjectById(projectId: string) {
   return request<{ project: LinearProjectSummary }>(
     `/linear/projects/${encodeURIComponent(projectId)}`,
+  );
+}
+
+export type LinearProjectOverview = {
+  id: string;
+  name: string;
+  icon: string | null;
+  state: string;
+  priority: number;
+  priorityLabel: string;
+  startDate: string | null;
+  targetDate: string | null;
+  leadName: string | null;
+  leadAvatarUrl: string | null;
+  summary: string | null;
+  description: string | null;
+  initiativeNames: string[];
+};
+
+export async function fetchLinearProjectOverview(projectId: string) {
+  return request<{ overview: LinearProjectOverview | null; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/overview`,
   );
 }
 

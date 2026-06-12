@@ -4,6 +4,7 @@ import {
 } from "./obsidianUri";
 import {
   isLinearAppUrl,
+  isLinearOAuthUrl,
   isLinearWebUrl,
   resolveLinearOpenUrl,
 } from "./linear/linearLink";
@@ -33,7 +34,11 @@ export async function openLocalFile(path: string): Promise<void> {
 }
 
 export async function openExternalUrl(url: string): Promise<void> {
-  const targetUrl = isLinearWebUrl(url) ? resolveLinearOpenUrl(url) : url;
+  const trimmed = url.trim();
+  const targetUrl =
+    isLinearOAuthUrl(trimmed) || !isLinearWebUrl(trimmed)
+      ? trimmed
+      : resolveLinearOpenUrl(trimmed);
   if (!isOpenableExternalUrl(targetUrl) && !isLinearAppUrl(targetUrl)) return;
 
   try {

@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLinearProjects } from "../hooks/useLinearProjects";
 import { useLinearTeams } from "../hooks/useLinearTeams";
 import { groupLinearProjectsByStatus } from "../lib/linearProjectGroups";
-import { useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
+import { useContentPanelNavigation, useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
 import {
   LinearWorkspaceViewToggle,
   type LinearWorkspaceView,
@@ -13,11 +13,16 @@ function matchesSearch(value: string, query: string) {
 }
 
 export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
+  const { linearSelection, setLinearSelection } = useContentPanelNavigation();
   const [view, setView] = useState<LinearWorkspaceView>("teams");
   const [search, setSearch] = useState("");
   const teamsQuery = useLinearTeams(enabled && view === "teams");
   const projectsQuery = useLinearProjects(enabled && view === "projects");
   const normalizedSearch = search.trim().toLowerCase();
+
+  useEffect(() => {
+    setLinearSelection(null);
+  }, [setLinearSelection, view]);
 
   useContentPanelSidebarBreadcrumbs(
     useMemo(
@@ -92,13 +97,30 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
             {!teamsQuery.loading && !teamsQuery.error ? (
               filteredTeams.length > 0 ? (
                 <ul className="vault-folder-explorer-list" aria-label="Linear teams">
-                  {filteredTeams.map((team) => (
-                    <li key={team.id} className="vault-folder-explorer-item">
-                      <div className="vault-folder-explorer-entry vault-folder-explorer-entry-file">
-                        <span className="vault-folder-explorer-entry-name">{team.name}</span>
-                      </div>
-                    </li>
-                  ))}
+                  {filteredTeams.map((team) => {
+                    const selected =
+                      linearSelection?.kind === "team" && linearSelection.id === team.id;
+                    return (
+                      <li key={team.id} className="vault-folder-explorer-item">
+                        <button
+                          type="button"
+                          className={[
+                            "vault-folder-explorer-entry",
+                            "vault-folder-explorer-entry-selectable",
+                            selected ? "vault-folder-explorer-entry-selected" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          aria-current={selected ? "page" : undefined}
+                          onClick={() =>
+                            setLinearSelection({ kind: "team", id: team.id, name: team.name })
+                          }
+                        >
+                          <span className="vault-folder-explorer-entry-name">{team.name}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="vault-folder-explorer-status">
@@ -135,13 +157,37 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                         {group.label}
                       </h3>
                       <ul className="vault-folder-explorer-list">
-                        {group.projects.map((project) => (
-                          <li key={project.id} className="vault-folder-explorer-item">
-                            <div className="vault-folder-explorer-entry vault-folder-explorer-entry-file">
-                              <span className="vault-folder-explorer-entry-name">{project.name}</span>
-                            </div>
-                          </li>
-                        ))}
+                        {group.projects.map((project) => {
+                          const selected =
+                            linearSelection?.kind === "project" &&
+                            linearSelection.id === project.id;
+                          return (
+                            <li key={project.id} className="vault-folder-explorer-item">
+                              <button
+                                type="button"
+                                className={[
+                                  "vault-folder-explorer-entry",
+                                  "vault-folder-explorer-entry-selectable",
+                                  selected ? "vault-folder-explorer-entry-selected" : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
+                                aria-current={selected ? "page" : undefined}
+                                onClick={() =>
+                                  setLinearSelection({
+                                    kind: "project",
+                                    id: project.id,
+                                    name: project.name,
+                                  })
+                                }
+                              >
+                                <span className="vault-folder-explorer-entry-name">
+                                  {project.name}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </section>
                   ))}

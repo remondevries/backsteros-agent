@@ -104,49 +104,6 @@ export function LinearIntegrationSection({
   const credentialsTestEnabled =
     !oauthBusy && (canTestCredentialDraft || showSavedCredentialActions);
 
-  useEffect(() => {
-    // #region agent log
-    fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "556676" },
-      body: JSON.stringify({
-        sessionId: "556676",
-        runId: "pre-fix",
-        hypothesisId: "A-B-C",
-        location: "LinearIntegrationSection.tsx:connectButtonState",
-        message: "Connect button gate state",
-        data: {
-          connectButtonDisabled,
-          oauthBusy,
-          credentialsStepComplete,
-          oauthFullyConnected,
-          credentialsConfigured,
-          hasCredentialDraft,
-          showSavedCredentialActions,
-          credentialsTestOk: credentialsTestResult?.ok ?? null,
-          linearOAuthStatus: linearOAuth
-            ? {
-                credentialsConfigured: linearOAuth.credentialsConfigured,
-                authenticated: linearOAuth.authenticated,
-              }
-            : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [
-    connectButtonDisabled,
-    oauthBusy,
-    credentialsStepComplete,
-    oauthFullyConnected,
-    credentialsConfigured,
-    hasCredentialDraft,
-    showSavedCredentialActions,
-    credentialsTestResult?.ok,
-    linearOAuth,
-  ]);
-
   function resetCredentialsTest() {
     setCredentialsTestResult(undefined);
   }
@@ -167,21 +124,6 @@ export function LinearIntegrationSection({
   }
 
   async function startBrowserConnect() {
-    // #region agent log
-    fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "556676" },
-      body: JSON.stringify({
-        sessionId: "556676",
-        runId: "pre-fix",
-        hypothesisId: "E",
-        location: "LinearIntegrationSection.tsx:startBrowserConnect",
-        message: "Connect handler invoked",
-        data: { connectButtonDisabled },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     setConnecting(true);
     setOauthError(null);
     setOauthMessage(null);
@@ -195,23 +137,7 @@ export function LinearIntegrationSection({
         setOauthMessage(result.message);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to start Linear sign-in";
-      // #region agent log
-      fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "556676" },
-        body: JSON.stringify({
-          sessionId: "556676",
-          runId: "pre-fix",
-          hypothesisId: "E",
-          location: "LinearIntegrationSection.tsx:startBrowserConnect:catch",
-          message: "Connect handler failed",
-          data: { errorMessage },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      setOauthError(errorMessage);
+      setOauthError(err instanceof Error ? err.message : "Failed to start Linear sign-in");
     } finally {
       setConnecting(false);
     }
@@ -252,24 +178,6 @@ export function LinearIntegrationSection({
         await restartSidecarIfNeeded();
         await onSecretsUpdated?.();
         setOauthMessage("Linear OAuth credentials saved.");
-        // #region agent log
-        fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "556676" },
-          body: JSON.stringify({
-            sessionId: "556676",
-            runId: "post-fix-v2",
-            hypothesisId: "F",
-            location: "LinearIntegrationSection.tsx:handleTestCredentials:afterSave",
-            message: "Credentials saved after test",
-            data: {
-              credentialsConfigured: next.linear.credentialsConfigured,
-              clientIdConfigured: next.linear.clientId.configured,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
       }
 
       setCredentialsTestResult(result);
@@ -297,24 +205,6 @@ export function LinearIntegrationSection({
       setClientSecretDraft("");
       setOauthMessage("Linear OAuth credentials saved.");
       setCredentialsTestResult({ ok: true, message: "Saved." });
-      // #region agent log
-      fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "556676" },
-        body: JSON.stringify({
-          sessionId: "556676",
-          runId: "post-fix-v3",
-          hypothesisId: "G",
-          location: "LinearIntegrationSection.tsx:handleSaveCredentials:afterSave",
-          message: "Save credentials API response",
-          data: {
-            credentialsConfigured: next.linear.credentialsConfigured,
-            clientIdConfigured: next.linear.clientId.configured,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
     } catch (err) {
       setOauthError(err instanceof Error ? err.message : "Failed to save OAuth credentials");
     } finally {
@@ -503,28 +393,6 @@ export function LinearIntegrationSection({
               type="button"
               className="btn-primary"
               disabled={connectButtonDisabled}
-              onPointerDown={(event) => {
-                // #region agent log
-                fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "556676" },
-                  body: JSON.stringify({
-                    sessionId: "556676",
-                    runId: "post-fix-v2",
-                    hypothesisId: "F",
-                    location: "LinearIntegrationSection.tsx:connectButton:pointerDown",
-                    message: "Connect button pointer down",
-                    data: {
-                      connectButtonDisabled,
-                      credentialsStepComplete,
-                      buttonDisabled: (event.currentTarget as HTMLButtonElement).disabled,
-                      pointerType: event.pointerType,
-                    },
-                    timestamp: Date.now(),
-                  }),
-                }).catch(() => {});
-                // #endregion
-              }}
               onClick={() => {
                 void startBrowserConnect();
               }}

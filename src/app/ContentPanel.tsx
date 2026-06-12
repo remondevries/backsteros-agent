@@ -79,7 +79,7 @@ function ContentPanelWithBreadcrumbs({
   activeSessionTitle?: string | null;
   children: ReactNode;
 }) {
-  const { sidebarSegments } = useContentPanelNavigation();
+  const { sidebarSegments, linearSelection } = useContentPanelNavigation();
   const breadcrumbSegments = useMemo(
     () =>
       buildContentPanelBreadcrumbSegments({
@@ -89,12 +89,14 @@ function ContentPanelWithBreadcrumbs({
         activeView,
         activeSessionTitle,
         sidebarSegments,
+        linearSelection,
       }),
     [
       activeSessionTitle,
       activeSettingsTab,
       activeVaultNavItem,
       activeView,
+      linearSelection,
       settingsOpen,
       sidebarSegments,
     ],
@@ -135,7 +137,7 @@ export function ContentPanel({
   children: ReactNode;
 }) {
   return (
-    <ContentPanelNavigationProvider>
+    <ContentPanelNavigationProvider projectsNavActive={activeVaultNavItem === "projects"}>
       <ContentPanelWithBreadcrumbs
         sidebarOpen={sidebarOpen}
         hideSidebar={hideSidebar}

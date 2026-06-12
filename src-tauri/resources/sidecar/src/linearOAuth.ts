@@ -4,7 +4,6 @@ import { createServer, type Server } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
-  getDefaultLinearOAuthCredentialsPath,
   getLinearOAuthCredentialsPath,
   getLinearOAuthTokenPath,
   isLinearOAuthAuthenticated,
@@ -23,7 +22,9 @@ interface PendingAuthFlow {
   port: number;
 }
 
-const PORT_RANGE = { start: 3510, end: 3515 };
+const LINEAR_OAUTH_PORT = 3510;
+const LINEAR_OAUTH_CALLBACK_PATH = "/linear/oauth/callback";
+const PORT_RANGE = { start: LINEAR_OAUTH_PORT, end: 3515 };
 const AUTH_TIMEOUT_MS = 10 * 60 * 1000;
 const LINEAR_AUTHORIZE_URL = "https://linear.app/oauth/authorize";
 const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
@@ -85,6 +86,20 @@ function scheduleAuthTimeout() {
     void stopLinearOAuthAuth();
   }, AUTH_TIMEOUT_MS);
 }
+
+function buildLinearOAuthRedirectUri(port: number): string {
+  return `http://localhost:${port}${LINEAR_OAUTH_CALLBACK_PATH}`;
+}
+
+export function getLinearOAuthRedirectUris(): string[] {
+  const uris: string[] = [];
+  for (let port = PORT_RANGE.start; port <= PORT_RANGE.end; port += 1) {
+    uris.push(buildLinearOAuthRedirectUri(port));
+  }
+  return uris;
+}
+
+export const LINEAR_OAUTH_PRIMARY_REDIRECT_URI = buildLinearOAuthRedirectUri(LINEAR_OAUTH_PORT);
 
 async function findAvailablePort(): Promise<number> {
   for (let port = PORT_RANGE.start; port <= PORT_RANGE.end; port += 1) {
@@ -164,15 +179,11 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
     throw new Error("Linear OAuth credentials are not configured");
   }
 
-  if (authServer) {
-    throw new Error("Linear authentication is already in progress");
-  }
-
   await stopLinearOAuthAuth();
 
   const credentials = await loadOAuthCredentials();
   const port = await findAvailablePort();
-  const redirectUri = `http://localhost:${port}/callback`;
+  const redirectUri = buildLinearOAuthRedirectUri(port);
   const codeVerifier = createCodeVerifier();
   const codeChallenge = createCodeChallenge(codeVerifier);
   const state = randomBytes(32).toString("hex");
@@ -192,7 +203,7 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
     try {
       const requestUrl = new URL(req.url ?? "/", `http://localhost:${port}`);
 
-      if (requestUrl.pathname !== "/callback") {
+      if (requestUrl.pathname !== LINEAR_OAUTH_CALLBACK_PATH) {
         sendHtml(res, 404, "<html><body><p>Not found</p></body></html>");
         return;
       }

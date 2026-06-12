@@ -17,6 +17,10 @@ export function isLinearWebUrl(url: string): boolean {
   return LINEAR_WEB_URL.test(url.trim());
 }
 
+export function isLinearOAuthUrl(url: string): boolean {
+  return /^https:\/\/(?:www\.)?linear\.app\/oauth\//i.test(url.trim());
+}
+
 export function isLinearAppUrl(url: string): boolean {
   return /^linear:\/\//i.test(url.trim());
 }
@@ -25,6 +29,10 @@ export function resolveLinearOpenUrl(
   webUrl: string,
   mode: LinearIssueLinkMode = issueLinkMode,
 ): string {
+  if (isLinearOAuthUrl(webUrl)) {
+    return webUrl;
+  }
+
   if (mode !== "internal" || !isLinearWebUrl(webUrl)) {
     return webUrl;
   }
