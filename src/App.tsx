@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppViewRibbon } from "./app/AppViewRibbon";
+import { AppShellLayout } from "./app/AppShellLayout";
 import { CommandPanel } from "./app/CommandPanel";
 import type { AppView } from "./app/appViews";
 import { ChatView, type ChatViewHandle } from "./chat/ChatView";
@@ -13,8 +13,8 @@ import { useLookupSessionTabs } from "./hooks/useLookupSessionTabs";
 import { useSessionTabs } from "./hooks/useSessionTabs";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import { LookupView, type LookupViewHandle } from "./lookup/LookupView";
-import { SettingsModal } from "./settings/SettingsModal";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import type { SettingsTabId } from "./settings/settingsTabs";
 import { VaultProvider } from "./chat/VaultContext";
 import {
   formatSidecarReachabilityError,
@@ -76,6 +76,7 @@ export default function App() {
   const [userProfilePath, setUserProfilePath] = useState<string | undefined>();
   const [agentProfilePath, setAgentProfilePath] = useState<string | undefined>();
   const [showSettings, setShowSettings] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>("general");
   const [healthError, setHealthError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [linearWarning, setLinearWarning] = useState<string | null>(null);
@@ -170,22 +171,54 @@ export default function App() {
     });
   }, [appView]);
 
+  const settingsMode = !notesPath || showSettings;
+
+  const handleOpenSettings = useCallback(() => {
+    setActiveSettingsTab("general");
+    setShowSettings(true);
+  }, []);
+
+  const handleExitSettings = useCallback(() => {
+    if (!notesPath) return;
+    setShowSettings(false);
+    window.requestAnimationFrame(() => focusActiveComposer());
+  }, [focusActiveComposer, notesPath]);
+
+  const handleToggleSettings = useCallback(() => {
+    if (!notesPath) return;
+    setShowSettings((open) => {
+      if (open) {
+        window.requestAnimationFrame(() => focusActiveComposer());
+        return false;
+      }
+      setActiveSettingsTab("general");
+      return true;
+    });
+  }, [focusActiveComposer, notesPath]);
+
+  useEffect(() => {
+    if (!notesPath && ready) {
+      setActiveSettingsTab("obsidian");
+    }
+  }, [notesPath, ready]);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
-        setShowSettings((open) => {
-          if (open && notesPath) {
-            window.requestAnimationFrame(() => focusActiveComposer());
-          }
-          return !open;
-        });
+        handleToggleSettings();
+        return;
+      }
+
+      if (event.key === "Escape" && showSettings && notesPath) {
+        event.preventDefault();
+        handleExitSettings();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusActiveComposer, notesPath]);
+  }, [handleExitSettings, handleToggleSettings, notesPath, showSettings]);
 
   const commandPanelEnabled = ready && Boolean(notesPath);
 
@@ -484,10 +517,32 @@ export default function App() {
             />
           )}
 
-          <div className="app-main-shell">
-            <AppViewRibbon activeView={appView} onChange={handleAppViewChange} />
-
-            <div className="app-content-shell">
+          <AppShellLayout
+            activeView={appView}
+            onViewChange={handleAppViewChange}
+            settingsOpen={settingsMode}
+            activeSettingsTab={activeSettingsTab}
+            onSettingsTabChange={setActiveSettingsTab}
+            onOpenSettings={handleOpenSettings}
+            onExitSettings={handleExitSettings}
+            savedNotesPath={notesPath}
+          >
+            {settingsMode ? (
+              <SettingsPanel
+                activeTab={activeSettingsTab}
+                notesPath={notesPath}
+                vaultName={vaultName}
+                defaultNotesPath={defaultNotesPath}
+                initialModelMode={modelMode}
+                initialUserProfilePath={userProfilePath}
+                initialAgentProfilePath={agentProfilePath}
+                onSecretsUpdated={() => connectToSidecar()}
+                onUpdated={(path, nextVaultName) => {
+                  void handleSettingsUpdated(path, nextVaultName);
+                }}
+              />
+            ) : (
+              <>
               {(appView === "chat" || appView === "lookup") && (
                 <SessionTabBar
                   tabs={appView === "lookup" ? lookupTabs : tabs}
@@ -627,27 +682,23 @@ export default function App() {
                   </Suspense>
                 </div>
               ) : null}
-            </div>
-          </div>
+              </>
+            )}
+          </AppShellLayout>
         </VaultProvider>
       ) : (
-        <div className="app-setup-shell" aria-hidden="true" />
-      )}
-
-      {(showSettings || !notesPath) && (
-        <SettingsModal
-          dismissible={Boolean(notesPath)}
-          onClose={
-            notesPath
-              ? () => {
-                  setShowSettings(false);
-                  focusActiveComposer();
-                }
-              : undefined
-          }
+        <AppShellLayout
+          activeView={appView}
+          onViewChange={handleAppViewChange}
+          settingsOpen
+          activeSettingsTab={activeSettingsTab}
+          onSettingsTabChange={setActiveSettingsTab}
+          onOpenSettings={handleOpenSettings}
+          savedNotesPath={null}
         >
           <SettingsPanel
-            notesPath={notesPath}
+            activeTab={activeSettingsTab}
+            notesPath={null}
             vaultName={vaultName}
             defaultNotesPath={defaultNotesPath}
             initialModelMode={modelMode}
@@ -658,7 +709,7 @@ export default function App() {
               void handleSettingsUpdated(path, nextVaultName);
             }}
           />
-        </SettingsModal>
+        </AppShellLayout>
       )}
     </div>
     </UiPreviewProvider>

@@ -26,6 +26,7 @@ import {
   waitForApproval,
 } from "./approvals.ts";
 import { startGoogleCalendarAuth } from "./calendarAuth.ts";
+import { startLinearOAuthAuth } from "./linearAuth.ts";
 import {
   getAgentProfilePath,
   getCursorApiKey,
@@ -37,6 +38,8 @@ import {
   getUserProfilePath,
   isGoogleCalendarAuthenticated,
   isGoogleCalendarConfigured,
+  isLinearOAuthAuthenticated,
+  isLinearOAuthConfigured,
   isWhoopAuthenticated,
   isWhoopConfigured,
 } from "./config.ts";
@@ -119,6 +122,7 @@ import {
   getIntegrationsStatus,
   importGoogleCalendarCredentials,
   saveGoogleCalendarOAuthCredentials,
+  saveLinearOAuthCredentials,
   updateIntegrationSecrets,
 } from "./integrations-secrets.ts";
 import {
@@ -349,6 +353,8 @@ app.get("/healthz", (c) => {
     hasApiKey: Boolean(getCursorApiKey()),
     hasGeminiApiKey: Boolean(getGeminiApiKey()),
     hasLinearApiKey: Boolean(getLinearApiKey()),
+    hasLinearOAuthCredentials: isLinearOAuthConfigured(),
+    hasLinearOAuthAuth: isLinearOAuthAuthenticated(),
     hasGoogleCalendarCredentials: isGoogleCalendarConfigured(),
     hasGoogleCalendarAuth: isGoogleCalendarAuthenticated(),
     hasWhoopConfigured: isWhoopConfigured(),
@@ -478,7 +484,8 @@ app.post("/integrations/test", async (c) => {
     target !== "linear" &&
     target !== "gemini" &&
     target !== "googleCalendar" &&
-    target !== "googleCalendarCredentials"
+    target !== "googleCalendarCredentials" &&
+    target !== "linearOAuthCredentials"
   ) {
     return c.json({ error: "Invalid integration test target" }, 400);
   }
@@ -489,6 +496,8 @@ app.post("/integrations/test", async (c) => {
     geminiApiKey: body.geminiApiKey,
     googleOAuthClientId: body.googleOAuthClientId,
     googleOAuthClientSecret: body.googleOAuthClientSecret,
+    linearOAuthClientId: body.linearOAuthClientId,
+    linearOAuthClientSecret: body.linearOAuthClientSecret,
   };
 
   const result = await runIntegrationTests(target, credentials);
@@ -532,6 +541,32 @@ app.post("/integrations/google-calendar/connect", async (c) => {
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to start Google Calendar authentication";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.post("/integrations/linear/credentials", async (c) => {
+  try {
+    const body = await c.req.json();
+    return c.json(
+      saveLinearOAuthCredentials(body as {
+        clientId?: string | null;
+        clientSecret?: string | null;
+        clear?: boolean;
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save Linear OAuth credentials";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/integrations/linear/connect", async (c) => {
+  try {
+    const result = await startLinearOAuthAuth();
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to start Linear authentication";
     return c.json({ error: message }, 500);
   }
 });

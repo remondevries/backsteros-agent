@@ -6,6 +6,7 @@ const INTEGRATION_TABS = new Set<SettingsTabId>([
   "linear",
   "gemini",
   "google-calendar",
+  "google-gmail",
 ]);
 
 export type SettingsConnectionContext = {
@@ -52,6 +53,7 @@ export function isSettingsTabConnected(
   if (tabId === "linear") return status.linearApiKey.configured;
   if (tabId === "gemini") return status.geminiApiKey.configured;
   if (tabId === "google-calendar") return isGoogleCalendarConnected(status.googleCalendar);
+  if (tabId === "google-gmail") return false;
 
   return false;
 }

@@ -55,6 +55,9 @@
   --toggle-active-bg: #2a2d33;
   --toggle-active-text: #ececec;
   --shadow-lg: rgba(0, 0, 0, 0.45);
+  --content-workspace-radius: 10px;
+  --content-workspace-inset: 10px;
+  --content-workspace-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.14);
   --error-bg: #2a1717;
   --error-border: #5a3030;
   --error-surface: #3a2323;
@@ -175,6 +178,7 @@
     --toggle-active-bg: #ffffff;
     --toggle-active-text: #1d1d1f;
     --shadow-lg: rgba(0, 0, 0, 0.12);
+    --content-workspace-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 3px 8px rgba(0, 0, 0, 0.06);
     --error-bg: #fff1f1;
     --error-border: #ffcaca;
     --error-surface: #ffe0e0;

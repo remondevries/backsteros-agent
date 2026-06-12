@@ -324,6 +324,7 @@ export const ChatView = forwardRef<
     onBeforeSessionClear?: () => void;
     onSessionClear?: (title: string) => void;
     onNavigateToView?: (view: AppView) => void;
+    layout?: "default" | "panel";
   }
 >(function ChatView(
   {
@@ -336,6 +337,7 @@ export const ChatView = forwardRef<
     onBeforeSessionClear,
     onSessionClear,
     onNavigateToView,
+    layout = "default",
   },
   ref,
 ) {
@@ -1883,7 +1885,7 @@ export const ChatView = forwardRef<
   );
 
   return (
-    <div className="chat-view">
+    <div className={layout === "panel" ? "chat-view chat-view--panel" : "chat-view"}>
       <AttachmentPreviewModal
         target={previewTarget}
         onClose={() => {

@@ -4,7 +4,8 @@ export type SettingsTabId =
   | "cursor"
   | "linear"
   | "gemini"
-  | "google-calendar";
+  | "google-calendar"
+  | "google-gmail";
 
 export type SettingsTabGroup = "general" | "integration";
 
@@ -22,20 +23,20 @@ export const SETTINGS_TABS: {
   },
   {
     id: "obsidian",
-    label: "Obsidian",
-    description: "Notes folder and vault name",
-    group: "integration",
-  },
-  {
-    id: "cursor",
-    label: "Cursor",
-    description: "API key for chat",
+    label: "Local vault (Obsidian settings)",
+    description: "Obsidian notes folder and vault name",
     group: "integration",
   },
   {
     id: "linear",
     label: "Linear",
     description: "API key and app preferences",
+    group: "integration",
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    description: "API key for chat",
     group: "integration",
   },
   {
@@ -48,6 +49,12 @@ export const SETTINGS_TABS: {
     id: "google-calendar",
     label: "Google Calendar",
     description: "OAuth and calendar access",
+    group: "integration",
+  },
+  {
+    id: "google-gmail",
+    label: "Google Gmail",
+    description: "OAuth and inbox access",
     group: "integration",
   },
 ];

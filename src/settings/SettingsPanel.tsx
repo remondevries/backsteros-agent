@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   composerModeFromSettings,
   settingsFromComposerMode,
@@ -12,19 +12,19 @@ import { CursorIntegrationSection } from "./CursorIntegrationSection";
 import { GeneralSettingsSection } from "./GeneralSettingsSection";
 import { GeminiIntegrationSection } from "./GeminiIntegrationSection";
 import { GoogleCalendarIntegrationSection } from "./GoogleCalendarIntegrationSection";
+import { GoogleGmailIntegrationSection } from "./GoogleGmailIntegrationSection";
 import {
   isSettingsTabConnected,
-  tabShowsConnectionIndicator,
 } from "./integrationConnectionStatus";
 import { LinearIntegrationSection } from "./LinearIntegrationSection";
 import { ObsidianSettingsSection } from "./ObsidianSettingsSection";
 import { ProfileEditorSection } from "./ProfileEditorSection";
 import { SettingsConnectionBadge } from "./SettingsConnectionBadge";
-import { SettingsConnectionDot } from "./SettingsConnectionDot";
 import { SETTINGS_TABS, type SettingsTabId } from "./settingsTabs";
 import { useIntegrationsStatus } from "./useIntegrationsStatus";
 
 export function SettingsPanel({
+  activeTab,
   notesPath,
   vaultName,
   defaultNotesPath,
@@ -34,6 +34,7 @@ export function SettingsPanel({
   onUpdated,
   onSecretsUpdated,
 }: {
+  activeTab: SettingsTabId;
   notesPath: string | null;
   vaultName?: string | null;
   defaultNotesPath: string;
@@ -43,7 +44,6 @@ export function SettingsPanel({
   onUpdated: (path: string, nextVaultName?: string | null) => void;
   onSecretsUpdated?: () => void | Promise<void>;
 }) {
-  const [activeTab, setActiveTab] = useState<SettingsTabId>("general");
   const [manualPath, setManualPath] = useState(notesPath ?? defaultNotesPath);
   const [manualVaultName, setManualVaultName] = useState(vaultName ?? "");
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
@@ -201,178 +201,134 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="settings-shell">
-      <aside className="settings-sidebar" aria-label="Settings categories">
-        <div className="settings-sidebar-header">
-          <h1 className="settings-sidebar-title">Settings</h1>
-        </div>
-        <nav className="settings-sidebar-nav">
-          {SETTINGS_TABS.map((tab, index) => {
-            const previousTab = index > 0 ? SETTINGS_TABS[index - 1] : null;
-            const showGroupDivider =
-              tab.group === "integration" && previousTab?.group === "general";
-
-            const showSidebarConnectionDot =
-              tabShowsConnectionIndicator(tab.id) &&
-              isSettingsTabConnected(tab.id, connectionContext);
-
-            return (
-              <Fragment key={tab.id}>
-                {showGroupDivider ? (
-                  <div className="settings-sidebar-divider" role="separator" />
-                ) : null}
-                <button
-                  type="button"
-                  className={[
-                    "settings-sidebar-item",
-                    activeTab === tab.id ? "settings-sidebar-item--active" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  aria-current={activeTab === tab.id ? "page" : undefined}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  <div className="settings-sidebar-item-heading">
-                    <span className="settings-sidebar-item-label">{tab.label}</span>
-                    {showSidebarConnectionDot && (
-                      <SettingsConnectionDot className="settings-sidebar-item-dot" />
-                    )}
-                  </div>
-                  <span className="settings-sidebar-item-description">{tab.description}</span>
-                </button>
-              </Fragment>
-            );
-          })}
-        </nav>
-      </aside>
-
-      <div className="settings-panel">
-        <div
-          className={[
-            "settings-panel-body",
-            profileEditor ? "settings-panel-body--editor" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <div className="settings-content-container">
-            <header className="settings-content-header">
-              {profileEditor && profileEditorMeta ? (
-                <>
-                  <div className="settings-content-title-row">
-                    <button
-                      type="button"
-                      className="settings-back-button"
-                      onClick={() => setProfileEditor(null)}
-                    >
-                      Back
-                    </button>
-                    <h2 className="settings-content-title">{profileEditorMeta.title}</h2>
-                  </div>
-                  <p className="settings-content-description">{profileEditorMeta.description}</p>
-                </>
-              ) : (
-                <>
-                  <div className="settings-content-title-row">
-                    <h2 className="settings-content-title">{activeTabMeta.label}</h2>
-                    {showConnectionBadge && <SettingsConnectionBadge />}
-                  </div>
-                  <p className="settings-content-description">{activeTabMeta.description}</p>
-                </>
-              )}
-            </header>
-
+    <div className="settings-panel">
+      <div
+        className={[
+          "settings-panel-body",
+          profileEditor ? "settings-panel-body--editor" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className="settings-content-container">
+          <header className="settings-content-header">
             {profileEditor && profileEditorMeta ? (
-              <ProfileEditorSection
-                label={profileEditorMeta.title}
-                pathHint={
-                  profileEditor === "agent"
-                    ? agentProfilePath
-                      ? `File: ${agentProfilePath}`
-                      : undefined
-                    : userProfilePath
-                      ? `File: ${userProfilePath}`
-                      : undefined
-                }
-                value={profileDraft}
-                loading={profileLoading}
-                disabled={saving || profileLoading}
-                onChange={setProfileDraft}
-              />
-            ) : null}
-
-            {activeTab === "general" && !profileEditor && (
-              <GeneralSettingsSection
-                composerMode={composerMode}
-                saving={saving}
-                userProfilePath={userProfilePath}
-                agentProfilePath={agentProfilePath}
-                onComposerModeChange={setComposerMode}
-                onEditAgentProfile={() => setProfileEditor("agent")}
-                onEditUserProfile={() => setProfileEditor("user")}
-              />
-            )}
-
-            {activeTab === "obsidian" && (
-              <ObsidianSettingsSection
-                notesPath={notesPath}
-                defaultNotesPath={defaultNotesPath}
-                manualPath={manualPath}
-                manualVaultName={manualVaultName}
-                onManualPathChange={setManualPath}
-                onManualVaultNameChange={setManualVaultName}
-              />
-            )}
-
-            {activeTab === "cursor" && (
-              <CursorIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
-            )}
-
-            {activeTab === "linear" && (
-              <LinearIntegrationSection
-                issueLinkMode={issueLinkMode}
-                groceryLinearProjectId={groceryLinearProjectId}
-                saving={saving}
-                onIssueLinkModeChange={setIssueLinkMode}
-                onGroceryLinearProjectIdChange={setGroceryLinearProjectId}
-                onSecretsUpdated={handleSecretsUpdated}
-              />
-            )}
-
-            {activeTab === "gemini" && (
-              <GeminiIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
-            )}
-
-            {activeTab === "google-calendar" && (
-              <GoogleCalendarIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
-            )}
-          </div>
-        </div>
-
-        {showSaveFooter && (
-          <div className="settings-footer">
-            {error ? (
-              <p className="error-text settings-footer-status settings-footer-status--error">{error}</p>
-            ) : saveMessage ? (
-              <p className="settings-footer-status settings-footer-status--ok" role="status">
-                {saveMessage}
-              </p>
+              <>
+                <div className="settings-content-title-row">
+                  <button
+                    type="button"
+                    className="settings-back-button"
+                    onClick={() => setProfileEditor(null)}
+                  >
+                    Back
+                  </button>
+                  <h2 className="settings-content-title">{profileEditorMeta.title}</h2>
+                </div>
+                <p className="settings-content-description">{profileEditorMeta.description}</p>
+              </>
             ) : (
-              <span className="settings-footer-status" aria-hidden="true" />
+              <>
+                <div className="settings-content-title-row">
+                  <h2 className="settings-content-title">{activeTabMeta.label}</h2>
+                  {showConnectionBadge && <SettingsConnectionBadge />}
+                </div>
+                <p className="settings-content-description">{activeTabMeta.description}</p>
+              </>
             )}
-            <button
-              type="button"
-              className="btn-primary settings-save-button"
-              onClick={() => {
-                void save();
-              }}
+          </header>
+
+          {profileEditor && profileEditorMeta ? (
+            <ProfileEditorSection
+              label={profileEditorMeta.title}
+              pathHint={
+                profileEditor === "agent"
+                  ? agentProfilePath
+                    ? `File: ${agentProfilePath}`
+                    : undefined
+                  : userProfilePath
+                    ? `File: ${userProfilePath}`
+                    : undefined
+              }
+              value={profileDraft}
+              loading={profileLoading}
               disabled={saving || profileLoading}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        )}
+              onChange={setProfileDraft}
+            />
+          ) : null}
+
+          {activeTab === "general" && !profileEditor && (
+            <GeneralSettingsSection
+              composerMode={composerMode}
+              saving={saving}
+              userProfilePath={userProfilePath}
+              agentProfilePath={agentProfilePath}
+              onComposerModeChange={setComposerMode}
+              onEditAgentProfile={() => setProfileEditor("agent")}
+              onEditUserProfile={() => setProfileEditor("user")}
+            />
+          )}
+
+          {activeTab === "obsidian" && (
+            <ObsidianSettingsSection
+              notesPath={notesPath}
+              defaultNotesPath={defaultNotesPath}
+              manualPath={manualPath}
+              manualVaultName={manualVaultName}
+              onManualPathChange={setManualPath}
+              onManualVaultNameChange={setManualVaultName}
+            />
+          )}
+
+          {activeTab === "cursor" && (
+            <CursorIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+          )}
+
+          {activeTab === "linear" && (
+            <LinearIntegrationSection
+              issueLinkMode={issueLinkMode}
+              groceryLinearProjectId={groceryLinearProjectId}
+              saving={saving}
+              onIssueLinkModeChange={setIssueLinkMode}
+              onGroceryLinearProjectIdChange={setGroceryLinearProjectId}
+              onSecretsUpdated={handleSecretsUpdated}
+            />
+          )}
+
+          {activeTab === "gemini" && (
+            <GeminiIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+          )}
+
+          {activeTab === "google-calendar" && (
+            <GoogleCalendarIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+          )}
+
+          {activeTab === "google-gmail" && <GoogleGmailIntegrationSection />}
+        </div>
       </div>
+
+      {showSaveFooter && (
+        <div className="settings-footer">
+          {error ? (
+            <p className="error-text settings-footer-status settings-footer-status--error">{error}</p>
+          ) : saveMessage ? (
+            <p className="settings-footer-status settings-footer-status--ok" role="status">
+              {saveMessage}
+            </p>
+          ) : (
+            <span className="settings-footer-status" aria-hidden="true" />
+          )}
+          <button
+            type="button"
+            className="btn-primary settings-save-button"
+            onClick={() => {
+              void save();
+            }}
+            disabled={saving || profileLoading}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
