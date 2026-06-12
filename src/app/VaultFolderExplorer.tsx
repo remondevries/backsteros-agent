@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
 import { useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
@@ -16,10 +16,6 @@ export function VaultFolderExplorer({
 }) {
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
-
-  useEffect(() => {
-    setRelativePath(rootPath);
-  }, [activeNavItem, rootPath]);
 
   const { entries, loading, error } = useVaultDirectory(relativePath, enabled);
 

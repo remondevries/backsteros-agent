@@ -3,10 +3,15 @@ import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavIte
 import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
   mergeContentPanelBreadcrumbs,
+  type ActiveVaultDocument,
   type ContentPanelBreadcrumbSegment,
 } from "./contentPanelNavigation";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { linearWorkspaceSelectionId } from "./linearWorkspaceSelection";
+import {
+  linearWorkspaceViewLabel,
+  type LinearWorkspaceViewId,
+} from "./linearProjectViews";
 
 export function buildContentPanelBreadcrumbSegments(options: {
   settingsOpen: boolean;
@@ -16,6 +21,9 @@ export function buildContentPanelBreadcrumbSegments(options: {
   activeSessionTitle?: string | null;
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   linearSelection?: LinearWorkspaceSelection | null;
+  activeVaultDocument?: ActiveVaultDocument | null;
+  onClearActiveVaultDocument?: () => void;
+  linearWorkspaceView?: LinearWorkspaceViewId | null;
 }): ContentPanelBreadcrumbSegment[] {
   const {
     settingsOpen,
@@ -25,6 +33,9 @@ export function buildContentPanelBreadcrumbSegments(options: {
     activeSessionTitle,
     sidebarSegments,
     linearSelection,
+    activeVaultDocument,
+    onClearActiveVaultDocument,
+    linearWorkspaceView,
   } = options;
 
   if (settingsOpen) {
@@ -36,20 +47,35 @@ export function buildContentPanelBreadcrumbSegments(options: {
   }
 
   const rootSegments: ContentPanelBreadcrumbSegment[] = activeVaultNavItem
-    ? [{ id: `nav-${activeVaultNavItem}`, label: sidebarNavItemLabel(activeVaultNavItem) }]
+    ? activeVaultNavItem === "projects"
+      ? [{ id: "nav-projects", label: "Linear", kind: "linear-logo" }]
+      : [{ id: `nav-${activeVaultNavItem}`, label: sidebarNavItemLabel(activeVaultNavItem) }]
     : [{ id: "explorer", label: "Explorer" }];
 
   const viewDefinition = APP_VIEWS.find((view) => view.id === activeView);
   const contentSegments: ContentPanelBreadcrumbSegment[] = [];
 
-  if (activeVaultNavItem === "projects") {
-    if (linearSelection) {
+  if (linearSelection) {
+    const clearDocument = activeVaultDocument ? onClearActiveVaultDocument : undefined;
+
+    contentSegments.push({
+      id: linearWorkspaceSelectionId(linearSelection),
+      label: linearSelection.name,
+      ...(clearDocument ? { onActivate: clearDocument } : {}),
+    });
+
+    if (linearWorkspaceView && linearWorkspaceView !== "overview") {
       contentSegments.push({
-        id: linearWorkspaceSelectionId(linearSelection),
-        label: linearSelection.name,
+        id: `linear-tab-${linearSelection.kind}-${linearWorkspaceView}`,
+        label: linearWorkspaceViewLabel(linearSelection.kind, linearWorkspaceView),
+        ...(clearDocument ? { onActivate: clearDocument } : {}),
       });
     }
-  } else if (viewDefinition && (activeView === "chat" || activeView === "lookup")) {
+  } else if (
+    activeVaultNavItem !== "projects" &&
+    viewDefinition &&
+    (activeView === "chat" || activeView === "lookup")
+  ) {
     contentSegments.push({ id: `view-${activeView}`, label: viewDefinition.label });
     const trimmedTitle = activeSessionTitle?.trim();
     if (trimmedTitle) {
@@ -60,6 +86,13 @@ export function buildContentPanelBreadcrumbSegments(options: {
     }
   } else if (viewDefinition && !activeVaultNavItem) {
     contentSegments.push({ id: `view-${activeView}`, label: viewDefinition.label });
+  }
+
+  if (activeVaultDocument) {
+    contentSegments.push({
+      id: `vault-doc-${activeVaultDocument.path}`,
+      label: activeVaultDocument.title,
+    });
   }
 
   return mergeContentPanelBreadcrumbs(rootSegments, sidebarSegments, contentSegments);

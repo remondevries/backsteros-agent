@@ -9,6 +9,7 @@ import {
   ContentPanelNavigationProvider,
   useContentPanelNavigation,
 } from "./contentPanelNavigation";
+import { ContentPanelMainSlot } from "./ContentPanelMainSlot";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
 
@@ -79,7 +80,13 @@ function ContentPanelWithBreadcrumbs({
   activeSessionTitle?: string | null;
   children: ReactNode;
 }) {
-  const { sidebarSegments, linearSelection } = useContentPanelNavigation();
+  const {
+    sidebarSegments,
+    linearSelection,
+    activeVaultDocument,
+    clearActiveVaultDocument,
+    linearWorkspaceView,
+  } = useContentPanelNavigation();
   const breadcrumbSegments = useMemo(
     () =>
       buildContentPanelBreadcrumbSegments({
@@ -90,13 +97,19 @@ function ContentPanelWithBreadcrumbs({
         activeSessionTitle,
         sidebarSegments,
         linearSelection,
+        activeVaultDocument,
+        onClearActiveVaultDocument: clearActiveVaultDocument,
+        linearWorkspaceView,
       }),
     [
       activeSessionTitle,
       activeSettingsTab,
+      activeVaultDocument,
       activeVaultNavItem,
       activeView,
+      clearActiveVaultDocument,
       linearSelection,
+      linearWorkspaceView,
       settingsOpen,
       sidebarSegments,
     ],
@@ -137,7 +150,7 @@ export function ContentPanel({
   children: ReactNode;
 }) {
   return (
-    <ContentPanelNavigationProvider projectsNavActive={activeVaultNavItem === "projects"}>
+    <ContentPanelNavigationProvider>
       <ContentPanelWithBreadcrumbs
         sidebarOpen={sidebarOpen}
         hideSidebar={hideSidebar}
@@ -148,7 +161,12 @@ export function ContentPanel({
         activeView={activeView}
         activeSessionTitle={activeSessionTitle}
       >
-        {children}
+        <ContentPanelMainSlot
+          settingsOpen={settingsOpen}
+          vaultStructureEnabled={vaultExplorerEnabled}
+        >
+          {children}
+        </ContentPanelMainSlot>
       </ContentPanelWithBreadcrumbs>
     </ContentPanelNavigationProvider>
   );

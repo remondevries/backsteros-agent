@@ -1,5 +1,6 @@
 import { resolveLinearStatusKey } from "../chat/LinearStatusIcon";
 import type { LinearIssueEntity } from "../chat/types";
+import { statusOrderIndex } from "../lib/linearIssueDisplay";
 
 export interface LinearStatusGroup {
   status: string;
@@ -69,6 +70,11 @@ export function groupLinearIssuesByStatus(issues: LinearIssueEntity[]): LinearSt
   });
 
   return groups.sort((left, right) => {
+    const nameOrderDiff = statusOrderIndex(left.status) - statusOrderIndex(right.status);
+    if (nameOrderDiff !== 0) {
+      return nameOrderDiff;
+    }
+
     const orderDiff = groupSortKey(left) - groupSortKey(right);
     if (orderDiff !== 0) {
       return orderDiff;

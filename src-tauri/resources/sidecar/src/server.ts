@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { cors } from "hono/cors";
 import { bearerAuth } from "hono/bearer-auth";
 import { HTTPException } from "hono/http-exception";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -80,13 +80,21 @@ import {
   respondToPendingDeleteFile,
 } from "./delete-file.ts";
 import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
-import { fetchLinearProjectOverview } from "./linear/project-overview.ts";
+import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
+import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
+import {
+  createProjectDocument,
+  fetchLinearProjectDocuments,
+  fetchLinearTeamDocuments,
+} from "./vault/project-documents.ts";
+import { readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
 import { fetchLinearTeams } from "./linear/teams.ts";
 import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
 import { dispatchAutomationHandler } from "./automation/registry.ts";
 import type { AutomationHandlerContext } from "./automation/types.ts";
 import {
   DAILY_NOTE_FOLDER,
+  ensureTodayDailyNote,
   getTodayDailyNote,
   readDailyNoteStats,
 } from "./daily-note.ts";
@@ -478,6 +486,144 @@ app.get("/linear/projects/:projectId/overview", async (c) => {
   }
 });
 
+app.get("/linear/projects/:projectId/issues", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        issues: [],
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", issues: [] }, 400);
+  }
+
+  try {
+    const issues = await fetchLinearProjectIssues(projectId);
+    return c.json({ issues });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load project issues";
+    return c.json({ error: message, issues: [] }, 500);
+  }
+});
+
+app.get("/linear/projects/:projectId/documents", async (c) => {
+  const notesPath = resolveNotesPath();
+  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
+    return c.json({ error: "Notes folder does not exist", documents: [] }, 400);
+  }
+
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        documents: [],
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", documents: [] }, 400);
+  }
+
+  try {
+    const documents = await fetchLinearProjectDocuments(notesPath, projectId);
+    return c.json({ documents });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load project documents";
+    return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
+app.post("/linear/projects/:projectId/documents", async (c) => {
+  const notesPath = resolveNotesPath();
+  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
+    return c.json({ error: "Notes folder does not exist", document: null }, 400);
+  }
+
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        document: null,
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", document: null }, 400);
+  }
+
+  try {
+    const document = await createProjectDocument(notesPath, projectId);
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create project document";
+    return c.json({ error: message, document: null }, 500);
+  }
+});
+
+app.get("/linear/teams/:teamId/documents", async (c) => {
+  const notesPath = resolveNotesPath();
+  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
+    return c.json({ error: "Notes folder does not exist", documents: [] }, 400);
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", documents: [] }, 400);
+  }
+
+  try {
+    const documents = await fetchLinearTeamDocuments(notesPath, teamId);
+    return c.json({ documents });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load team documents";
+    return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
+app.patch("/linear/projects/:projectId/overview/description", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        overview: null,
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", overview: null }, 400);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { content?: string };
+  if (typeof body.content !== "string") {
+    return c.json({ error: "content is required", overview: null }, 400);
+  }
+
+  try {
+    const overview = await updateLinearProjectContent(projectId, body.content);
+    if (!overview) {
+      return c.json({ error: "Project not found", overview: null }, 404);
+    }
+    return c.json({ overview });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update project description";
+    return c.json({ error: message, overview: null }, 500);
+  }
+});
+
 app.get("/linear/projects/:projectId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json({ error: "Linear is not connected. Add an API key or connect OAuth in Settings." }, 400);
@@ -684,6 +830,22 @@ app.get("/vault/daily-note/today", async (c) => {
     const message = error instanceof Error ? error.message : "Failed to load daily note";
     const note = getTodayDailyNote(notesPath, { includeContent: false, createIfMissing: false });
     return c.json({ note, stats: null, recentNotes: [], error: message }, 500);
+  }
+});
+
+app.post("/vault/daily-note/today/ensure", async (c) => {
+  const notesPath = resolveNotesPath();
+
+  if (!existsSync(notesPath) || !statSync(notesPath).isDirectory()) {
+    return c.json({ error: "Notes path does not exist", note: null }, 400);
+  }
+
+  try {
+    const note = ensureTodayDailyNote(notesPath);
+    return c.json({ note });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to ensure daily note";
+    return c.json({ error: message, note: null }, 500);
   }
 });
 
@@ -959,6 +1121,7 @@ app.put("/settings", async (c) => {
   if (notesPath) {
     prepareWorkspace(notesPath, port, token);
     ensureVaultNavFolders(notesPath);
+    ensureTodayDailyNote(notesPath);
     settings.notesPath = notesPath;
   }
 
@@ -1063,6 +1226,61 @@ app.get("/vault/entries", (c) => {
     return c.json({ path, entries });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to list vault directory";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.get("/vault/documents", (c) => {
+  const notesPath = resolveNotesPath();
+  const path = c.req.query("path")?.trim();
+  if (!path) {
+    return c.json({ error: "path is required" }, 400);
+  }
+
+  try {
+    const document = readVaultDocument(notesPath, path);
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load document";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.patch("/vault/documents", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const path =
+    body && typeof body === "object" && "path" in body && typeof body.path === "string"
+      ? body.path.trim()
+      : "";
+  if (!path) {
+    return c.json({ error: "path is required" }, 400);
+  }
+
+  const title =
+    body && typeof body === "object" && "title" in body && typeof body.title === "string"
+      ? body.title
+      : undefined;
+  const content =
+    body && typeof body === "object" && "body" in body && typeof body.body === "string"
+      ? body.body
+      : undefined;
+
+  if (title === undefined && content === undefined) {
+    return c.json({ error: "title or body is required" }, 400);
+  }
+
+  try {
+    const document = updateVaultDocument(notesPath, path, { title, body: content });
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update document";
     return c.json({ error: message }, 400);
   }
 });

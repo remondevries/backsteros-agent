@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { LinearProjectIcon } from "../../chat/LinearProjectIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
@@ -7,6 +6,7 @@ import {
   formatOverviewStartMonth,
   formatOverviewTargetDate,
 } from "../../lib/linearOverviewFormat";
+import { ProjectOverviewDescriptionEditor } from "./ProjectOverviewDescriptionEditor";
 import { ProjectOverviewLeadPill, ProjectOverviewPill } from "./ProjectOverviewPill";
 import { ProjectOverviewMetaRow } from "./ProjectOverviewMetaRow";
 import { ProjectOverviewSkeleton } from "./ProjectOverviewSkeleton";
@@ -18,12 +18,10 @@ export function ProjectOverviewPanel({
   projectId: string;
   enabled: boolean;
 }) {
-  const { overview, loading, error } = useLinearProjectOverview(projectId, enabled);
-  const [descriptionExpanded, setDescriptionExpanded] = useState(true);
-
-  useEffect(() => {
-    setDescriptionExpanded(true);
-  }, [projectId, overview?.description]);
+  const { overview, loading, error, saveDescription } = useLinearProjectOverview(
+    projectId,
+    enabled,
+  );
 
   if (loading && !overview) {
     return (
@@ -45,7 +43,7 @@ export function ProjectOverviewPanel({
 
   const summary = overview.summary?.trim() || "No summary.";
   const initiative = overview.initiativeNames[0];
-  const description = overview.description?.trim();
+  const description = overview.description ?? "";
   const priorityLabel = overview.priorityLabel || getPriorityLabel(overview.priority);
 
   return (
@@ -97,35 +95,13 @@ export function ProjectOverviewPanel({
               <span className="project-overview-muted">—</span>
             )}
           </ProjectOverviewMetaRow>
-
-          <ProjectOverviewMetaRow label="Notes">
-            <span className="project-overview-muted">—</span>
-          </ProjectOverviewMetaRow>
         </section>
 
-        {description ? (
-          <section
-            className="project-overview-body"
-            data-expanded={descriptionExpanded ? "true" : "false"}
-          >
-            <div className="project-overview-description-block">
-              <button
-                type="button"
-                className="project-overview-description-toggle"
-                aria-expanded={descriptionExpanded}
-                onClick={() => setDescriptionExpanded((open) => !open)}
-              >
-                <span>Description</span>
-                <span className="project-overview-description-chevron" aria-hidden="true">
-                  ▾
-                </span>
-              </button>
-              {descriptionExpanded ? (
-                <div className="project-overview-description">{description}</div>
-              ) : null}
-            </div>
-          </section>
-        ) : null}
+        <ProjectOverviewDescriptionEditor
+          projectId={projectId}
+          value={description}
+          onSave={saveDescription}
+        />
       </article>
     </div>
   );

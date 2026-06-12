@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { linearWorkspaceSelectionId } from "./linearWorkspaceSelection";
+import { useContentPanelNavigation } from "./contentPanelNavigation";
 import { useEnsureLinearWorkspaceVaultStructure } from "../hooks/useEnsureLinearWorkspaceVaultStructure";
+import { ProjectDocumentsPanel } from "./project-documents/ProjectDocumentsPanel";
+import { ProjectIssuesPanel } from "./project-issues/ProjectIssuesPanel";
 import { ProjectOverviewPanel } from "./project-overview/ProjectOverviewPanel";
 import { LinearProjectViewTabs } from "./LinearProjectViewTabs";
-import { type LinearProjectViewId } from "./linearProjectViews";
+import {
+  defaultLinearWorkspaceViewId,
+  linearWorkspaceViewLabel,
+  type LinearWorkspaceViewId,
+} from "./linearProjectViews";
 
 function LinearWorkspaceViewPlaceholder({ message }: { message: string }) {
   return (
@@ -19,10 +26,24 @@ function LinearWorkspaceDetailBody({
   activeView,
 }: {
   selection: LinearWorkspaceSelection;
-  activeView: LinearProjectViewId;
+  activeView: LinearWorkspaceViewId;
 }) {
   if (activeView === "overview" && selection.kind === "project") {
     return <ProjectOverviewPanel projectId={selection.id} enabled />;
+  }
+
+  if (activeView === "issues" && selection.kind === "project") {
+    return <ProjectIssuesPanel projectId={selection.id} enabled />;
+  }
+
+  if (activeView === "documents") {
+    return (
+      <ProjectDocumentsPanel
+        projectId={selection.kind === "project" ? selection.id : null}
+        teamId={selection.kind === "team" ? selection.id : null}
+        enabled
+      />
+    );
   }
 
   if (activeView === "overview" && selection.kind === "team") {
@@ -31,10 +52,10 @@ function LinearWorkspaceDetailBody({
     );
   }
 
+  const label = linearWorkspaceViewLabel(selection.kind, activeView);
+
   return (
-    <LinearWorkspaceViewPlaceholder
-      message={`${activeView.charAt(0).toUpperCase()}${activeView.slice(1)} will appear here.`}
-    />
+    <LinearWorkspaceViewPlaceholder message={`${label} will appear here.`} />
   );
 }
 
@@ -45,17 +66,28 @@ export function LinearProjectContent({
   selection: LinearWorkspaceSelection;
   vaultStructureEnabled: boolean;
 }) {
-  const [activeView, setActiveView] = useState<LinearProjectViewId>("overview");
+  const { setLinearWorkspaceView } = useContentPanelNavigation();
+  const [activeView, setActiveView] = useState<LinearWorkspaceViewId>(() =>
+    defaultLinearWorkspaceViewId(selection.kind),
+  );
 
   useEnsureLinearWorkspaceVaultStructure(selection, vaultStructureEnabled);
 
   useEffect(() => {
-    setActiveView("overview");
+    setActiveView(defaultLinearWorkspaceViewId(selection.kind));
   }, [selection.kind, selection.id]);
+
+  useEffect(() => {
+    setLinearWorkspaceView(activeView);
+  }, [activeView, setLinearWorkspaceView]);
 
   return (
     <div className="linear-workspace-content linear-project-content">
-      <LinearProjectViewTabs activeView={activeView} onChange={setActiveView} />
+      <LinearProjectViewTabs
+        selectionKind={selection.kind}
+        activeView={activeView}
+        onChange={setActiveView}
+      />
       <div
         className="linear-project-view-body"
         role="tabpanel"

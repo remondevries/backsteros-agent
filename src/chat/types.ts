@@ -1,5 +1,10 @@
 export type ToolCategory = "linear" | "calendar" | "whoop" | "notes" | "generic";
 
+export interface LinearIssueLabel {
+  name: string;
+  color: string;
+}
+
 export interface LinearIssueEntity {
   id: string;
   identifier?: string;
@@ -9,11 +14,14 @@ export interface LinearIssueEntity {
   statusColor?: string;
   url?: string;
   priority?: number;
+  priorityLabel?: string;
   assigneeName?: string;
   assigneeAvatarUrl?: string;
   assigneeId?: string;
   projectName?: string;
   dueDate?: string;
+  estimate?: number | null;
+  labels?: LinearIssueLabel[];
 }
 
 export interface MarkdownFileEntity {

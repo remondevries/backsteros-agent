@@ -1,4 +1,39 @@
 import type { ContentPanelBreadcrumbSegment } from "./contentPanelNavigation";
+import { LinearIcon } from "../chat/LinearIcon";
+
+function BreadcrumbSegmentContent({
+  segment,
+  isLast,
+}: {
+  segment: ContentPanelBreadcrumbSegment;
+  isLast: boolean;
+}) {
+  if (segment.kind === "linear-logo") {
+    return (
+      <span className="content-panel-breadcrumb-icon" aria-label={segment.label} title={segment.label}>
+        <LinearIcon size={14} />
+      </span>
+    );
+  }
+
+  if (segment.onActivate && !isLast) {
+    return (
+      <button
+        type="button"
+        className="content-panel-breadcrumb-button"
+        onClick={segment.onActivate}
+      >
+        {segment.label}
+      </button>
+    );
+  }
+
+  return (
+    <span className="content-panel-breadcrumb-current" aria-current={isLast ? "page" : undefined}>
+      {segment.label}
+    </span>
+  );
+}
 
 export function ContentPanelBreadcrumb({
   segments,
@@ -20,22 +55,7 @@ export function ContentPanelBreadcrumb({
         return (
           <span key={segment.id} className="content-panel-breadcrumb-item">
             {index > 0 ? <span className="content-panel-breadcrumb-sep">/</span> : null}
-            {segment.onActivate && !isLast ? (
-              <button
-                type="button"
-                className="content-panel-breadcrumb-button"
-                onClick={segment.onActivate}
-              >
-                {segment.label}
-              </button>
-            ) : (
-              <span
-                className="content-panel-breadcrumb-current"
-                aria-current={isLast ? "page" : undefined}
-              >
-                {segment.label}
-              </span>
-            )}
+            <BreadcrumbSegmentContent segment={segment} isLast={isLast} />
           </span>
         );
       })}

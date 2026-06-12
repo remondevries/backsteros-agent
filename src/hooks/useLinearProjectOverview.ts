@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchLinearProjectOverview, type LinearProjectOverview } from "../lib/api";
+import {
+  fetchLinearProjectOverview,
+  updateLinearProjectOverviewDescription,
+  type LinearProjectOverview,
+} from "../lib/api";
 
 export function useLinearProjectOverview(projectId: string | null, enabled: boolean) {
   const [overview, setOverview] = useState<LinearProjectOverview | null>(null);
@@ -32,9 +36,27 @@ export function useLinearProjectOverview(projectId: string | null, enabled: bool
     }
   }, [enabled, projectId]);
 
+  const saveDescription = useCallback(
+    async (content: string): Promise<string | null> => {
+      if (!projectId) return "Project not found.";
+
+      const result = await updateLinearProjectOverviewDescription(projectId, content);
+      if (result.error) {
+        return result.error;
+      }
+      if (!result.overview) {
+        return "Failed to save description.";
+      }
+
+      setOverview(result.overview);
+      return null;
+    },
+    [projectId],
+  );
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { overview, loading, error, refresh };
+  return { overview, loading, error, refresh, saveDescription };
 }

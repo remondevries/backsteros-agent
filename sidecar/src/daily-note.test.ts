@@ -8,6 +8,7 @@ import {
   DAY_LOG_STUB,
   defaultDailyNoteContent,
   ensureDailyNoteJournalStructure,
+  ensureTodayDailyNote,
   formatDateInTimezone,
   formatMetricValue,
   getDailyNoteRelativePath,
@@ -75,6 +76,22 @@ describe("daily note helpers", () => {
     expect(content).not.toMatch(/---\n\n## Day log/);
     expect(content).toMatch(/---\n## Day log\n- xx\n$/);
     expect(content).not.toMatch(/## Day log\n- xx\n---\n$/);
+  });
+
+  test("ensureTodayDailyNote creates today's note when missing", () => {
+    const first = ensureTodayDailyNote(notesPath, {
+      timezone: "UTC",
+      now: new Date("2026-06-10T12:00:00Z"),
+    });
+    expect(first.created).toBe(true);
+    expect(first.path).toBe("Daily/2026-06-10.md");
+
+    const second = ensureTodayDailyNote(notesPath, {
+      timezone: "UTC",
+      now: new Date("2026-06-10T12:00:00Z"),
+    });
+    expect(second.created).toBe(false);
+    expect(second.exists).toBe(true);
   });
 
   test("compacts day log spacing and drops stub when metrics are written", () => {

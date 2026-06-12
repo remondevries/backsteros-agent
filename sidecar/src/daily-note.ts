@@ -442,6 +442,22 @@ export function getTodayDailyNote(
   return result;
 }
 
+export function ensureTodayDailyNote(
+  notesPath: string,
+  options: {
+    timezone?: string;
+    now?: Date;
+    includeContent?: boolean;
+  } = {},
+): TodayDailyNoteResult {
+  return getTodayDailyNote(notesPath, {
+    includeContent: options.includeContent ?? false,
+    createIfMissing: true,
+    timezone: options.timezone,
+    now: options.now,
+  });
+}
+
 export function formatTodayDailyNoteResult(result: TodayDailyNoteResult): string {
   const lines = [
     `date: ${result.date}`,

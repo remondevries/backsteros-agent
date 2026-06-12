@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLinearProjects } from "../hooks/useLinearProjects";
 import { useLinearTeams } from "../hooks/useLinearTeams";
 import { groupLinearProjectsByStatus } from "../lib/linearProjectGroups";
@@ -19,10 +19,6 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
   const teamsQuery = useLinearTeams(enabled && view === "teams");
   const projectsQuery = useLinearProjects(enabled && view === "projects");
   const normalizedSearch = search.trim().toLowerCase();
-
-  useEffect(() => {
-    setLinearSelection(null);
-  }, [setLinearSelection, view]);
 
   useContentPanelSidebarBreadcrumbs(
     useMemo(

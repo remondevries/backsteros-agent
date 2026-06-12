@@ -13,10 +13,12 @@ import type {
   WhoopSnapshotEntity,
 } from "../chat/types";
 import type { LetterFilingOptions } from "../chat/letterFiling";
+import type { ProjectDocumentEntity } from "./documentStatusGroups";
 import {
   cachedRequest,
   DASHBOARD_CACHE_TTL_MS,
   HEALTH_CACHE_TTL_MS,
+  invalidateRequestCache,
   REQUEST_CACHE_KEYS,
 } from "./requestCache";
 
@@ -355,6 +357,26 @@ export async function fetchVaultDailyNoteToday(options?: { force?: boolean }) {
   );
 }
 
+export async function ensureVaultDailyNoteToday() {
+  const result = await request<{
+    note: {
+      date: string;
+      weekday: string;
+      timezone: string;
+      path: string;
+      exists: boolean;
+      created: boolean;
+    } | null;
+    error?: string;
+  }>("/vault/daily-note/today/ensure", { method: "POST" });
+
+  if (result.note?.created) {
+    invalidateRequestCache(REQUEST_CACHE_KEYS.vaultDailyNoteToday);
+  }
+
+  return result;
+}
+
 export async function runGoodMorningFlow() {
   return request<{
     prefetched: {
@@ -460,11 +482,34 @@ export type VaultDirectoryEntry = {
   path: string;
 };
 
+export type VaultDocumentContent = {
+  path: string;
+  title: string;
+  body: string;
+};
+
 export async function listVaultDirectory(path: string) {
   const query = new URLSearchParams({ path });
   return request<{ path: string; entries: VaultDirectoryEntry[] }>(
     `/vault/entries?${query.toString()}`,
   );
+}
+
+export async function fetchVaultDocument(path: string) {
+  const query = new URLSearchParams({ path });
+  return request<{ document: VaultDocumentContent; error?: string }>(
+    `/vault/documents?${query.toString()}`,
+  );
+}
+
+export async function updateVaultDocument(
+  path: string,
+  updates: { title?: string; body?: string },
+) {
+  return request<{ document: VaultDocumentContent; error?: string }>("/vault/documents", {
+    method: "PATCH",
+    body: JSON.stringify({ path, ...updates }),
+  });
 }
 
 export async function ensureLinearWorkspaceVaultStructure(options: {
@@ -554,6 +599,41 @@ export type LinearProjectOverview = {
 export async function fetchLinearProjectOverview(projectId: string) {
   return request<{ overview: LinearProjectOverview | null; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/overview`,
+  );
+}
+
+export async function updateLinearProjectOverviewDescription(projectId: string, content: string) {
+  return request<{ overview: LinearProjectOverview | null; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/overview/description`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
+    },
+  );
+}
+
+export async function fetchLinearProjectIssues(projectId: string) {
+  return request<{ issues: LinearIssueEntity[]; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/issues`,
+  );
+}
+
+export async function fetchLinearProjectDocuments(projectId: string) {
+  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/documents`,
+  );
+}
+
+export async function fetchLinearTeamDocuments(teamId: string) {
+  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/documents`,
+  );
+}
+
+export async function createLinearProjectDocument(projectId: string) {
+  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/documents`,
+    { method: "POST" },
   );
 }
 

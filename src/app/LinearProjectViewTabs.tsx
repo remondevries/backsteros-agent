@@ -1,15 +1,22 @@
-import { LINEAR_PROJECT_VIEWS, type LinearProjectViewId } from "./linearProjectViews";
+import {
+  linearWorkspaceViewsForKind,
+  type LinearWorkspaceViewId,
+} from "./linearProjectViews";
 
 export function LinearProjectViewTabs({
+  selectionKind,
   activeView,
   onChange,
 }: {
-  activeView: LinearProjectViewId;
-  onChange: (view: LinearProjectViewId) => void;
+  selectionKind: "team" | "project";
+  activeView: LinearWorkspaceViewId;
+  onChange: (view: LinearWorkspaceViewId) => void;
 }) {
+  const views = linearWorkspaceViewsForKind(selectionKind);
+
   return (
     <div className="linear-project-view-tabs" role="tablist" aria-label="Team and project views">
-      {LINEAR_PROJECT_VIEWS.map((view) => {
+      {views.map((view) => {
         const active = activeView === view.id;
         return (
           <button

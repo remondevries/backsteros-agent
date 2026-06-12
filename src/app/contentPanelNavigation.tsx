@@ -8,11 +8,18 @@ import {
   type ReactNode,
 } from "react";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
+import type { LinearWorkspaceViewId } from "./linearProjectViews";
 
 export type ContentPanelBreadcrumbSegment = {
   id: string;
   label: string;
+  kind?: "linear-logo";
   onActivate?: () => void;
+};
+
+export type ActiveVaultDocument = {
+  path: string;
+  title: string;
 };
 
 type ContentPanelNavigationContextValue = {
@@ -20,25 +27,40 @@ type ContentPanelNavigationContextValue = {
   setSidebarSegments: (segments: ContentPanelBreadcrumbSegment[]) => void;
   linearSelection: LinearWorkspaceSelection | null;
   setLinearSelection: (selection: LinearWorkspaceSelection | null) => void;
+  activeVaultDocument: ActiveVaultDocument | null;
+  setActiveVaultDocument: (document: ActiveVaultDocument | null) => void;
+  updateActiveVaultDocument: (patch: Partial<ActiveVaultDocument>) => void;
+  clearActiveVaultDocument: () => void;
+  linearWorkspaceView: LinearWorkspaceViewId | null;
+  setLinearWorkspaceView: (view: LinearWorkspaceViewId | null) => void;
 };
 
 const ContentPanelNavigationContext = createContext<ContentPanelNavigationContextValue | null>(
   null,
 );
 
-export function ContentPanelNavigationProvider({
-  children,
-  projectsNavActive,
-}: {
-  children: ReactNode;
-  projectsNavActive: boolean;
-}) {
+export function ContentPanelNavigationProvider({ children }: { children: ReactNode }) {
   const [sidebarSegments, setSidebarSegmentsState] = useState<ContentPanelBreadcrumbSegment[]>(
     [],
   );
   const [linearSelection, setLinearSelectionState] = useState<LinearWorkspaceSelection | null>(
     null,
   );
+  const [activeVaultDocument, setActiveVaultDocumentState] = useState<ActiveVaultDocument | null>(
+    null,
+  );
+  const [linearWorkspaceView, setLinearWorkspaceViewState] = useState<LinearWorkspaceViewId | null>(
+    null,
+  );
+
+  const linearSelectionKey = linearSelection
+    ? `${linearSelection.kind}:${linearSelection.id}`
+    : null;
+
+  useEffect(() => {
+    setActiveVaultDocumentState(null);
+    setLinearWorkspaceViewState(null);
+  }, [linearSelectionKey]);
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
     setSidebarSegmentsState(segments);
@@ -48,11 +70,21 @@ export function ContentPanelNavigationProvider({
     setLinearSelectionState(selection);
   }, []);
 
-  useEffect(() => {
-    if (!projectsNavActive) {
-      setLinearSelectionState(null);
-    }
-  }, [projectsNavActive]);
+  const setActiveVaultDocument = useCallback((document: ActiveVaultDocument | null) => {
+    setActiveVaultDocumentState(document);
+  }, []);
+
+  const updateActiveVaultDocument = useCallback((patch: Partial<ActiveVaultDocument>) => {
+    setActiveVaultDocumentState((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  const clearActiveVaultDocument = useCallback(() => {
+    setActiveVaultDocumentState(null);
+  }, []);
+
+  const setLinearWorkspaceView = useCallback((view: LinearWorkspaceViewId | null) => {
+    setLinearWorkspaceViewState(view);
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -60,8 +92,25 @@ export function ContentPanelNavigationProvider({
       setSidebarSegments,
       linearSelection,
       setLinearSelection,
+      activeVaultDocument,
+      setActiveVaultDocument,
+      updateActiveVaultDocument,
+      clearActiveVaultDocument,
+      linearWorkspaceView,
+      setLinearWorkspaceView,
     }),
-    [linearSelection, setLinearSelection, sidebarSegments, setSidebarSegments],
+    [
+      activeVaultDocument,
+      clearActiveVaultDocument,
+      linearSelection,
+      linearWorkspaceView,
+      setActiveVaultDocument,
+      setLinearSelection,
+      setLinearWorkspaceView,
+      sidebarSegments,
+      setSidebarSegments,
+      updateActiveVaultDocument,
+    ],
   );
 
   return (
