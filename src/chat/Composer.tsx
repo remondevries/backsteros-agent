@@ -10,14 +10,14 @@ import { ComposerTextarea } from "./ComposerTextarea";
 import { AttachmentChip } from "./AttachmentChip";
 import { filesFromClipboard } from "./attachments";
 import { ComposerToolIndicators } from "./ComposerToolIndicators";
+import type { ComposerInputModeControls } from "./composerInputMode";
+import { ComposerInputModeToggle } from "./ComposerInputModeToggle";
 import { ComposerModeToggle } from "./ComposerModeToggle";
 import type { AutomationFlowId } from "./automation/types";
 import { DailyCaptureTimeTag, type DailyCaptureTimeTagHandle } from "./DailyCaptureTimeTag";
 import { GroceryWeekTag, type GroceryWeekTagHandle } from "./GroceryWeekTag";
 import { composerModeDisplayName } from "./composerMode";
 import type { ComposerMode } from "./composerMode";
-import { TextVoiceToggle, type InputMode } from "./TextVoiceToggle";
-import { TtsToggle } from "./TtsToggle";
 import type { ToolPinSelection, ToolSelection } from "./tool-routing";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import {
@@ -76,16 +76,7 @@ export const Composer = forwardRef<
     composerModeLabel?: string;
     onComposerModeChange?: (mode: ComposerMode) => void;
     savingComposerMode?: boolean;
-    tts?: {
-      enabled: boolean;
-      onToggle: () => void;
-      supported: boolean;
-    };
-    textVoice?: {
-      mode: InputMode;
-      onChange: (mode: InputMode) => void;
-      supported: boolean;
-    };
+    inputModeControls?: ComposerInputModeControls;
     voiceMode?: boolean;
     toolIndicators?: ToolSelection;
     toolPins?: ToolPinSelection;
@@ -135,8 +126,7 @@ export const Composer = forwardRef<
     composerModeLabel,
     onComposerModeChange,
     savingComposerMode,
-    tts,
-    textVoice,
+    inputModeControls,
     voiceMode = false,
     toolIndicators,
     toolPins,
@@ -250,8 +240,10 @@ export const Composer = forwardRef<
     whoop: false,
   };
   const showToolIndicators = Object.values(activeTools).some(Boolean);
-  const showFooter = Boolean(textVoice?.supported || (composerMode && onComposerModeChange));
-  const showReadAloudToggle = Boolean(tts?.supported && !textVoice?.supported);
+  const showFooter = Boolean(
+    inputModeControls?.textVoice?.supported || (composerMode && onComposerModeChange),
+  );
+  const showReadAloudToggle = Boolean(inputModeControls?.tts?.supported);
 
   function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
     const files = filesFromClipboard(event.clipboardData);
@@ -516,12 +508,10 @@ export const Composer = forwardRef<
               />
 
               <div className="composer-right-rail">
-                {showReadAloudToggle && tts && (
-                  <TtsToggle
-                    enabled={tts.enabled}
-                    onToggle={tts.onToggle}
+                {showReadAloudToggle && inputModeControls && (
+                  <ComposerInputModeToggle
+                    controls={{ tts: inputModeControls.tts }}
                     disabled={disabled}
-                    compact
                   />
                 )}
                 <button
@@ -603,12 +593,8 @@ export const Composer = forwardRef<
             )}
           </div>
           <div className="composer-footer-end">
-            {textVoice?.supported && (
-              <TextVoiceToggle
-                mode={textVoice.mode}
-                onChange={textVoice.onChange}
-                disabled={disabled}
-              />
+            {inputModeControls?.textVoice?.supported && (
+              <ComposerInputModeToggle controls={inputModeControls} disabled={disabled} />
             )}
           </div>
         </div>

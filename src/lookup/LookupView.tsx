@@ -28,14 +28,12 @@ import type {
   PendingAttachment,
   RunViewModel,
 } from "../chat/types";
-import { VoiceTurnBubble, type VoiceTurnPhase } from "../chat/VoiceTurnBubble";
-import { useInputModeShortcuts } from "../hooks/useInputModeShortcuts";
+import { VoiceTurnBubble } from "../chat/VoiceTurnBubble";
+import { useTextVoiceInput } from "../hooks/useTextVoiceInput";
 import { useLookupDepth } from "../hooks/useLookupDepth";
 import { useLookupOutputFormat } from "../hooks/useLookupOutputFormat";
 import { useLookupSearchMode } from "../hooks/useLookupSearchMode";
 import { useStreamingRunTts } from "../hooks/useStreamingRunTts";
-import { useVoiceMode } from "../hooks/useVoiceMode";
-import { useTts } from "../hooks/useTts";
 import { parseChatCommand } from "../chat/chatCommands";
 import { isSlashCommandPaletteOpen, type SlashCommandDefinition } from "../chat/slashCommands";
 import { cancelRun } from "../lib/api";
@@ -71,17 +69,6 @@ function shouldAllowCopyShortcut(target: EventTarget | null): boolean {
 }
 
 const voiceModeFocusGuardRef = { current: false };
-
-function scheduleComposerFocus(focus: () => void) {
-  if (voiceModeFocusGuardRef.current) return;
-
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      if (voiceModeFocusGuardRef.current) return;
-      focus();
-    });
-  });
-}
 
 function createEmptyRun(runId: string): RunViewModel {
   return {
@@ -191,53 +178,26 @@ export const LookupView = forwardRef<
 
   const handleSendRef = useRef<(messageText?: string) => Promise<void>>(async () => {});
 
-  const fallbackTts = useTts();
-  const voiceMode = useVoiceMode({
+  const {
+    voiceModeEnabled,
+    voiceTurnPhase,
+    voiceModeError,
+    ttsSupported,
+    ttsEnabled,
+    advanceStreamingTts,
+    stopSpeaking,
+    interruptVoice,
+    inputModeControls,
+  } = useTextVoiceInput({
+    isActive,
     onTranscript: async (text) => {
       await handleSendRef.current(text);
     },
-    isActive,
-  });
-  const voiceModeSupported = voiceMode.supported;
-  const voiceModeEnabled = voiceModeSupported ? voiceMode.enabled : false;
-  voiceModeFocusGuardRef.current = voiceModeEnabled;
-  const ttsSupported = voiceModeSupported || fallbackTts.supported;
-  const ttsEnabled = voiceModeSupported ? voiceMode.enabled : fallbackTts.enabled;
-  const toggleVoiceModeRaw = voiceModeSupported ? voiceMode.toggle : fallbackTts.toggle;
-  const toggleVoiceMode = useCallback(() => {
-    const wasEnabled = voiceModeEnabled;
-    toggleVoiceModeRaw();
-    if (wasEnabled) {
-      scheduleComposerFocus(() => {
-        composerRef.current?.focus();
-      });
-    }
-  }, [voiceModeEnabled, toggleVoiceModeRaw]);
-  const setVoiceModeEnabled = useCallback(
-    (enabled: boolean) => {
-      if (!voiceModeSupported) return;
-      voiceMode.setEnabled(enabled);
-      if (!enabled) {
-        scheduleComposerFocus(() => {
-          composerRef.current?.focus();
-        });
-      }
+    focusComposer: () => {
+      composerRef.current?.focus();
     },
-    [voiceMode, voiceModeSupported],
-  );
-  useInputModeShortcuts({
-    isActive,
-    supported: voiceModeSupported,
-    setEnabled: setVoiceModeEnabled,
+    focusGuardRef: voiceModeFocusGuardRef,
   });
-  const advanceStreamingTts = voiceModeSupported ? voiceMode.advance : fallbackTts.advance;
-  const stopSpeaking = voiceModeSupported ? voiceMode.stop : fallbackTts.stop;
-  const interruptVoice = voiceModeSupported ? voiceMode.interrupt : fallbackTts.stop;
-  const {
-    transcribing,
-    speaking,
-    error: voiceModeError,
-  } = voiceMode;
 
   const latestFinishedRunId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -250,13 +210,6 @@ export const LookupView = forwardRef<
     }
     return null;
   }, [messages, runs]);
-
-  const voiceTurnPhase = useMemo((): VoiceTurnPhase | null => {
-    if (!voiceModeEnabled) return null;
-    if (speaking) return "listening";
-    if (transcribing) return "processing";
-    return null;
-  }, [voiceModeEnabled, speaking, transcribing]);
 
   useStreamingRunTts({
     runs,
@@ -803,28 +756,7 @@ export const LookupView = forwardRef<
               format: lookupOutputFormat,
               onChange: setLookupOutputFormat,
             }}
-            tts={
-              ttsSupported && !voiceModeSupported
-                ? {
-                    enabled: ttsEnabled,
-                    onToggle: toggleVoiceMode,
-                    supported: true,
-                  }
-                : undefined
-            }
-            textVoice={
-              voiceModeSupported
-                ? {
-                    mode: voiceModeEnabled ? "voice" : "text",
-                    onChange: (mode) => {
-                      if ((mode === "voice") !== voiceModeEnabled) {
-                        toggleVoiceMode();
-                      }
-                    },
-                    supported: true,
-                  }
-                : undefined
-            }
+            inputModeControls={inputModeControls}
             onSlashCommandSelect={handleSlashCommandSelect}
           />
         </div>

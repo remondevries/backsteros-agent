@@ -6,12 +6,14 @@ import {
   getGeminiApiKey,
   getGoogleOAuthCredentialsPath,
   getLinearApiKey,
+  getLinearOAuthCredentialsPath,
   isGoogleCalendarAuthenticated,
   isGoogleCalendarConfigured,
+  isLinearOAuthConfigured,
 } from "./config.ts";
 import { fetchCalendarEventsToday } from "./morning-review-calendar.ts";
 import { linearGraphqlRequest } from "./linear/graphql.ts";
-import { parseOAuthCredentialsJson } from "./integrations-secrets.ts";
+import { parseOAuthCredentialsJson, parseLinearOAuthCredentialsJson } from "./integrations-secrets.ts";
 
 const TEST_TIMEOUT_MS = 12_000;
 
@@ -20,7 +22,8 @@ export type IntegrationTestTarget =
   | "linear"
   | "gemini"
   | "googleCalendar"
-  | "googleCalendarCredentials";
+  | "googleCalendarCredentials"
+  | "linearOAuthCredentials";
 
 export type IntegrationConnectTestTarget = Exclude<
   IntegrationTestTarget,
@@ -40,6 +43,8 @@ export interface IntegrationTestCredentials {
   geminiApiKey?: string;
   googleOAuthClientId?: string;
   googleOAuthClientSecret?: string;
+  linearOAuthClientId?: string;
+  linearOAuthClientSecret?: string;
 }
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
@@ -221,6 +226,55 @@ export async function testGoogleCalendarCredentials(
   }
 }
 
+function validateLinearOAuthCredentialPair(
+  clientId: string,
+  clientSecret: string,
+): IntegrationTestResult {
+  if (!clientId || !clientSecret) {
+    return failure("Client ID and client secret are both required.");
+  }
+
+  if (clientId.length < 8) {
+    return failure("Client ID looks too short.");
+  }
+
+  if (clientSecret.length < 8) {
+    return failure("Client secret looks too short.");
+  }
+
+  return success("OAuth credentials look valid.");
+}
+
+export async function testLinearOAuthCredentials(
+  credentials?: IntegrationTestCredentials,
+): Promise<IntegrationTestResult> {
+  const draftClientId = credentials?.linearOAuthClientId?.trim();
+  const draftClientSecret = credentials?.linearOAuthClientSecret?.trim();
+
+  if (draftClientId || draftClientSecret) {
+    if (!draftClientId || !draftClientSecret) {
+      return failure("Enter both the client ID and client secret to test.");
+    }
+    return validateLinearOAuthCredentialPair(draftClientId, draftClientSecret);
+  }
+
+  if (!isLinearOAuthConfigured()) {
+    return failure("Linear OAuth credentials are not configured.");
+  }
+
+  const credentialsPath = getLinearOAuthCredentialsPath();
+  if (!credentialsPath) {
+    return failure("Linear OAuth credentials are not configured.");
+  }
+
+  try {
+    const parsed = parseLinearOAuthCredentialsJson(JSON.parse(readFileSync(credentialsPath, "utf8")));
+    return validateLinearOAuthCredentialPair(parsed.client_id, parsed.client_secret);
+  } catch {
+    return failure("Saved Linear OAuth credentials could not be read.");
+  }
+}
+
 function credentialOverrideForTarget(
   target: IntegrationTestTarget,
   credentials?: IntegrationTestCredentials,
@@ -238,6 +292,9 @@ export async function runIntegrationTest(
 ): Promise<IntegrationTestResult> {
   if (target === "googleCalendarCredentials") {
     return testGoogleCalendarCredentials(credentials);
+  }
+  if (target === "linearOAuthCredentials") {
+    return testLinearOAuthCredentials(credentials);
   }
 
   const override = credentialOverrideForTarget(target, credentials);

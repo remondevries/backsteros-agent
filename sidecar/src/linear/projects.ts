@@ -4,6 +4,12 @@ export type LinearProjectSummary = {
   id: string;
   name: string;
   slugId?: string;
+  status?: {
+    id: string;
+    name: string;
+    type: string;
+    position?: number;
+  } | null;
 };
 
 export type LinearProjectsPage = {
@@ -24,6 +30,12 @@ const PROJECTS_PAGE_QUERY = `
         id
         name
         slugId
+        status {
+          id
+          name
+          type
+          position
+        }
       }
       pageInfo {
         hasNextPage
@@ -39,6 +51,12 @@ const PROJECT_BY_ID_QUERY = `
       id
       name
       slugId
+      status {
+        id
+        name
+        type
+        position
+      }
     }
   }
 `;
@@ -61,15 +79,42 @@ function normalizePageSize(first?: number): number {
   return Math.min(Math.max(Math.trunc(first), 1), MAX_PAGE_SIZE);
 }
 
+function normalizeProjectStatus(
+  status: { id?: string; name?: string; type?: string; position?: number } | null | undefined,
+): LinearProjectSummary["status"] {
+  if (!status?.id?.trim() || !status.name?.trim() || !status.type?.trim()) {
+    return null;
+  }
+
+  return {
+    id: status.id.trim(),
+    name: status.name.trim(),
+    type: status.type.trim(),
+    position: Number.isFinite(status.position) ? Number(status.position) : undefined,
+  };
+}
+
 function normalizeProjectNodes(
-  nodes: Array<{ id?: string; name?: string; slugId?: string }> | undefined,
+  nodes:
+    | Array<{
+        id?: string;
+        name?: string;
+        slugId?: string;
+        status?: { id?: string; name?: string; type?: string; position?: number } | null;
+      }>
+    | undefined,
 ): LinearProjectSummary[] {
   const projects: LinearProjectSummary[] = [];
   for (const node of nodes ?? []) {
     const id = node.id?.trim();
     const name = node.name?.trim();
     if (!id || !name) continue;
-    projects.push({ id, name, slugId: node.slugId?.trim() || undefined });
+    projects.push({
+      id,
+      name,
+      slugId: node.slugId?.trim() || undefined,
+      status: normalizeProjectStatus(node.status),
+    });
   }
   return projects;
 }
@@ -85,7 +130,12 @@ export async function fetchLinearProjectsPage(options: {
 
   const data = await linearGraphqlRequest<{
     projects?: {
-      nodes?: Array<{ id?: string; name?: string; slugId?: string }>;
+      nodes?: Array<{
+        id?: string;
+        name?: string;
+        slugId?: string;
+        status?: { id?: string; name?: string; type?: string; position?: number } | null;
+      }>;
       pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
     };
   }>(PROJECTS_PAGE_QUERY, {
@@ -109,7 +159,12 @@ export async function fetchLinearProjectById(projectId: string): Promise<LinearP
   if (!id) return null;
 
   const data = await linearGraphqlRequest<{
-    project?: { id?: string; name?: string; slugId?: string } | null;
+    project?: {
+      id?: string;
+      name?: string;
+      slugId?: string;
+      status?: { id?: string; name?: string; type?: string; position?: number } | null;
+    } | null;
   }>(PROJECT_BY_ID_QUERY, { id });
 
   const project = data.project;
@@ -119,6 +174,7 @@ export async function fetchLinearProjectById(projectId: string): Promise<LinearP
     id: project.id,
     name: project.name.trim(),
     slugId: project.slugId?.trim() || undefined,
+    status: normalizeProjectStatus(project.status),
   };
 }
 

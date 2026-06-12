@@ -12,7 +12,7 @@ import {
   validateAttachment,
 } from "./attachments";
 import { Composer, type ComposerHandle } from "./Composer";
-import { VoiceTurnBubble, type VoiceTurnPhase } from "./VoiceTurnBubble";
+import { VoiceTurnBubble } from "./VoiceTurnBubble";
 import { parseChatCommand } from "./chatCommands";
 import {
   composerModeDisplayName,
@@ -39,8 +39,6 @@ import {
   GOOD_MORNING_ACTION_ID,
   isGoodMorningComposerMode,
   isGoodMorningFeelMessage,
-  isGoodMorningFlowMessage,
-  isGoodMorningMessage,
   isGoodMorningWakeMessage,
   markMorningReviewUsedToday,
   MORNING_REVIEW_MESSAGE,
@@ -120,10 +118,8 @@ import type {
   PendingAttachment,
   RunViewModel,
 } from "./types";
-import { useInputModeShortcuts } from "../hooks/useInputModeShortcuts";
+import { useTextVoiceInput } from "../hooks/useTextVoiceInput";
 import { useStreamingRunTts } from "../hooks/useStreamingRunTts";
-import { useVoiceMode } from "../hooks/useVoiceMode";
-import { useTts } from "../hooks/useTts";
 import {
   getSettings,
   getWorkspaceDiff,
@@ -454,53 +450,25 @@ export const ChatView = forwardRef<
   >(
     async () => {},
   );
-  const voiceMode = useVoiceMode({
+  const focusComposerRef = useRef<() => void>(() => {});
+  const {
+    voiceModeEnabled,
+    voiceTurnPhase,
+    voiceModeError,
+    ttsSupported,
+    ttsEnabled,
+    advanceStreamingTts,
+    stopSpeaking,
+    interruptVoice,
+    inputModeControls,
+  } = useTextVoiceInput({
+    isActive,
     onTranscript: async (text) => {
       await handleSendRef.current(text);
     },
-    isActive,
+    focusComposer: () => focusComposerRef.current(),
+    focusGuardRef: voiceModeFocusGuardRef,
   });
-  const voiceModeSupported = voiceMode.supported;
-  const fallbackTts = useTts({ isActive: isActive && !voiceModeSupported });
-  const voiceModeEnabled = voiceModeSupported ? voiceMode.enabled : false;
-  voiceModeFocusGuardRef.current = voiceModeEnabled;
-  const ttsSupported = voiceModeSupported || fallbackTts.supported;
-  const ttsEnabled = voiceModeSupported ? voiceMode.enabled : fallbackTts.enabled;
-  const toggleVoiceModeRaw = voiceModeSupported ? voiceMode.toggle : fallbackTts.toggle;
-  const toggleVoiceMode = useCallback(() => {
-    const wasEnabled = voiceModeEnabled;
-    toggleVoiceModeRaw();
-    if (wasEnabled) {
-      scheduleComposerFocus(() => {
-        composerRef.current?.focus();
-      });
-    }
-  }, [voiceModeEnabled, toggleVoiceModeRaw]);
-  const setVoiceModeEnabled = useCallback(
-    (enabled: boolean) => {
-      if (!voiceModeSupported) return;
-      voiceMode.setEnabled(enabled);
-      if (!enabled) {
-        scheduleComposerFocus(() => {
-          composerRef.current?.focus();
-        });
-      }
-    },
-    [voiceMode, voiceModeSupported],
-  );
-  useInputModeShortcuts({
-    isActive,
-    supported: voiceModeSupported,
-    setEnabled: setVoiceModeEnabled,
-  });
-  const advanceStreamingTts = voiceModeSupported ? voiceMode.advance : fallbackTts.advance;
-  const stopSpeaking = voiceModeSupported ? voiceMode.stop : fallbackTts.stop;
-  const interruptVoice = voiceModeSupported ? voiceMode.interrupt : fallbackTts.stop;
-  const {
-    transcribing,
-    speaking,
-    error: voiceModeError,
-  } = voiceMode;
 
   const latestFinishedRunId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -513,13 +481,6 @@ export const ChatView = forwardRef<
     }
     return null;
   }, [messages, runs]);
-
-  const voiceTurnPhase = useMemo((): VoiceTurnPhase | null => {
-    if (!voiceModeEnabled) return null;
-    if (speaking) return "listening";
-    if (transcribing) return "processing";
-    return null;
-  }, [voiceModeEnabled, speaking, transcribing]);
 
   const { resetTtsRunTracking } = useStreamingRunTts({
     runs,
@@ -568,6 +529,10 @@ export const ChatView = forwardRef<
       composerRef.current?.focus();
     });
   }, []);
+
+  useEffect(() => {
+    focusComposerRef.current = focusComposer;
+  }, [focusComposer]);
 
   const blurComposer = useCallback(() => {
     composerFocusSuspendedRef.current = true;
@@ -1026,7 +991,6 @@ export const ChatView = forwardRef<
     runCount,
     activeRunTextLength,
     error,
-    transcribing,
     voiceModeEnabled,
     voiceTurnPhase,
     scheduleScrollToBottom,
@@ -1306,7 +1270,6 @@ export const ChatView = forwardRef<
       (autoDeleteIntent ? DELETE_FILE_ACTION_ID : undefined);
     const isDailyCapture = isDailyCaptureMessage(effectiveQuickActionId);
     const isGroceryList = isGroceryListMessage(effectiveQuickActionId);
-    const isDeleteFile = isDeleteFileMessage(effectiveQuickActionId);
     const isGoodMorningWake = isGoodMorningWakeMessage(effectiveQuickActionId);
     const isGoodMorningFeel = isGoodMorningFeelMessage(effectiveQuickActionId);
     const isGoodNightReflection = isGoodNightReflectionMessage(effectiveQuickActionId);
@@ -2006,28 +1969,7 @@ export const ChatView = forwardRef<
             composerModeLabel={composerModeLabel}
             onComposerModeChange={(mode) => void handleComposerModeChange(mode)}
             savingComposerMode={savingComposerMode}
-            tts={
-              ttsSupported && !voiceModeSupported
-                ? {
-                    enabled: ttsEnabled,
-                    onToggle: toggleVoiceMode,
-                    supported: true,
-                  }
-                : undefined
-            }
-            textVoice={
-              voiceModeSupported
-                ? {
-                    mode: voiceModeEnabled ? "voice" : "text",
-                    onChange: (mode) => {
-                      if ((mode === "voice") !== voiceModeEnabled) {
-                        toggleVoiceMode();
-                      }
-                    },
-                    supported: true,
-                  }
-                : undefined
-            }
+            inputModeControls={inputModeControls}
             voiceMode={voiceModeEnabled}
             toolIndicators={composerTools}
             toolPins={toolPins}

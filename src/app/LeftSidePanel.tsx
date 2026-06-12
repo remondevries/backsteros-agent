@@ -5,10 +5,10 @@ import {
   SIDEBAR_SECTIONS,
   type SidebarNavItemId,
 } from "./sidebarNavConfig";
-import type { SettingsTabId } from "../settings/settingsTabs";
 import { BacksterIcon } from "../chat/BacksterIcon";
 import { SidebarChevronIcon, SidebarSettingsIcon } from "./SidebarNavIcons";
 import { SettingsSidePanelNav } from "./SettingsSidePanelNav";
+import type { SettingsTabId } from "../settings/settingsTabs";
 
 function LeftSidePanelNavItem({
   label,
@@ -74,6 +74,8 @@ export function LeftSidePanel({
   onOpenSettings,
   onExitSettings,
   savedNotesPath,
+  activeVaultNavItem,
+  onVaultNavItemChange,
 }: {
   activeView: AppView;
   onChange: (view: AppView) => void;
@@ -83,8 +85,9 @@ export function LeftSidePanel({
   onOpenSettings: () => void;
   onExitSettings?: () => void;
   savedNotesPath: string | null;
+  activeVaultNavItem: SidebarNavItemId | null;
+  onVaultNavItemChange: (item: SidebarNavItemId) => void;
 }) {
-  const [activeNavItem, setActiveNavItem] = useState<SidebarNavItemId | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     workspace: true,
     people: true,
@@ -125,8 +128,8 @@ export function LeftSidePanel({
                 key={item.id}
                 label={item.label}
                 icon={item.icon}
-                active={activeNavItem === item.id}
-                onClick={() => setActiveNavItem(item.id)}
+                active={activeVaultNavItem === item.id}
+                onClick={() => onVaultNavItemChange(item.id)}
               />
             ))}
 
@@ -142,8 +145,8 @@ export function LeftSidePanel({
                     key={item.id}
                     label={item.label}
                     icon={item.icon}
-                    active={activeNavItem === item.id}
-                    onClick={() => setActiveNavItem(item.id)}
+                    active={activeVaultNavItem === item.id}
+                    onClick={() => onVaultNavItemChange(item.id)}
                   />
                 ))}
               </LeftSidePanelNavSection>

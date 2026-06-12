@@ -41,7 +41,9 @@ export function ObsidianSettingsSection({
   return (
     <section className="settings-section">
       <p className="settings-hint settings-hint-spaced-top">
-        Choose where Backster reads and writes markdown notes in your Obsidian vault.
+        Choose where Backster reads and writes markdown notes in your local vault. Saving creates
+        the standard navigation folders (Inbox, Daily, Workouts, and the rest) when they are
+        missing.
       </p>
       <p className="settings-hint">
         Status: <strong>{statusLabel}</strong>
@@ -73,7 +75,7 @@ export function ObsidianSettingsSection({
         Vault name (optional)
       </label>
       <p className="settings-hint">
-        Leave blank to use the folder name. Set this only when Obsidian shows a different vault name.
+        Leave blank to use the folder name. Set this only when your local vault name differs from the folder name.
       </p>
       <div className="settings-row">
         <input

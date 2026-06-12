@@ -3,17 +3,17 @@ import {
   getGoogleCalendarAccountId,
   getGoogleCalendarTokenPath,
   getGoogleOAuthCredentialsPath,
-  getLinearApiKey,
   getWhoopEnv,
   isGoogleCalendarConfigured,
 } from "./config.ts";
+import { getLinearAuthToken, linearAuthorizationHeader } from "./linear/auth-token.ts";
 import type { ToolSelection } from "./tool-routing.ts";
 
 export function getLinearMcpServers(): Record<string, McpServerConfig> {
   const headers: Record<string, string> = {};
-  const apiKey = getLinearApiKey();
+  const apiKey = getLinearAuthToken();
   if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
+    headers.Authorization = linearAuthorizationHeader(apiKey);
   }
 
   return {

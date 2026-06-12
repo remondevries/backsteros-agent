@@ -3,6 +3,7 @@ import { ContentPanel } from "./ContentPanel";
 import { LeftSidePanel } from "./LeftSidePanel";
 import { RightSidePanel } from "./RightSidePanel";
 import type { AppView } from "./appViews";
+import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import { ResizablePanel } from "./ResizablePanel";
@@ -31,6 +32,10 @@ export function AppShellLayout({
   rightPanelSession,
   rightPanelSessionLoading,
   onSaveRightPanelSessionState,
+  activeVaultNavItem,
+  onVaultNavItemChange,
+  vaultExplorerEnabled,
+  activeSessionTitle,
   children,
 }: {
   activeView: AppView;
@@ -49,6 +54,10 @@ export function AppShellLayout({
     messages: ChatMessage[],
     runs: Record<string, RunViewModel>,
   ) => void;
+  activeVaultNavItem: SidebarNavItemId | null;
+  onVaultNavItemChange: (item: SidebarNavItemId) => void;
+  vaultExplorerEnabled: boolean;
+  activeSessionTitle?: string | null;
   children: ReactNode;
 }) {
   const {
@@ -88,11 +97,22 @@ export function AppShellLayout({
           onOpenSettings={onOpenSettings}
           onExitSettings={onExitSettings}
           savedNotesPath={savedNotesPath}
+          activeVaultNavItem={activeVaultNavItem}
+          onVaultNavItemChange={onVaultNavItemChange}
         />
       </ResizablePanel>
 
       <div className="content-panel-slot">
-        <ContentPanel sidebarOpen={contentPanelSidebarOpen} hideSidebar={settingsOpen}>
+        <ContentPanel
+          sidebarOpen={contentPanelSidebarOpen}
+          hideSidebar={settingsOpen}
+          activeVaultNavItem={activeVaultNavItem}
+          vaultExplorerEnabled={vaultExplorerEnabled}
+          settingsOpen={settingsOpen}
+          activeSettingsTab={activeSettingsTab}
+          activeView={activeView}
+          activeSessionTitle={activeSessionTitle}
+        >
           {children}
         </ContentPanel>
       </div>

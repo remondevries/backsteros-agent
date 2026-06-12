@@ -1,4 +1,9 @@
 import type { ReactNode } from "react";
+import { VAULT_NAV_ITEMS, type VaultNavItemId, vaultNavItemLabel } from "../lib/vaultNavFolders";
+import {
+  type SidebarNavItemId,
+  sidebarNavItemLabel as labelForSidebarNavItem,
+} from "../lib/sidebarNavItems";
 import {
   SidebarContactsIcon,
   SidebarDailyIcon,
@@ -12,17 +17,7 @@ import {
   SidebarWorkoutsIcon,
 } from "./SidebarNavIcons";
 
-export type SidebarNavItemId =
-  | "inbox"
-  | "daily"
-  | "workouts"
-  | "meetings"
-  | "projects"
-  | "financials"
-  | "knowledge-base"
-  | "letters"
-  | "organizations"
-  | "contacts";
+export type { SidebarNavItemId };
 
 export interface SidebarNavItemDefinition {
   id: SidebarNavItemId;
@@ -36,10 +31,38 @@ export interface SidebarNavSectionDefinition {
   items: SidebarNavItemDefinition[];
 }
 
+const VAULT_NAV_ICONS: Record<VaultNavItemId, ReactNode> = {
+  inbox: <SidebarInboxIcon />,
+  daily: <SidebarDailyIcon />,
+  workouts: <SidebarWorkoutsIcon />,
+  meetings: <SidebarMeetingsIcon />,
+  financials: <SidebarFinancialsIcon />,
+  "knowledge-base": <SidebarKnowledgeBaseIcon />,
+  letters: <SidebarLettersIcon />,
+  organizations: <SidebarOrganizationsIcon />,
+  contacts: <SidebarContactsIcon />,
+};
+
+function navItem(id: VaultNavItemId): SidebarNavItemDefinition {
+  return {
+    id,
+    label: vaultNavItemLabel(id),
+    icon: VAULT_NAV_ICONS[id],
+  };
+}
+
+function projectsNavItem(): SidebarNavItemDefinition {
+  return {
+    id: "projects",
+    label: labelForSidebarNavItem("projects"),
+    icon: <SidebarProjectsIcon />,
+  };
+}
+
 export const SIDEBAR_PRIMARY_ITEMS: SidebarNavItemDefinition[] = [
-  { id: "inbox", label: "Inbox", icon: <SidebarInboxIcon /> },
-  { id: "daily", label: "Daily", icon: <SidebarDailyIcon /> },
-  { id: "workouts", label: "Workouts", icon: <SidebarWorkoutsIcon /> },
+  navItem("inbox"),
+  navItem("daily"),
+  navItem("workouts"),
 ];
 
 export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
@@ -47,19 +70,18 @@ export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
     id: "workspace",
     label: "Workspace",
     items: [
-      { id: "meetings", label: "Meetings", icon: <SidebarMeetingsIcon /> },
-      { id: "projects", label: "Projects", icon: <SidebarProjectsIcon /> },
-      { id: "financials", label: "Financials", icon: <SidebarFinancialsIcon /> },
-      { id: "knowledge-base", label: "Knowledge Base", icon: <SidebarKnowledgeBaseIcon /> },
-      { id: "letters", label: "Letters", icon: <SidebarLettersIcon /> },
+      projectsNavItem(),
+      navItem("meetings"),
+      navItem("financials"),
+      navItem("knowledge-base"),
+      navItem("letters"),
     ],
   },
   {
     id: "people",
     label: "People",
-    items: [
-      { id: "organizations", label: "Organizations", icon: <SidebarOrganizationsIcon /> },
-      { id: "contacts", label: "Contacts", icon: <SidebarContactsIcon /> },
-    ],
+    items: [navItem("organizations"), navItem("contacts")],
   },
 ];
+
+export const SIDEBAR_VAULT_NAV_ITEM_IDS = VAULT_NAV_ITEMS.map((item) => item.id);

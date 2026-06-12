@@ -27,6 +27,7 @@ import {
 } from "./approvals.ts";
 import { startGoogleCalendarAuth } from "./calendarAuth.ts";
 import { startLinearOAuthAuth } from "./linearAuth.ts";
+import { getLinearAuthToken } from "./linear/auth-token.ts";
 import {
   getAgentProfilePath,
   getCursorApiKey,
@@ -136,6 +137,11 @@ import {
   type IntegrationTestResult,
   type IntegrationTestTarget,
 } from "./integrations-test.ts";
+import {
+  ensureVaultNavFolders,
+  listVaultDirectoryEntries,
+  VAULT_NAV_FOLDER_NAMES,
+} from "./vault-nav-structure.ts";
 import type { LinearIssueEntity, MarkdownFileEntity, ToolCategory } from "./types.ts";
 import { ensureAgentProfile } from "./context/agent.ts";
 import { ensureUserProfile, loadUserFirstName, loadUserTimezone } from "./context/profile.ts";
@@ -337,6 +343,7 @@ app.use("/llm-extract/*", bearerAuth({ token }));
 app.use("/linear/*", bearerAuth({ token }));
 app.use("/integrations/*", bearerAuth({ token }));
 app.use("/profiles/*", bearerAuth({ token }));
+app.use("/vault/*", bearerAuth({ token }));
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
@@ -396,8 +403,15 @@ app.post("/llm-extract", async (c) => {
 });
 
 app.get("/linear/projects", async (c) => {
-  if (!getLinearApiKey()) {
-    return c.json({ error: "LINEAR_API_KEY is not configured", projects: [] }, 400);
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        projects: [],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      400,
+    );
   }
 
   const query = c.req.query("q")?.trim() || undefined;
@@ -415,8 +429,14 @@ app.get("/linear/projects", async (c) => {
 });
 
 app.get("/linear/teams", async (c) => {
-  if (!getLinearApiKey()) {
-    return c.json({ error: "LINEAR_API_KEY is not configured", teams: [] }, 400);
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        teams: [],
+      },
+      400,
+    );
   }
 
   try {
@@ -476,6 +496,8 @@ app.post("/integrations/test", async (c) => {
     geminiApiKey?: string;
     googleOAuthClientId?: string;
     googleOAuthClientSecret?: string;
+    linearOAuthClientId?: string;
+    linearOAuthClientSecret?: string;
   };
   const target = body.target ?? "all";
   if (
@@ -906,6 +928,7 @@ app.put("/settings", async (c) => {
 
   if (notesPath) {
     prepareWorkspace(notesPath, port, token);
+    ensureVaultNavFolders(notesPath);
     settings.notesPath = notesPath;
   }
 
@@ -972,6 +995,26 @@ app.put("/settings", async (c) => {
     issueLinkMode: next.issueLinkMode ?? "external",
     groceryLinearProjectId: next.groceryLinearProjectId ?? null,
   });
+});
+
+app.get("/vault/folders", (c) => {
+  return c.json({ folders: VAULT_NAV_FOLDER_NAMES });
+});
+
+app.get("/vault/entries", (c) => {
+  const notesPath = resolveNotesPath();
+  const path = c.req.query("path")?.trim();
+  if (!path) {
+    return c.json({ error: "path is required" }, 400);
+  }
+
+  try {
+    const entries = listVaultDirectoryEntries(notesPath, path);
+    return c.json({ path, entries });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to list vault directory";
+    return c.json({ error: message }, 400);
+  }
 });
 
 app.get("/profiles/:kind", (c) => {

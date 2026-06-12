@@ -29,6 +29,21 @@ export function isGoogleCalendarConnected(
   return calendar.credentialsConfigured && calendar.authenticated;
 }
 
+export function isLinearOAuthConnected(linear: IntegrationsStatus["linear"]): boolean {
+  return linear.credentialsConfigured && linear.authenticated;
+}
+
+export function getLinearOAuthStatusLabel(linear: IntegrationsStatus["linear"]): string {
+  if (isLinearOAuthConnected(linear)) return "Connected";
+  if (linear.credentialsConfigured) return "Needs sign-in";
+  if (linear.authenticated) return "Missing OAuth credentials";
+  return "Not connected";
+}
+
+export function isLinearSettingsConnected(status: IntegrationsStatus): boolean {
+  return status.linearApiKey.configured || isLinearOAuthConnected(status.linear);
+}
+
 export function getGoogleCalendarStatusLabel(
   calendar: IntegrationsStatus["googleCalendar"],
 ): string {
@@ -50,7 +65,7 @@ export function isSettingsTabConnected(
   if (!status) return false;
 
   if (tabId === "cursor") return status.cursorApiKey.configured;
-  if (tabId === "linear") return status.linearApiKey.configured;
+  if (tabId === "linear") return isLinearSettingsConnected(status);
   if (tabId === "gemini") return status.geminiApiKey.configured;
   if (tabId === "google-calendar") return isGoogleCalendarConnected(status.googleCalendar);
   if (tabId === "google-gmail") return false;
@@ -66,6 +81,10 @@ export function getSettingsTabStatusLabel(
 
   if (tabId === "google-calendar" && context.integrationsStatus) {
     return getGoogleCalendarStatusLabel(context.integrationsStatus.googleCalendar);
+  }
+
+  if (tabId === "linear" && context.integrationsStatus) {
+    return getLinearOAuthStatusLabel(context.integrationsStatus.linear);
   }
 
   return "Not connected";

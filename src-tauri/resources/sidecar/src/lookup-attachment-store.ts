@@ -59,8 +59,8 @@ export async function persistLookupAttachments(
     writeFileSync(path, buffer);
 
     const mimeType = resolveMimeType(attachment.name, attachment.mimeType);
-    let extractedText: string | undefined;
-    if (isPdfAttachment(attachment.name, mimeType)) {
+    let extractedText = attachment.extractedText?.trim();
+    if (!extractedText && isPdfAttachment(attachment.name, mimeType)) {
       const text = await extractPdfText(buffer, { filePath: path });
       if (text) {
         extractedText = text;

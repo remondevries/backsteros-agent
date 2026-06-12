@@ -60,6 +60,16 @@ describe("env-file", () => {
     expect(process.env.CURSOR_API_KEY).toBe("cursor_from_disk");
   });
 
+  test("reloadEnvFromDisk syncs LINEAR_OAUTH_CREDENTIALS", () => {
+    const credentialsPath = join(dataDir, "linear-oauth.keys.json");
+    mergeEnvFile(envPath, { LINEAR_OAUTH_CREDENTIALS: credentialsPath });
+    delete process.env.LINEAR_OAUTH_CREDENTIALS;
+
+    reloadEnvFromDisk();
+
+    expect(process.env.LINEAR_OAUTH_CREDENTIALS).toBe(credentialsPath);
+  });
+
   test("mergeEnvFile creates parent directory", () => {
     const nestedPath = join(dataDir, "nested", ".env");
     expect(existsSync(join(dataDir, "nested"))).toBe(false);

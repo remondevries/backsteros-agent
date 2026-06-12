@@ -158,6 +158,12 @@ export type IntegrationsStatus = {
     clientId: { configured: boolean; preview?: string };
     clientSecret: { configured: boolean; preview?: string };
   };
+  linear: {
+    credentialsConfigured: boolean;
+    authenticated: boolean;
+    clientId: { configured: boolean; preview?: string };
+    clientSecret: { configured: boolean; preview?: string };
+  };
 };
 
 export async function getIntegrationsStatus() {
@@ -186,6 +192,23 @@ export async function saveGoogleCalendarCredentials(body: {
   });
 }
 
+export async function saveLinearOAuthCredentials(body: {
+  clientId?: string | null;
+  clientSecret?: string | null;
+  clear?: boolean;
+}) {
+  return request<IntegrationsStatus>("/integrations/linear/credentials", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function connectLinearOAuth() {
+  return request<{ authUrl: string; localUrl: string }>("/integrations/linear/connect", {
+    method: "POST",
+  });
+}
+
 /** @deprecated Use saveGoogleCalendarCredentials with clientId/clientSecret fields */
 export async function importGoogleCalendarCredentials(json: unknown) {
   return request<IntegrationsStatus>("/integrations/google-calendar/credentials", {
@@ -199,7 +222,8 @@ export type IntegrationTestTarget =
   | "linear"
   | "gemini"
   | "googleCalendar"
-  | "googleCalendarCredentials";
+  | "googleCalendarCredentials"
+  | "linearOAuthCredentials";
 
 export type IntegrationTestResult = {
   ok: boolean;
@@ -212,6 +236,8 @@ export type IntegrationTestCredentials = {
   geminiApiKey?: string;
   googleOAuthClientId?: string;
   googleOAuthClientSecret?: string;
+  linearOAuthClientId?: string;
+  linearOAuthClientSecret?: string;
 };
 
 const INTEGRATION_TEST_TIMEOUT_MS = 20_000;
@@ -380,6 +406,8 @@ type HealthResponse = {
   hasApiKey: boolean;
   hasGeminiApiKey: boolean;
   hasLinearApiKey: boolean;
+  hasLinearOAuthCredentials: boolean;
+  hasLinearOAuthAuth: boolean;
   hasGoogleCalendarCredentials: boolean;
   hasGoogleCalendarAuth: boolean;
   hasWhoopConfigured: boolean;
@@ -426,6 +454,19 @@ export async function getSettings() {
   return request<AppSettings>("/settings", undefined, SETTINGS_REQUEST_TIMEOUT_MS);
 }
 
+export type VaultDirectoryEntry = {
+  name: string;
+  kind: "file" | "directory";
+  path: string;
+};
+
+export async function listVaultDirectory(path: string) {
+  const query = new URLSearchParams({ path });
+  return request<{ path: string; entries: VaultDirectoryEntry[] }>(
+    `/vault/entries?${query.toString()}`,
+  );
+}
+
 export type ProfileKind = "user" | "agent";
 
 export async function getProfileContent(kind: ProfileKind) {
@@ -443,7 +484,23 @@ export type LinearProjectSummary = {
   id: string;
   name: string;
   slugId?: string;
+  status?: {
+    id: string;
+    name: string;
+    type: string;
+    position?: number;
+  } | null;
 };
+
+export type LinearTeamSummary = {
+  id: string;
+  key: string;
+  name: string;
+};
+
+export async function fetchLinearTeams() {
+  return request<{ teams: LinearTeamSummary[]; error?: string }>("/linear/teams");
+}
 
 export async function fetchLinearProjectsPage(options: {
   query?: string;

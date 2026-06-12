@@ -12,6 +12,15 @@ import { useSessionTabShortcuts } from "./hooks/useSessionTabShortcuts";
 import { useLookupSessionTabs } from "./hooks/useLookupSessionTabs";
 import { useSessionTabs } from "./hooks/useSessionTabs";
 import { useSystemTheme } from "./hooks/useSystemTheme";
+import { useRightPanelSession } from "./hooks/useRightPanelSession";
+import {
+  readPersistedAppView,
+  readPersistedSettingsTab,
+  readPersistedShowSettings,
+  readPersistedVaultNavItem,
+  writePersistedAppState,
+} from "./hooks/usePersistedAppState";
+import type { SidebarNavItemId } from "./lib/sidebarNavItems";
 import { LookupView, type LookupViewHandle } from "./lookup/LookupView";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import type { SettingsTabId } from "./settings/settingsTabs";
@@ -75,8 +84,10 @@ export default function App() {
   const [modelMode, setModelMode] = useState<ModelMode>("auto");
   const [userProfilePath, setUserProfilePath] = useState<string | undefined>();
   const [agentProfilePath, setAgentProfilePath] = useState<string | undefined>();
-  const [showSettings, setShowSettings] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>("general");
+  const [showSettings, setShowSettings] = useState(() => readPersistedShowSettings());
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>(
+    () => readPersistedSettingsTab() ?? "general",
+  );
   const [healthError, setHealthError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [linearWarning, setLinearWarning] = useState<string | null>(null);
@@ -87,10 +98,17 @@ export default function App() {
   const [geminiWarning, setGeminiWarning] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renamingLookupSessionId, setRenamingLookupSessionId] = useState<string | null>(null);
-  const [appView, setAppView] = useState<AppView>("chat");
-  const [mountedDashboardViews, setMountedDashboardViews] = useState<Set<DashboardView>>(
-    () => new Set(),
+  const [appView, setAppView] = useState<AppView>(() => readPersistedAppView() ?? "chat");
+  const [activeVaultNavItem, setActiveVaultNavItem] = useState<SidebarNavItemId | null>(
+    () => readPersistedVaultNavItem() ?? "inbox",
   );
+  const [mountedDashboardViews, setMountedDashboardViews] = useState<Set<DashboardView>>(() => {
+    const persistedView = readPersistedAppView();
+    if (persistedView && isDashboardView(persistedView)) {
+      return new Set([persistedView]);
+    }
+    return new Set();
+  });
   const [commandPanelOpen, setCommandPanelOpen] = useState(false);
   const activeChatRef = useRef<ChatViewHandle>(null);
   const activeLookupRef = useRef<LookupViewHandle>(null);
@@ -159,6 +177,16 @@ export default function App() {
     [mountedLookupSessionIds],
   );
 
+  const activeSessionTitle = useMemo(() => {
+    if (appView === "chat") {
+      return tabs.find((tab) => tab.sessionId === activeSessionId)?.title ?? null;
+    }
+    if (appView === "lookup") {
+      return lookupTabs.find((tab) => tab.sessionId === activeLookupSessionId)?.title ?? null;
+    }
+    return null;
+  }, [activeLookupSessionId, activeSessionId, appView, lookupTabs, tabs]);
+
   useSystemTheme();
 
   useEffect(() => {
@@ -172,6 +200,23 @@ export default function App() {
   }, [appView]);
 
   const settingsMode = !notesPath || showSettings;
+  const rightPanelChatEnabled = chatEnabled && !settingsMode;
+  const vaultExplorerEnabled = chatEnabled && !settingsMode;
+  const {
+    session: rightPanelSession,
+    loading: rightPanelSessionLoading,
+    saveSessionState: saveRightPanelSessionState,
+  } = useRightPanelSession(rightPanelChatEnabled);
+
+  useEffect(() => {
+    if (!ready || !notesPath) return;
+    writePersistedAppState({
+      appView,
+      showSettings,
+      activeSettingsTab,
+      activeVaultNavItem: activeVaultNavItem ?? undefined,
+    });
+  }, [activeSettingsTab, activeVaultNavItem, appView, notesPath, ready, showSettings]);
 
   const handleOpenSettings = useCallback(() => {
     setActiveSettingsTab("general");
@@ -526,6 +571,14 @@ export default function App() {
             onOpenSettings={handleOpenSettings}
             onExitSettings={handleExitSettings}
             savedNotesPath={notesPath}
+            rightPanelChatEnabled={rightPanelChatEnabled}
+            rightPanelSession={rightPanelSession}
+            rightPanelSessionLoading={rightPanelSessionLoading}
+            onSaveRightPanelSessionState={saveRightPanelSessionState}
+            activeVaultNavItem={activeVaultNavItem}
+            onVaultNavItemChange={setActiveVaultNavItem}
+            vaultExplorerEnabled={vaultExplorerEnabled}
+            activeSessionTitle={activeSessionTitle}
           >
             {settingsMode ? (
               <SettingsPanel
@@ -695,6 +748,14 @@ export default function App() {
           onSettingsTabChange={setActiveSettingsTab}
           onOpenSettings={handleOpenSettings}
           savedNotesPath={null}
+          rightPanelChatEnabled={false}
+          rightPanelSession={null}
+          rightPanelSessionLoading={false}
+          onSaveRightPanelSessionState={() => undefined}
+          activeVaultNavItem={null}
+          onVaultNavItemChange={() => undefined}
+          vaultExplorerEnabled={false}
+          activeSessionTitle={null}
         >
           <SettingsPanel
             activeTab={activeSettingsTab}

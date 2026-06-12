@@ -8,7 +8,6 @@ import {
 } from "../lib/api";
 
 const SESSION_STORAGE_KEY = "backsteros.rightPanel.sessionId";
-const DEFAULT_TITLE = "Assistant";
 
 type RightPanelSession = {
   sessionId: string;

@@ -298,6 +298,7 @@ function writeLinearOAuthCredentialsFile(raw: unknown): IntegrationsStatus {
     LINEAR_OAUTH_CREDENTIALS: credentialsPath,
   });
   reloadEnvFromDisk();
+  process.env.LINEAR_OAUTH_CREDENTIALS = credentialsPath;
 
   return getIntegrationsStatus();
 }
@@ -344,6 +345,7 @@ export function clearLinearOAuthCredentials(): IntegrationsStatus {
     LINEAR_OAUTH_CREDENTIALS: null,
   });
   reloadEnvFromDisk();
+  delete process.env.LINEAR_OAUTH_CREDENTIALS;
 
   return getIntegrationsStatus();
 }

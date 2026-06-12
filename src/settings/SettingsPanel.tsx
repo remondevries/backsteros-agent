@@ -16,12 +16,25 @@ import { GoogleGmailIntegrationSection } from "./GoogleGmailIntegrationSection";
 import {
   isSettingsTabConnected,
 } from "./integrationConnectionStatus";
-import { LinearIntegrationSection } from "./LinearIntegrationSection";
+import { LinearIntegrationSection, type LinearSettingsView } from "./LinearIntegrationSection";
 import { ObsidianSettingsSection } from "./ObsidianSettingsSection";
 import { ProfileEditorSection } from "./ProfileEditorSection";
 import { SettingsConnectionBadge } from "./SettingsConnectionBadge";
+import { SettingsSectionToggle } from "./SettingsSectionToggle";
 import { SETTINGS_TABS, type SettingsTabId } from "./settingsTabs";
 import { useIntegrationsStatus } from "./useIntegrationsStatus";
+
+const LINEAR_VIEW_OPTIONS: { value: LinearSettingsView; label: string }[] = [
+  { value: "general", label: "General" },
+  { value: "api-key", label: "API Key" },
+  { value: "oauth", label: "OAuth" },
+];
+
+const LINEAR_VIEW_DESCRIPTIONS: Record<LinearSettingsView, string> = {
+  general: "Connection status, issue links, and grocery list project.",
+  "api-key": "Personal API key for Linear MCP tools and automations.",
+  oauth: "OAuth app credentials and browser sign-in for issue control.",
+};
 
 export function SettingsPanel({
   activeTab,
@@ -61,13 +74,14 @@ export function SettingsPanel({
   const [profileEditor, setProfileEditor] = useState<ProfileKind | null>(null);
   const [profileDraft, setProfileDraft] = useState("");
   const [profileLoading, setProfileLoading] = useState(false);
+  const [linearView, setLinearView] = useState<LinearSettingsView>("general");
 
   const activeTabMeta = SETTINGS_TABS.find((tab) => tab.id === activeTab) ?? SETTINGS_TABS[0];
   const showSaveFooter =
     profileEditor !== null ||
     activeTab === "general" ||
     activeTab === "obsidian" ||
-    activeTab === "linear";
+    (activeTab === "linear" && linearView === "general");
   const { status: integrationsStatus, refresh: refreshIntegrationsStatus } =
     useIntegrationsStatus(true);
   const connectionContext = useMemo(
@@ -226,6 +240,24 @@ export function SettingsPanel({
                 </div>
                 <p className="settings-content-description">{profileEditorMeta.description}</p>
               </>
+            ) : activeTab === "linear" ? (
+              <>
+                <div className="settings-content-title-row settings-content-title-row--with-actions">
+                  <div className="settings-content-title-group">
+                    <h2 className="settings-content-title">{activeTabMeta.label}</h2>
+                    {showConnectionBadge && <SettingsConnectionBadge />}
+                  </div>
+                  <SettingsSectionToggle
+                    value={linearView}
+                    options={LINEAR_VIEW_OPTIONS}
+                    onChange={setLinearView}
+                    ariaLabel="Linear settings section"
+                  />
+                </div>
+                <p className="settings-content-description">
+                  {LINEAR_VIEW_DESCRIPTIONS[linearView]}
+                </p>
+              </>
             ) : (
               <>
                 <div className="settings-content-title-row">
@@ -285,6 +317,7 @@ export function SettingsPanel({
 
           {activeTab === "linear" && (
             <LinearIntegrationSection
+              activeView={linearView}
               issueLinkMode={issueLinkMode}
               groceryLinearProjectId={groceryLinearProjectId}
               saving={saving}

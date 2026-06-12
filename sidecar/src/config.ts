@@ -65,7 +65,17 @@ export function getDefaultLinearOAuthCredentialsPath(): string {
 }
 
 export function getLinearOAuthCredentialsPath(): string | undefined {
-  return process.env.LINEAR_OAUTH_CREDENTIALS?.trim() || undefined;
+  const configuredPath = process.env.LINEAR_OAUTH_CREDENTIALS?.trim();
+  if (configuredPath && existsSync(configuredPath)) {
+    return configuredPath;
+  }
+
+  const defaultPath = getDefaultLinearOAuthCredentialsPath();
+  if (existsSync(defaultPath)) {
+    return defaultPath;
+  }
+
+  return configuredPath || undefined;
 }
 
 export function getLinearOAuthTokenPath(): string {

@@ -18,8 +18,8 @@ import {
   type SlashCommandDefinition,
 } from "../chat/slashCommands";
 import type { PendingAttachment } from "../chat/types";
-import { TextVoiceToggle, type InputMode } from "../chat/TextVoiceToggle";
-import { TtsToggle } from "../chat/TtsToggle";
+import type { ComposerInputModeControls } from "../chat/composerInputMode";
+import { ComposerInputModeToggle } from "../chat/ComposerInputModeToggle";
 import { LookupComposerOptionsMenu } from "./LookupComposerOptionsMenu";
 import { LookupDepthToggle } from "./LookupDepthToggle";
 import { lookupDepthModelName, type LookupDepthMode } from "./lookupDepth";
@@ -69,16 +69,7 @@ export const LookupComposer = forwardRef<
     onRemoveAttachment?: (id: string) => void;
     onOpenAttachment?: (attachment: PendingAttachment) => void;
     isDragging?: boolean;
-    tts?: {
-      enabled: boolean;
-      onToggle: () => void;
-      supported: boolean;
-    };
-    textVoice?: {
-      mode: InputMode;
-      onChange: (mode: InputMode) => void;
-      supported: boolean;
-    };
+    inputModeControls?: ComposerInputModeControls;
     voiceMode?: boolean;
     lookupDepth?: {
       mode: LookupDepthMode;
@@ -108,8 +99,7 @@ export const LookupComposer = forwardRef<
     onRemoveAttachment,
     onOpenAttachment,
     isDragging = false,
-    tts,
-    textVoice,
+    inputModeControls,
     voiceMode = false,
     lookupDepth,
     lookupSearchMode,
@@ -198,8 +188,8 @@ export const LookupComposer = forwardRef<
   const showOptionsMenu = Boolean(
     onAddAttachments && lookupSearchMode && lookupOutputFormat,
   );
-  const showFooter = Boolean(textVoice?.supported || lookupDepth);
-  const showReadAloudToggle = Boolean(tts?.supported && !textVoice?.supported);
+  const showFooter = Boolean(inputModeControls?.textVoice?.supported || lookupDepth);
+  const showReadAloudToggle = Boolean(inputModeControls?.tts?.supported);
   const resolvedLookupModelName = lookupDepth
     ? lookupDepthModelName(lookupDepth.mode)
     : "";
@@ -329,12 +319,10 @@ export const LookupComposer = forwardRef<
               />
 
               <div className="composer-right-rail">
-                {showReadAloudToggle && tts && (
-                  <TtsToggle
-                    enabled={tts.enabled}
-                    onToggle={tts.onToggle}
+                {showReadAloudToggle && inputModeControls && (
+                  <ComposerInputModeToggle
+                    controls={{ tts: inputModeControls.tts }}
                     disabled={disabled}
-                    compact
                   />
                 )}
                 <button
@@ -422,12 +410,8 @@ export const LookupComposer = forwardRef<
             )}
           </div>
           <div className="composer-footer-end">
-            {textVoice?.supported && (
-              <TextVoiceToggle
-                mode={textVoice.mode}
-                onChange={textVoice.onChange}
-                disabled={disabled}
-              />
+            {inputModeControls?.textVoice?.supported && (
+              <ComposerInputModeToggle controls={inputModeControls} disabled={disabled} />
             )}
           </div>
         </div>

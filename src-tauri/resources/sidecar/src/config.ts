@@ -60,6 +60,47 @@ export function getLinearApiKey(): string | undefined {
   return process.env.LINEAR_API_KEY?.trim() || undefined;
 }
 
+export function getDefaultLinearOAuthCredentialsPath(): string {
+  return join(getDataDir(), "linear-oauth.keys.json");
+}
+
+export function getLinearOAuthCredentialsPath(): string | undefined {
+  const configuredPath = process.env.LINEAR_OAUTH_CREDENTIALS?.trim();
+  if (configuredPath && existsSync(configuredPath)) {
+    return configuredPath;
+  }
+
+  const defaultPath = getDefaultLinearOAuthCredentialsPath();
+  if (existsSync(defaultPath)) {
+    return defaultPath;
+  }
+
+  return configuredPath || undefined;
+}
+
+export function getLinearOAuthTokenPath(): string {
+  return join(getDataDir(), "linear-oauth-tokens.json");
+}
+
+export function isLinearOAuthConfigured(): boolean {
+  const credentialsPath = getLinearOAuthCredentialsPath();
+  return Boolean(credentialsPath && existsSync(credentialsPath));
+}
+
+export function isLinearOAuthAuthenticated(): boolean {
+  const tokenPath = getLinearOAuthTokenPath();
+  if (!existsSync(tokenPath)) return false;
+
+  try {
+    const parsed = JSON.parse(readFileSync(tokenPath, "utf8")) as unknown;
+    if (!parsed || typeof parsed !== "object") return false;
+    const record = parsed as Record<string, unknown>;
+    return typeof record.access_token === "string" && Boolean(record.access_token.trim());
+  } catch {
+    return false;
+  }
+}
+
 export function getDefaultGoogleOAuthCredentialsPath(): string {
   return join(getDataDir(), "google-oauth.keys.json");
 }

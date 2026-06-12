@@ -26,6 +26,8 @@ import {
   waitForApproval,
 } from "./approvals.ts";
 import { startGoogleCalendarAuth } from "./calendarAuth.ts";
+import { startLinearOAuthAuth } from "./linearAuth.ts";
+import { getLinearAuthToken } from "./linear/auth-token.ts";
 import {
   getAgentProfilePath,
   getCursorApiKey,
@@ -37,6 +39,8 @@ import {
   getUserProfilePath,
   isGoogleCalendarAuthenticated,
   isGoogleCalendarConfigured,
+  isLinearOAuthAuthenticated,
+  isLinearOAuthConfigured,
   isWhoopAuthenticated,
   isWhoopConfigured,
 } from "./config.ts";
@@ -119,6 +123,7 @@ import {
   getIntegrationsStatus,
   importGoogleCalendarCredentials,
   saveGoogleCalendarOAuthCredentials,
+  saveLinearOAuthCredentials,
   updateIntegrationSecrets,
 } from "./integrations-secrets.ts";
 import {
@@ -132,6 +137,11 @@ import {
   type IntegrationTestResult,
   type IntegrationTestTarget,
 } from "./integrations-test.ts";
+import {
+  ensureVaultNavFolders,
+  listVaultDirectoryEntries,
+  VAULT_NAV_FOLDER_NAMES,
+} from "./vault-nav-structure.ts";
 import type { LinearIssueEntity, MarkdownFileEntity, ToolCategory } from "./types.ts";
 import { ensureAgentProfile } from "./context/agent.ts";
 import { ensureUserProfile, loadUserFirstName, loadUserTimezone } from "./context/profile.ts";
@@ -170,7 +180,10 @@ import { persistLookupAttachments } from "./lookup-attachment-store.ts";
 import { buildGeminiUserParts } from "./lookup-attachments.ts";
 import { completeLookupRun, runLookupMessage } from "./lookup-handler.ts";
 import { normalizeLookupOutputFormat } from "./lookup-output-format.ts";
-import { normalizeLookupSearchMode } from "./lookup-tools.ts";
+import {
+  normalizeLookupSearchMode,
+  resolveLookupSearchModeForRequest,
+} from "./lookup-tools.ts";
 import { loadSettings, saveSettings } from "./store.ts";
 import type { AgentEvent, ReadyMessage } from "./types.ts";
 import {
@@ -330,6 +343,7 @@ app.use("/llm-extract/*", bearerAuth({ token }));
 app.use("/linear/*", bearerAuth({ token }));
 app.use("/integrations/*", bearerAuth({ token }));
 app.use("/profiles/*", bearerAuth({ token }));
+app.use("/vault/*", bearerAuth({ token }));
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
@@ -346,6 +360,8 @@ app.get("/healthz", (c) => {
     hasApiKey: Boolean(getCursorApiKey()),
     hasGeminiApiKey: Boolean(getGeminiApiKey()),
     hasLinearApiKey: Boolean(getLinearApiKey()),
+    hasLinearOAuthCredentials: isLinearOAuthConfigured(),
+    hasLinearOAuthAuth: isLinearOAuthAuthenticated(),
     hasGoogleCalendarCredentials: isGoogleCalendarConfigured(),
     hasGoogleCalendarAuth: isGoogleCalendarAuthenticated(),
     hasWhoopConfigured: isWhoopConfigured(),
@@ -387,8 +403,15 @@ app.post("/llm-extract", async (c) => {
 });
 
 app.get("/linear/projects", async (c) => {
-  if (!getLinearApiKey()) {
-    return c.json({ error: "LINEAR_API_KEY is not configured", projects: [] }, 400);
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        projects: [],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      400,
+    );
   }
 
   const query = c.req.query("q")?.trim() || undefined;
@@ -406,8 +429,14 @@ app.get("/linear/projects", async (c) => {
 });
 
 app.get("/linear/teams", async (c) => {
-  if (!getLinearApiKey()) {
-    return c.json({ error: "LINEAR_API_KEY is not configured", teams: [] }, 400);
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        teams: [],
+      },
+      400,
+    );
   }
 
   try {
@@ -467,6 +496,8 @@ app.post("/integrations/test", async (c) => {
     geminiApiKey?: string;
     googleOAuthClientId?: string;
     googleOAuthClientSecret?: string;
+    linearOAuthClientId?: string;
+    linearOAuthClientSecret?: string;
   };
   const target = body.target ?? "all";
   if (
@@ -475,7 +506,8 @@ app.post("/integrations/test", async (c) => {
     target !== "linear" &&
     target !== "gemini" &&
     target !== "googleCalendar" &&
-    target !== "googleCalendarCredentials"
+    target !== "googleCalendarCredentials" &&
+    target !== "linearOAuthCredentials"
   ) {
     return c.json({ error: "Invalid integration test target" }, 400);
   }
@@ -486,6 +518,8 @@ app.post("/integrations/test", async (c) => {
     geminiApiKey: body.geminiApiKey,
     googleOAuthClientId: body.googleOAuthClientId,
     googleOAuthClientSecret: body.googleOAuthClientSecret,
+    linearOAuthClientId: body.linearOAuthClientId,
+    linearOAuthClientSecret: body.linearOAuthClientSecret,
   };
 
   const result = await runIntegrationTests(target, credentials);
@@ -529,6 +563,32 @@ app.post("/integrations/google-calendar/connect", async (c) => {
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to start Google Calendar authentication";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.post("/integrations/linear/credentials", async (c) => {
+  try {
+    const body = await c.req.json();
+    return c.json(
+      saveLinearOAuthCredentials(body as {
+        clientId?: string | null;
+        clientSecret?: string | null;
+        clear?: boolean;
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save Linear OAuth credentials";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/integrations/linear/connect", async (c) => {
+  try {
+    const result = await startLinearOAuthAuth();
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to start Linear authentication";
     return c.json({ error: message }, 500);
   }
 });
@@ -868,6 +928,7 @@ app.put("/settings", async (c) => {
 
   if (notesPath) {
     prepareWorkspace(notesPath, port, token);
+    ensureVaultNavFolders(notesPath);
     settings.notesPath = notesPath;
   }
 
@@ -934,6 +995,26 @@ app.put("/settings", async (c) => {
     issueLinkMode: next.issueLinkMode ?? "external",
     groceryLinearProjectId: next.groceryLinearProjectId ?? null,
   });
+});
+
+app.get("/vault/folders", (c) => {
+  return c.json({ folders: VAULT_NAV_FOLDER_NAMES });
+});
+
+app.get("/vault/entries", (c) => {
+  const notesPath = resolveNotesPath();
+  const path = c.req.query("path")?.trim();
+  if (!path) {
+    return c.json({ error: "path is required" }, 400);
+  }
+
+  try {
+    const entries = listVaultDirectoryEntries(notesPath, path);
+    return c.json({ path, entries });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to list vault directory";
+    return c.json({ error: message }, 400);
+  }
 });
 
 app.get("/profiles/:kind", (c) => {
@@ -1714,7 +1795,11 @@ app.post("/lookup/sessions/:sessionId/messages", async (c) => {
     return c.json({ error: "depthMode must be fast or deep" }, 400);
   }
 
-  const searchMode = normalizeLookupSearchMode(body.searchMode);
+  const searchMode = resolveLookupSearchModeForRequest(
+    normalizeLookupSearchMode(body.searchMode),
+    text,
+    attachments.length > 0,
+  );
   const outputFormat = normalizeLookupOutputFormat(body.outputFormat);
 
   const runId = crypto.randomUUID();

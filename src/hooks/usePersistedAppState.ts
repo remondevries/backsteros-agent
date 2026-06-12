@@ -1,5 +1,6 @@
 import type { AppView } from "../app/appViews";
 import type { SettingsTabId } from "../settings/settingsTabs";
+import { isSidebarNavItemId, type SidebarNavItemId } from "../lib/sidebarNavItems";
 
 const APP_STATE_STORAGE_KEY = "backsteros.app.state";
 
@@ -25,6 +26,7 @@ export type PersistedAppState = {
   appView?: AppView;
   showSettings?: boolean;
   activeSettingsTab?: SettingsTabId;
+  activeVaultNavItem?: SidebarNavItemId;
 };
 
 function readRawState(): PersistedAppState {
@@ -50,6 +52,11 @@ export function readPersistedShowSettings(): boolean {
 export function readPersistedSettingsTab(): SettingsTabId | null {
   const tab = readRawState().activeSettingsTab;
   return tab && SETTINGS_TABS.has(tab) ? tab : null;
+}
+
+export function readPersistedVaultNavItem(): SidebarNavItemId | null {
+  const item = readRawState().activeVaultNavItem;
+  return item && isSidebarNavItemId(item) ? item : null;
 }
 
 export function writePersistedAppState(patch: PersistedAppState) {

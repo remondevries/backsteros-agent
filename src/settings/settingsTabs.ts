@@ -23,14 +23,14 @@ export const SETTINGS_TABS: {
   },
   {
     id: "obsidian",
-    label: "Local vault (Obsidian settings)",
-    description: "Obsidian notes folder and vault name",
+    label: "Local vault",
+    description: "Local notes folder and vault name",
     group: "integration",
   },
   {
     id: "linear",
     label: "Linear",
-    description: "API key and app preferences",
+    description: "General, API key, and OAuth",
     group: "integration",
   },
   {

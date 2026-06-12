@@ -1,4 +1,4 @@
-import { getLinearApiKey } from "../config.ts";
+import { getLinearAuthToken, linearAuthorizationHeader } from "./auth-token.ts";
 
 export const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 
@@ -7,15 +7,15 @@ export async function linearGraphqlRequest<T>(
   variables: Record<string, unknown>,
   options?: { apiKey?: string },
 ): Promise<T> {
-  const apiKey = options?.apiKey?.trim() || getLinearApiKey();
+  const apiKey = options?.apiKey?.trim() || getLinearAuthToken();
   if (!apiKey) {
-    throw new Error("LINEAR_API_KEY is not configured");
+    throw new Error("Linear is not connected. Add an API key or connect OAuth in Settings.");
   }
 
   const response = await fetch(LINEAR_GRAPHQL_URL, {
     method: "POST",
     headers: {
-      Authorization: apiKey,
+      Authorization: linearAuthorizationHeader(apiKey),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query, variables }),

@@ -17,6 +17,12 @@ describe("integrationConnectionStatus", () => {
       clientId: { configured: true, preview: "...com" },
       clientSecret: { configured: true, preview: "...cret" },
     },
+    linear: {
+      credentialsConfigured: false,
+      authenticated: false,
+      clientId: { configured: false },
+      clientSecret: { configured: false },
+    },
   };
 
   const context = {
@@ -28,6 +34,20 @@ describe("integrationConnectionStatus", () => {
     expect(isSettingsTabConnected("cursor", context)).toBe(true);
     expect(isSettingsTabConnected("linear", context)).toBe(false);
     expect(isSettingsTabConnected("gemini", context)).toBe(true);
+    expect(
+      isSettingsTabConnected("linear", {
+        ...context,
+        integrationsStatus: {
+          ...status,
+          linear: {
+            credentialsConfigured: true,
+            authenticated: true,
+            clientId: { configured: true },
+            clientSecret: { configured: true },
+          },
+        },
+      }),
+    ).toBe(true);
   });
 
   test("requires Google Calendar credentials and authentication", () => {

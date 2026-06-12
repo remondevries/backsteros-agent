@@ -7,6 +7,7 @@ import {
   MAX_TEXT_BYTES,
   resolveMimeType,
 } from "./attachments.ts";
+import { prepareLookupAttachmentContent } from "./lookup-limits.ts";
 import { extractPdfText } from "./lookup-pdf-text.ts";
 import type { AttachmentInput, MessageAttachmentMeta } from "./types.ts";
 
@@ -111,7 +112,8 @@ function validateLookupAttachment(
 }
 
 export function formatExtractedAttachmentText(name: string, content: string): string {
-  return `[Attached file: ${name}]\n\`\`\`\n${content}\n\`\`\``;
+  const prepared = prepareLookupAttachmentContent(content);
+  return `[Attached file: ${name}]\n\`\`\`\n${prepared}\n\`\`\``;
 }
 
 export async function buildGeminiUserParts(
@@ -140,8 +142,7 @@ export async function buildGeminiUserParts(
     }
 
     if (validation.kind === "text") {
-      const content = buffer.toString("utf8");
-      textParts.push(formatExtractedAttachmentText(attachment.name, content));
+      textParts.push(formatExtractedAttachmentText(attachment.name, buffer.toString("utf8")));
       attachmentMeta.push({
         kind: "text",
         name: attachment.name,
@@ -154,6 +155,7 @@ export async function buildGeminiUserParts(
       const extracted =
         attachment.extractedText?.trim() || (await extractPdfText(buffer)) || null;
       if (extracted) {
+        attachment.extractedText = extracted;
         textParts.push(formatExtractedAttachmentText(attachment.name, extracted));
         attachmentMeta.push({
           kind: "binary",
