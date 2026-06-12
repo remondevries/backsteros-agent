@@ -286,7 +286,17 @@ textarea {
   min-width: 0;
   min-height: 0;
   display: flex;
-  padding: var(--content-workspace-inset);
+  padding: 0 var(--content-workspace-inset) var(--content-workspace-inset);
+  overflow: hidden;
+}
+
+.content-panel-shell {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -426,7 +436,7 @@ textarea {
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -502,7 +512,9 @@ textarea {
 }
 
 .content-panel-breadcrumb-sep {
-  margin: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 6px;
   color: var(--text-faint);
 }
 
@@ -510,6 +522,7 @@ textarea {
   padding: 0;
   border: none;
   background: transparent;
+  font: inherit;
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -770,13 +783,13 @@ textarea {
 
 .linear-project-view-tab {
   flex-shrink: 0;
-  padding: 7px 16px;
+  padding: 6px 14px;
   border: 0.5px solid var(--linear-project-view-tab-border);
   border-radius: 999px;
   background: var(--linear-project-view-tab-bg);
   color: var(--linear-project-view-tab-text);
   font: inherit;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
   cursor: pointer;
@@ -1183,6 +1196,16 @@ button.project-issue-row:focus-visible {
   line-height: 18px;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
+}
+
+.project-issue-row__id,
+.linear-issue-id,
+.linear-issue-identifier {
+  font-family:
+    var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cpsp" 1, "calt" 1;
 }
 
 .project-issue-row__title {
@@ -2284,7 +2307,7 @@ button.project-document-row:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  padding-top: 24px;
+  padding-top: 52px;
 }
 
 .linear-issue-icon {
@@ -2308,6 +2331,12 @@ button.project-document-row:focus-visible {
 
 .linear-issue-header .linear-issue-title {
   margin: 0;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 24px;
   font-weight: 600;
   line-height: 1.25;
@@ -2328,7 +2357,7 @@ button.project-document-row:focus-visible {
 }
 
 .linear-issue-body-editor .tiptap-editor-content {
-  font-size: 17px;
+  font-size: 16px;
   line-height: 24px;
   color: var(--text-secondary);
 }

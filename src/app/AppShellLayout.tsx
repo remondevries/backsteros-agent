@@ -137,6 +137,7 @@ function AppMainShell({
           sidebarOpen={showContentPanelSidebar}
           hideSidebar={settingsOpen || activeVaultNavItem === "projects"}
           activeVaultNavItem={activeVaultNavItem}
+          onVaultNavItemChange={handleVaultNavItemChange}
           vaultExplorerEnabled={vaultExplorerEnabled}
           settingsOpen={settingsOpen}
           activeSettingsTab={activeSettingsTab}
