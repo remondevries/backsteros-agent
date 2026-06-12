@@ -321,6 +321,7 @@ export const ChatView = forwardRef<
     onSessionClear?: (title: string) => void;
     onNavigateToView?: (view: AppView) => void;
     layout?: "default" | "panel";
+    focusContext?: import("../lib/chatFocusContext").ChatFocusContext | null;
   }
 >(function ChatView(
   {
@@ -334,6 +335,7 @@ export const ChatView = forwardRef<
     onSessionClear,
     onNavigateToView,
     layout = "default",
+    focusContext = null,
   },
   ref,
 ) {
@@ -1384,8 +1386,15 @@ export const ChatView = forwardRef<
         }
       }
     }
-    const pinsForSend = { ...toolPins };
-    setToolPins(EMPTY_TOOL_PINS);
+    const pinsForSend = focusContext
+      ? {
+          linear: "on" as const,
+          ...(focusContext.kind === "vault_document" ? { obsidian: "on" as const } : {}),
+        }
+      : { ...toolPins };
+    if (!focusContext) {
+      setToolPins(EMPTY_TOOL_PINS);
+    }
     focusComposer();
 
     const registeredFlowVariant = resolveAutomationFlowVariant(effectiveQuickActionId);
@@ -1409,6 +1418,18 @@ export const ChatView = forwardRef<
       quickActionId: effectiveQuickActionId,
       flowVariant,
       attachments: pendingAttachmentsToMessageAttachments(attachmentsToSend),
+      contextChips: focusContext
+        ? [
+            {
+              id:
+                focusContext.kind === "linear_issue"
+                  ? focusContext.identifier
+                  : focusContext.path,
+              title: focusContext.title,
+              entityType: focusContext.kind,
+            },
+          ]
+        : undefined,
     };
     if (effectiveQuickActionId === GOOD_MORNING_ACTION_ID) {
       recordMorningReviewUsage();
@@ -1434,7 +1455,11 @@ export const ChatView = forwardRef<
         wireAttachments.length > 0 ? wireAttachments : undefined,
         pinsForSend,
         effectiveQuickActionId,
-        { captureTime: captureTimeForSend, groceryWeek: groceryWeekForSend },
+        {
+          captureTime: captureTimeForSend,
+          groceryWeek: groceryWeekForSend,
+          focusContext,
+        },
       );
       liveRunIdRef.current = runId;
       setMessages((current) =>

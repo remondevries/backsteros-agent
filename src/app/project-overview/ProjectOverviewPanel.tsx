@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { LinearProjectIcon } from "../../chat/LinearProjectIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
+import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectOverview } from "../../hooks/useLinearProjectOverview";
 import {
   formatOverviewStartMonth,
@@ -18,10 +20,25 @@ export function ProjectOverviewPanel({
   projectId: string;
   enabled: boolean;
 }) {
-  const { overview, loading, error, saveDescription } = useLinearProjectOverview(
+  const [editorBar, setEditorBar] = useState({
+    saving: false,
+    dirty: false,
+    error: null as string | null,
+  });
+  const { overview, loading, refreshing, error, refresh, saveDescription } = useLinearProjectOverview(
     projectId,
     enabled,
   );
+
+  useContentPanelBarState({
+    saving: editorBar.saving,
+    dirty: editorBar.dirty,
+    error: editorBar.error ?? error,
+    loading: loading && !overview,
+    loadingMessage: "Loading overview…",
+    refreshing,
+    onRefresh: refresh,
+  });
 
   if (loading && !overview) {
     return (
@@ -101,6 +118,7 @@ export function ProjectOverviewPanel({
           projectId={projectId}
           value={description}
           onSave={saveDescription}
+          onBarStateChange={setEditorBar}
         />
       </article>
     </div>

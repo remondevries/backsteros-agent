@@ -22,6 +22,30 @@ export type ActiveVaultDocument = {
   title: string;
 };
 
+export type ActiveLinearIssue = {
+  id: string;
+  identifier: string;
+  title: string;
+};
+
+export type FocusContentSnapshot =
+  | {
+      kind: "linear_issue";
+      description: string | null;
+    }
+  | {
+      kind: "vault_document";
+      title: string;
+      body: string;
+    };
+
+export type ContentPanelBarState = {
+  message: string | null;
+  tone: "default" | "error";
+  refreshing: boolean;
+  onRefresh: (() => void) | null;
+};
+
 type ContentPanelNavigationContextValue = {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   setSidebarSegments: (segments: ContentPanelBreadcrumbSegment[]) => void;
@@ -31,8 +55,16 @@ type ContentPanelNavigationContextValue = {
   setActiveVaultDocument: (document: ActiveVaultDocument | null) => void;
   updateActiveVaultDocument: (patch: Partial<ActiveVaultDocument>) => void;
   clearActiveVaultDocument: () => void;
+  activeLinearIssue: ActiveLinearIssue | null;
+  setActiveLinearIssue: (issue: ActiveLinearIssue | null) => void;
+  updateActiveLinearIssue: (patch: Partial<ActiveLinearIssue>) => void;
+  clearActiveLinearIssue: () => void;
+  focusContentSnapshot: FocusContentSnapshot | null;
+  setFocusContentSnapshot: (snapshot: FocusContentSnapshot | null) => void;
   linearWorkspaceView: LinearWorkspaceViewId | null;
   setLinearWorkspaceView: (view: LinearWorkspaceViewId | null) => void;
+  contentPanelBarState: ContentPanelBarState | null;
+  setContentPanelBarState: (state: ContentPanelBarState | null) => void;
 };
 
 const ContentPanelNavigationContext = createContext<ContentPanelNavigationContextValue | null>(
@@ -49,7 +81,14 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   const [activeVaultDocument, setActiveVaultDocumentState] = useState<ActiveVaultDocument | null>(
     null,
   );
+  const [activeLinearIssue, setActiveLinearIssueState] = useState<ActiveLinearIssue | null>(null);
+  const [focusContentSnapshot, setFocusContentSnapshotState] = useState<FocusContentSnapshot | null>(
+    null,
+  );
   const [linearWorkspaceView, setLinearWorkspaceViewState] = useState<LinearWorkspaceViewId | null>(
+    null,
+  );
+  const [contentPanelBarState, setContentPanelBarStateState] = useState<ContentPanelBarState | null>(
     null,
   );
 
@@ -59,7 +98,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   useEffect(() => {
     setActiveVaultDocumentState(null);
+    setActiveLinearIssueState(null);
+    setFocusContentSnapshotState(null);
     setLinearWorkspaceViewState(null);
+    setContentPanelBarStateState(null);
   }, [linearSelectionKey]);
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
@@ -72,6 +114,9 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   const setActiveVaultDocument = useCallback((document: ActiveVaultDocument | null) => {
     setActiveVaultDocumentState(document);
+    if (document) {
+      setActiveLinearIssueState(null);
+    }
   }, []);
 
   const updateActiveVaultDocument = useCallback((patch: Partial<ActiveVaultDocument>) => {
@@ -80,10 +125,37 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   const clearActiveVaultDocument = useCallback(() => {
     setActiveVaultDocumentState(null);
+    setFocusContentSnapshotState((current) =>
+      current?.kind === "vault_document" ? null : current,
+    );
+  }, []);
+
+  const setActiveLinearIssue = useCallback((issue: ActiveLinearIssue | null) => {
+    setActiveLinearIssueState(issue);
+    if (issue) {
+      setActiveVaultDocumentState(null);
+    }
+  }, []);
+
+  const updateActiveLinearIssue = useCallback((patch: Partial<ActiveLinearIssue>) => {
+    setActiveLinearIssueState((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  const clearActiveLinearIssue = useCallback(() => {
+    setActiveLinearIssueState(null);
+    setFocusContentSnapshotState((current) => (current?.kind === "linear_issue" ? null : current));
+  }, []);
+
+  const setFocusContentSnapshot = useCallback((snapshot: FocusContentSnapshot | null) => {
+    setFocusContentSnapshotState(snapshot);
   }, []);
 
   const setLinearWorkspaceView = useCallback((view: LinearWorkspaceViewId | null) => {
     setLinearWorkspaceViewState(view);
+  }, []);
+
+  const setContentPanelBarState = useCallback((state: ContentPanelBarState | null) => {
+    setContentPanelBarStateState(state);
   }, []);
 
   const value = useMemo(
@@ -96,19 +168,35 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setActiveVaultDocument,
       updateActiveVaultDocument,
       clearActiveVaultDocument,
+      activeLinearIssue,
+      setActiveLinearIssue,
+      updateActiveLinearIssue,
+      clearActiveLinearIssue,
+      focusContentSnapshot,
+      setFocusContentSnapshot,
       linearWorkspaceView,
       setLinearWorkspaceView,
+      contentPanelBarState,
+      setContentPanelBarState,
     }),
     [
+      activeLinearIssue,
       activeVaultDocument,
+      clearActiveLinearIssue,
       clearActiveVaultDocument,
+      contentPanelBarState,
+      focusContentSnapshot,
       linearSelection,
       linearWorkspaceView,
+      setActiveLinearIssue,
       setActiveVaultDocument,
+      setContentPanelBarState,
+      setFocusContentSnapshot,
       setLinearSelection,
       setLinearWorkspaceView,
       sidebarSegments,
       setSidebarSegments,
+      updateActiveLinearIssue,
       updateActiveVaultDocument,
     ],
   );

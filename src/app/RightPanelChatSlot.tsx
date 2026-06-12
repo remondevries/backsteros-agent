@@ -3,6 +3,9 @@ import { ChatView } from "../chat/ChatView";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import type { AppView } from "./appViews";
 import type { IntegrationsStatus } from "../lib/api";
+import { buildChatFocusContext, chatFocusContextLabel } from "../lib/chatFocusContext";
+import { useContentPanelNavigation } from "./contentPanelNavigation";
+import { LinearIssueAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
 import { resolveRightPanelAgent } from "./rightPanelAgents";
 
 type RightPanelSession = {
@@ -28,22 +31,51 @@ export function RightPanelChatSlot({
     runs: Record<string, RunViewModel>,
   ) => void;
 }) {
+  const { activeLinearIssue, activeVaultDocument, focusContentSnapshot } =
+    useContentPanelNavigation();
+
+  const focusContext = useMemo(
+    () =>
+      buildChatFocusContext({
+        activeLinearIssue,
+        activeVaultDocument,
+        focusContentSnapshot,
+      }),
+    [activeLinearIssue, activeVaultDocument, focusContentSnapshot],
+  );
+
   const resolvedAgent = useMemo(
     () =>
       resolveRightPanelAgent({
         activeView,
         integrationsStatus,
+        hasLinearFocus: focusContext !== null,
       }),
-    [activeView, integrationsStatus],
+    [activeView, focusContext, integrationsStatus],
   );
+
+  const isLinearIssueThreadMode =
+    resolvedAgent.active === "linear" && focusContext?.kind === "linear_issue";
+
+  if (isLinearIssueThreadMode) {
+    return (
+      <LinearIssueAgentPanel
+        issueId={focusContext.issueId}
+        identifier={focusContext.identifier}
+        title={focusContext.title}
+      />
+    );
+  }
 
   const headerSubtitle = resolvedAgent.fallbackReason
     ? resolvedAgent.fallbackReason
     : resolvedAgent.requested !== resolvedAgent.active
       ? `Requested ${resolvedAgent.requested} agent`
-      : undefined;
+      : focusContext
+        ? chatFocusContextLabel(focusContext)
+        : undefined;
 
-  if (resolvedAgent.active === "cursor") {
+  if (resolvedAgent.active === "cursor" || resolvedAgent.active === "linear") {
     return (
       <div className="right-side-panel-chat">
         <header className="right-side-panel-chat-header">
@@ -61,6 +93,7 @@ export function RightPanelChatSlot({
             layout="panel"
             initialMessages={session.initialMessages}
             initialRuns={session.initialRuns}
+            focusContext={focusContext}
             onStateChange={(messages, runs) => onSaveState(session.sessionId, messages, runs)}
             onNavigateToView={onNavigateToView}
           />

@@ -1,17 +1,14 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
+import type { LinearIssueEntity } from "../../chat/types";
+import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
 import { groupVariantFromStatusKey } from "../../lib/groupVariantFromStatusKey";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
+import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
 import { useCollapsibleGroups } from "../workspace-list/useCollapsibleGroups";
 import { ProjectIssueRow } from "./ProjectIssueRow";
-
-function openIssueUrl(url: string | undefined) {
-  const target = url?.trim();
-  if (!target) return;
-  window.open(target, "_blank", "noopener,noreferrer");
-}
 
 export function ProjectIssuesPanel({
   projectId,
@@ -20,8 +17,28 @@ export function ProjectIssuesPanel({
   projectId: string;
   enabled: boolean;
 }) {
-  const { issues, loading, error } = useLinearProjectIssues(projectId, enabled);
+  const { setActiveLinearIssue } = useContentPanelNavigation();
+  const { issues, loading, refreshing, error, refresh } = useLinearProjectIssues(projectId, enabled);
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
+
+  useContentPanelBarState({
+    error,
+    loading: loading && issues.length === 0,
+    loadingMessage: "Loading issues…",
+    refreshing,
+    onRefresh: refresh,
+  });
+
+  const openLinearIssue = useCallback(
+    (issue: LinearIssueEntity) => {
+      setActiveLinearIssue({
+        id: issue.id,
+        identifier: issue.identifier ?? issue.id,
+        title: issue.title,
+      });
+    },
+    [setActiveLinearIssue],
+  );
 
   const groups = useMemo(() => {
     return groupLinearIssuesByStatus(issues).map((group) => ({
@@ -83,7 +100,9 @@ export function ProjectIssuesPanel({
             key={issue.id}
             issue={issue}
             grouped
-            onClick={() => openIssueUrl(issue.url)}
+            onClick={() => {
+              openLinearIssue(issue);
+            }}
           />
         )}
       />

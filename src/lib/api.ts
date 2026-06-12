@@ -103,11 +103,55 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_
         : error instanceof Error
           ? error.message
           : "failed";
+    // #region agent log
+    if (path.includes("/vault/documents")) {
+      fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "49b1ec",
+        },
+        body: JSON.stringify({
+          sessionId: "49b1ec",
+          location: "api.ts:request",
+          message: "Vault document request failed before response",
+          data: { path, method: init?.method ?? "GET", error: message },
+          hypothesisId: "H1",
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
     throw new Error(`Cannot reach agent server at ${connection.baseUrl}: ${message}`);
   }
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    const errorMessage = await readErrorMessage(response);
+    // #region agent log
+    if (path.includes("/vault/documents")) {
+      fetch("http://127.0.0.1:7520/ingest/4580ffec-ea73-4c04-a5e5-8313ab77c6f6", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "49b1ec",
+        },
+        body: JSON.stringify({
+          sessionId: "49b1ec",
+          location: "api.ts:request",
+          message: "Vault document request returned error response",
+          data: {
+            path,
+            method: init?.method ?? "GET",
+            status: response.status,
+            error: errorMessage,
+          },
+          hypothesisId: "H1",
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+    throw new Error(errorMessage);
   }
 
   const text = await response.text();
@@ -480,12 +524,24 @@ export type VaultDirectoryEntry = {
   name: string;
   kind: "file" | "directory";
   path: string;
+  date?: string | null;
+  whoop?: {
+    sleep: number | null;
+    recovery: number | null;
+    strain: number | null;
+  } | null;
 };
 
 export type VaultDocumentContent = {
   path: string;
   title: string;
   body: string;
+  date?: string | null;
+  whoop?: {
+    sleep: number | null;
+    recovery: number | null;
+    strain: number | null;
+  } | null;
 };
 
 export async function listVaultDirectory(path: string) {
@@ -615,6 +671,75 @@ export async function updateLinearProjectOverviewDescription(projectId: string, 
 export async function fetchLinearProjectIssues(projectId: string) {
   return request<{ issues: LinearIssueEntity[]; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/issues`,
+  );
+}
+
+export type LinearIssueDetail = {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  url: string;
+  status: string;
+  stateType?: string;
+  priority: number;
+  priorityLabel: string;
+  assigneeName: string | null;
+  dueDate: string | null;
+  projectName: string | null;
+};
+
+export async function fetchLinearIssueDetail(issueId: string) {
+  return request<{ issue: LinearIssueDetail | null; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}`,
+  );
+}
+
+export type LinearCommentAuthor = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+export type LinearCommentThreadSummary = {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: LinearCommentAuthor;
+};
+
+export type LinearComment = {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: LinearCommentAuthor;
+  parentId: string | null;
+};
+
+export async function fetchLinearIssueCommentThreads(issueId: string) {
+  return request<{ threads: LinearCommentThreadSummary[]; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}/comment-threads`,
+  );
+}
+
+export async function fetchLinearIssueCommentThread(issueId: string, threadId: string) {
+  return request<{
+    viewerId: string | null;
+    comments: LinearComment[];
+    error?: string;
+  }>(`/linear/issues/${encodeURIComponent(issueId)}/comment-threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function createLinearIssueComment(
+  issueId: string,
+  options: { body?: string; parentId?: string; newThread?: boolean },
+) {
+  return request<{ comment: LinearComment; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}/comment-threads`,
+    {
+      method: "POST",
+      body: JSON.stringify(options),
+    },
   );
 }
 
@@ -759,6 +884,7 @@ export async function clearSessionChat(sessionId: string) {
 }
 
 import type { ToolPinSelection } from "../chat/tool-routing";
+import type { ChatFocusContext } from "./chatFocusContext";
 
 export async function sendMessage(
   sessionId: string,
@@ -766,7 +892,7 @@ export async function sendMessage(
   attachments?: AttachmentWireInput[],
   toolPins?: ToolPinSelection,
   quickActionId?: string,
-  options?: { captureTime?: string; groceryWeek?: string },
+  options?: { captureTime?: string; groceryWeek?: string; focusContext?: ChatFocusContext | null },
 ) {
   return request<{ runId: string; attachments?: MessageAttachment[] }>(
     `/sessions/${encodeURIComponent(sessionId)}/messages`,
@@ -779,6 +905,7 @@ export async function sendMessage(
         quickActionId,
         captureTime: options?.captureTime,
         groceryWeek: options?.groceryWeek,
+        focusContext: options?.focusContext ?? undefined,
       }),
     },
     120_000,

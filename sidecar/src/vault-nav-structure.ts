@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { normalizeVaultRelativePath, shouldSkipVaultDirectory } from "./vault-paths.ts";
+import { resolveVaultNoteWhoopStats, type VaultNoteWhoopStats } from "./vault/vault-whoop-stats.ts";
 
 export const VAULT_NAV_FOLDER_NAMES = [
   "Inbox",
@@ -20,7 +21,25 @@ export type VaultDirectoryEntry = {
   name: string;
   kind: "file" | "directory";
   path: string;
+  date?: string | null;
+  whoop?: VaultNoteWhoopStats | null;
 };
+
+function enrichMarkdownFileEntry(
+  notesPath: string,
+  entry: Pick<VaultDirectoryEntry, "name" | "kind" | "path">,
+): VaultDirectoryEntry {
+  if (entry.kind !== "file" || !entry.name.toLowerCase().endsWith(".md")) {
+    return entry;
+  }
+
+  const { date, whoop } = resolveVaultNoteWhoopStats(notesPath, entry.path);
+  return {
+    ...entry,
+    ...(date ? { date } : {}),
+    ...(whoop ? { whoop } : {}),
+  };
+}
 
 function resolveWorkspacePath(notesPath: string, targetPath: string): string {
   const abs = join(notesPath, targetPath);
@@ -85,11 +104,13 @@ export function listVaultDirectoryEntries(
       if (entry.isDirectory() && shouldSkipVaultDirectory(entry.name)) return false;
       return entry.isFile() || entry.isDirectory();
     })
-    .map((entry) => ({
-      name: entry.name,
-      kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
-      path: join(normalized, entry.name).replace(/\\/g, "/"),
-    }));
+    .map((entry) =>
+      enrichMarkdownFileEntry(notesPath, {
+        name: entry.name,
+        kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
+        path: join(normalized, entry.name).replace(/\\/g, "/"),
+      }),
+    );
 
   entries.sort((left, right) => {
     if (left.kind !== right.kind) {

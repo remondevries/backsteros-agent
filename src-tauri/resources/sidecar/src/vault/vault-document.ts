@@ -1,13 +1,26 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { joinFrontmatterAndBody, splitFrontmatter } from "../daily-note.ts";
+import { loadUserTimezone } from "../context/profile.ts";
+import { formatDateInTimezone, joinFrontmatterAndBody, readDailyNoteStats, splitFrontmatter } from "../daily-note.ts";
+import { updateLinearApiDocument } from "../linear/project-documents-api.ts";
 import { normalizeVaultRelativePath } from "../vault-paths.ts";
+import { ensureDocumentDateFrontmatter } from "./vault-frontmatter.ts";
+import { readLinearDocumentIdFromVault } from "./linear-document-sync.ts";
+import {
+  hasWhoopMetrics,
+  readWhoopStatsFromContent,
+  resolveVaultNoteDate,
+  toVaultNoteWhoopStats,
+  type VaultNoteWhoopStats,
+} from "./vault-whoop-stats.ts";
 
 export type VaultDocumentContent = {
   path: string;
   title: string;
   body: string;
   frontmatter: string | null;
+  date?: string | null;
+  whoop?: VaultNoteWhoopStats | null;
 };
 
 function titleFromBody(path: string, body: string): { title: string; body: string } {
@@ -57,25 +70,47 @@ export function readVaultDocument(notesPath: string, relativePath: string): Vaul
   const raw = readFileSync(abs, "utf8");
   const { frontmatter, body } = splitFrontmatter(raw);
   const parsed = titleFromBody(path, body);
+  const date = resolveVaultNoteDate(path, raw);
+  const ownStats = readWhoopStatsFromContent(raw);
+  let whoop = ownStats;
+  if (!whoop && date) {
+    const dailyStats = readDailyNoteStats(notesPath, date);
+    if (dailyStats && hasWhoopMetrics(dailyStats)) {
+      whoop = toVaultNoteWhoopStats(dailyStats);
+    }
+  }
 
   return {
     path,
     title: parsed.title,
     body: parsed.body,
     frontmatter,
+    date,
+    whoop,
   };
 }
 
-export function updateVaultDocument(
+export async function updateVaultDocument(
   notesPath: string,
   relativePath: string,
   updates: { title?: string; body?: string },
-): VaultDocumentContent {
+): Promise<VaultDocumentContent> {
   const current = readVaultDocument(notesPath, relativePath);
   const nextTitle = updates.title !== undefined ? updates.title : current.title;
   const nextBody = updates.body !== undefined ? updates.body : current.body;
   const abs = join(notesPath, current.path);
-  const content = joinFrontmatterAndBody(current.frontmatter, bodyWithTitle(nextTitle, nextBody));
+  const date = formatDateInTimezone(loadUserTimezone());
+  const frontmatter = ensureDocumentDateFrontmatter(current.frontmatter, date);
+  const content = joinFrontmatterAndBody(frontmatter, bodyWithTitle(nextTitle, nextBody));
   writeFileSync(abs, content, "utf8");
+
+  const linearDocumentId = readLinearDocumentIdFromVault(notesPath, current.path);
+  if (linearDocumentId) {
+    await updateLinearApiDocument(linearDocumentId, {
+      title: nextTitle,
+      content: nextBody,
+    });
+  }
+
   return readVaultDocument(notesPath, current.path);
 }

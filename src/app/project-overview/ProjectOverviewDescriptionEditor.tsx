@@ -3,14 +3,22 @@ import { TiptapEditor } from "../../editor/TiptapEditor";
 
 const SAVE_DEBOUNCE_MS = 800;
 
+export type ProjectOverviewEditorBarState = {
+  saving: boolean;
+  dirty: boolean;
+  error: string | null;
+};
+
 export function ProjectOverviewDescriptionEditor({
   projectId,
   value,
   onSave,
+  onBarStateChange,
 }: {
   projectId: string;
   value: string;
   onSave: (content: string) => Promise<string | null>;
+  onBarStateChange?: (state: ProjectOverviewEditorBarState) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [draft, setDraft] = useState(value);
@@ -21,6 +29,14 @@ export function ProjectOverviewDescriptionEditor({
   const draftRef = useRef(draft);
   const userEditedRef = useRef(false);
   draftRef.current = draft;
+
+  useEffect(() => {
+    onBarStateChange?.({
+      saving,
+      dirty,
+      error: saveError,
+    });
+  }, [dirty, onBarStateChange, saveError, saving]);
 
   useEffect(() => {
     setExpanded(true);
@@ -114,17 +130,7 @@ export function ProjectOverviewDescriptionEditor({
               ▾
             </span>
           </button>
-          {saving ? (
-            <span className="project-overview-description-status">Saving…</span>
-          ) : dirty ? (
-            <span className="project-overview-description-status">Unsaved changes</span>
-          ) : null}
         </div>
-        {saveError ? (
-          <p className="project-overview-description-error" role="alert">
-            {saveError}
-          </p>
-        ) : null}
         {expanded ? (
           <div className="project-overview-description-editor">
             <TiptapEditor

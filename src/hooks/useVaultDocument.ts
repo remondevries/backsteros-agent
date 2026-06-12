@@ -4,6 +4,7 @@ import { fetchVaultDocument, updateVaultDocument, type VaultDocumentContent } fr
 export function useVaultDocument(path: string, enabled = true) {
   const [document, setDocument] = useState<VaultDocumentContent | null>(null);
   const [loading, setLoading] = useState(enabled);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,5 +48,23 @@ export function useVaultDocument(path: string, enabled = true) {
     [path],
   );
 
-  return { document, loading, error, save };
+  const refresh = useCallback(async () => {
+    if (!enabled || !path) return;
+    setRefreshing(true);
+    setError(null);
+    try {
+      const result = await fetchVaultDocument(path);
+      if (result.error || !result.document) {
+        setDocument(null);
+        setError(result.error ?? "Failed to load document.");
+      } else {
+        setDocument(result.document);
+        setError(null);
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [enabled, path]);
+
+  return { document, loading, refreshing, error, save, refresh };
 }

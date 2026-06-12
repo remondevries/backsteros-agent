@@ -8,33 +8,44 @@ import {
 export function useLinearProjectOverview(projectId: string | null, enabled: boolean) {
   const [overview, setOverview] = useState<LinearProjectOverview | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!enabled || !projectId) {
-      setOverview(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchLinearProjectOverview(projectId);
-      setOverview(result.overview);
-      if (result.error) {
-        setError(result.error);
-      } else if (!result.overview) {
-        setError("Project not found.");
+  const refresh = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!enabled || !projectId) {
+        setOverview(null);
+        setError(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
       }
-    } catch (err) {
-      setOverview(null);
-      setError(err instanceof Error ? err.message : "Failed to load project overview");
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled, projectId]);
+
+      const isBackgroundRefresh = options?.background ?? false;
+      if (isBackgroundRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const result = await fetchLinearProjectOverview(projectId);
+        setOverview(result.overview);
+        if (result.error) {
+          setError(result.error);
+        } else if (!result.overview) {
+          setError("Project not found.");
+        }
+      } catch (err) {
+        setOverview(null);
+        setError(err instanceof Error ? err.message : "Failed to load project overview");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [enabled, projectId],
+  );
 
   const saveDescription = useCallback(
     async (content: string): Promise<string | null> => {
@@ -58,5 +69,7 @@ export function useLinearProjectOverview(projectId: string | null, enabled: bool
     void refresh();
   }, [refresh]);
 
-  return { overview, loading, error, refresh, saveDescription };
+  const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);
+
+  return { overview, loading, refreshing, error, refresh: refreshInBackground, saveDescription };
 }

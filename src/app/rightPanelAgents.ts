@@ -16,7 +16,7 @@ const AGENT_LABELS: Record<RightPanelAgentId, string> = {
 };
 
 /** Agents with a dedicated chat implementation in the right panel. */
-const IMPLEMENTED_AGENTS = new Set<RightPanelAgentId>(["cursor"]);
+const IMPLEMENTED_AGENTS = new Set<RightPanelAgentId>(["cursor", "linear"]);
 
 export function isLinearIntegrationAvailable(status: IntegrationsStatus | null): boolean {
   if (!status) return false;
@@ -28,8 +28,8 @@ export function isCursorAgentAvailable(status: IntegrationsStatus | null): boole
   return Boolean(status?.cursorApiKey.configured);
 }
 
-function requestAgentForView(activeView: AppView): RightPanelAgentId {
-  if (activeView === "linear") return "linear";
+function requestAgentForView(activeView: AppView, hasLinearFocus: boolean): RightPanelAgentId {
+  if (activeView === "linear" || hasLinearFocus) return "linear";
   return "cursor";
 }
 
@@ -49,8 +49,9 @@ function isAgentAvailable(
 export function resolveRightPanelAgent(input: {
   activeView: AppView;
   integrationsStatus: IntegrationsStatus | null;
+  hasLinearFocus?: boolean;
 }): ResolvedRightPanelAgent {
-  const requested = requestAgentForView(input.activeView);
+  const requested = requestAgentForView(input.activeView, Boolean(input.hasLinearFocus));
   const label = AGENT_LABELS[requested];
 
   if (

@@ -1,7 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { WhoopMetricDots } from "../chat/WhoopMetricDots";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
+import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
+import { resolveTodayDailyNoteDocument } from "../lib/resolveTodayDailyNoteDocument";
+import { whoopSnapshotFromStats } from "../lib/whoopSnapshotFromStats";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
-import { useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
+import {
+  useContentPanelNavigation,
+  useContentPanelSidebarBreadcrumbs,
+} from "./contentPanelNavigation";
 
 function splitRelativePath(path: string): string[] {
   return path.split("/").filter(Boolean);
@@ -14,10 +21,33 @@ export function VaultFolderExplorer({
   activeNavItem: VaultNavItemId;
   enabled: boolean;
 }) {
+  const { activeVaultDocument, setActiveVaultDocument } = useContentPanelNavigation();
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
 
   const { entries, loading, error } = useVaultDirectory(relativePath, enabled);
+
+  useEffect(() => {
+    setRelativePath(vaultNavItemLabel(activeNavItem));
+  }, [activeNavItem]);
+
+  useEffect(() => {
+    if (!enabled || activeNavItem !== "daily") return;
+
+    let cancelled = false;
+    void resolveTodayDailyNoteDocument().then((document) => {
+      if (cancelled || !document) return;
+      setActiveVaultDocument(document);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeNavItem, enabled, setActiveVaultDocument]);
+
+  const openVaultNote = (path: string, title: string) => {
+    setActiveVaultDocument({ path, title });
+  };
 
   const sidebarBreadcrumbs = useMemo(() => {
     const pathSegments = splitRelativePath(relativePath);
@@ -43,7 +73,16 @@ export function VaultFolderExplorer({
       {!loading && !error ? (
         entries.length > 0 ? (
           <ul className="vault-folder-explorer-list">
-            {entries.map((entry) => (
+            {entries.map((entry) => {
+              const whoopSnapshot =
+                entry.kind === "file" && entry.date && entry.whoop
+                  ? whoopSnapshotFromStats(entry.date, entry.whoop)
+                  : null;
+              const displayName = formatVaultNoteDisplayName(entry.name);
+              const selected =
+                entry.kind === "file" && activeVaultDocument?.path === entry.path;
+
+              return (
               <li key={entry.path} className="vault-folder-explorer-item">
                 {entry.kind === "directory" ? (
                   <button
@@ -54,12 +93,26 @@ export function VaultFolderExplorer({
                     <span className="vault-folder-explorer-entry-name">{entry.name}</span>
                   </button>
                 ) : (
-                  <div className="vault-folder-explorer-entry vault-folder-explorer-entry-file">
-                    <span className="vault-folder-explorer-entry-name">{entry.name}</span>
-                  </div>
+                  <button
+                    type="button"
+                    className={[
+                      "vault-folder-explorer-entry",
+                      "vault-folder-explorer-entry-file",
+                      "vault-folder-explorer-entry-selectable",
+                      selected ? "vault-folder-explorer-entry-selected" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    aria-current={selected ? "page" : undefined}
+                    onClick={() => openVaultNote(entry.path, displayName)}
+                  >
+                    <span className="vault-folder-explorer-entry-name">{displayName}</span>
+                    {whoopSnapshot ? <WhoopMetricDots snapshot={whoopSnapshot} /> : null}
+                  </button>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : (
           <p className="vault-folder-explorer-status">This folder is empty.</p>

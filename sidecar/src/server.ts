@@ -88,6 +88,15 @@ import {
   fetchLinearTeamDocuments,
 } from "./vault/project-documents.ts";
 import { readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
+import { debugLog } from "./debug-log.ts";
+import { fetchLinearIssueDetail } from "./linear/issue-detail.ts";
+import {
+  createLinearAgentThread,
+  createLinearIssueComment,
+  fetchLinearIssueCommentThread,
+  fetchLinearIssueCommentThreads,
+} from "./linear/issue-comments.ts";
+import { buildFocusContextSection, type FocusContextInput } from "./context/focus.ts";
 import { fetchLinearTeams } from "./linear/teams.ts";
 import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
 import { dispatchAutomationHandler } from "./automation/registry.ts";
@@ -335,7 +344,7 @@ app.use(
     // Localhost-only sidecar: reflect the Tauri webview origin (tauri.localhost, etc.).
     origin: (origin) => origin ?? "http://tauri.localhost",
     allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -508,6 +517,119 @@ app.get("/linear/projects/:projectId/issues", async (c) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load project issues";
     return c.json({ error: message, issues: [] }, 500);
+  }
+});
+
+app.get("/linear/issues/:issueId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        issue: null,
+      },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required", issue: null }, 400);
+  }
+
+  try {
+    const issue = await fetchLinearIssueDetail(issueId);
+    if (!issue) {
+      return c.json({ error: "Issue not found", issue: null }, 404);
+    }
+    return c.json({ issue });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load issue";
+    return c.json({ error: message, issue: null }, 500);
+  }
+});
+
+app.get("/linear/issues/:issueId/comment-threads", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        threads: [],
+      },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required", threads: [] }, 400);
+  }
+
+  try {
+    const threads = await fetchLinearIssueCommentThreads(issueId);
+    return c.json({ threads });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load comment threads";
+    return c.json({ error: message, threads: [] }, 500);
+  }
+});
+
+app.get("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        viewerId: null,
+        comments: [],
+      },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  const threadId = c.req.param("threadId")?.trim();
+  if (!issueId || !threadId) {
+    return c.json({ error: "issueId and threadId are required", viewerId: null, comments: [] }, 400);
+  }
+
+  try {
+    const thread = await fetchLinearIssueCommentThread(issueId, threadId);
+    return c.json(thread);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load comment thread";
+    return c.json({ error: message, viewerId: null, comments: [] }, 500);
+  }
+});
+
+app.post("/linear/issues/:issueId/comment-threads", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      { error: "Linear is not connected. Add an API key or connect OAuth in Settings." },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required" }, 400);
+  }
+
+  const body = (await c.req.json()) as { body?: string; parentId?: string; newThread?: boolean };
+  try {
+    if (body.newThread) {
+      const comment = await createLinearAgentThread(issueId);
+      return c.json({ comment });
+    }
+
+    const text = body.body?.trim() ?? "";
+    if (!text) {
+      return c.json({ error: "body is required" }, 400);
+    }
+
+    const comment = await createLinearIssueComment(issueId, text, body.parentId);
+    return c.json({ comment });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create comment";
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -1277,10 +1399,26 @@ app.patch("/vault/documents", async (c) => {
   }
 
   try {
-    const document = updateVaultDocument(notesPath, path, { title, body: content });
+    const document = await updateVaultDocument(notesPath, path, { title, body: content });
+    // #region agent log
+    debugLog(
+      "server.ts:PATCH /vault/documents",
+      "Vault document patched successfully",
+      { path, hasTitle: title !== undefined, hasBody: content !== undefined },
+      "H1",
+    );
+    // #endregion
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update document";
+    // #region agent log
+    debugLog(
+      "server.ts:PATCH /vault/documents",
+      "Vault document patch failed",
+      { path, error: message },
+      "H1",
+    );
+    // #endregion
     return c.json({ error: message }, 400);
   }
 });
@@ -1503,6 +1641,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
     quickActionId?: string;
     captureTime?: string;
     groceryWeek?: string;
+    focusContext?: FocusContextInput;
   };
   const text = body.text?.trim() ?? "";
   const attachments = (body.attachments ?? []).map((attachment) => ({
@@ -1548,7 +1687,16 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isGroceryList = isGroceryListQuickAction(body.quickActionId);
   const isDeleteFile = isDeleteFileQuickAction(body.quickActionId);
   const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
-  const effectiveToolSelection = isGoodMorningWake || isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList || isDeleteFile
+  const focusToolSelection = body.focusContext
+    ? {
+        obsidian: body.focusContext.kind === "vault_document",
+        linear: true,
+        calendar: false,
+        whoop: false,
+      }
+    : null;
+  const effectiveToolSelection = focusToolSelection
+    ?? (isGoodMorningWake || isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList || isDeleteFile
     ? {
         obsidian: false,
         linear: false,
@@ -1562,7 +1710,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
         calendar: body.toolPins?.calendar === "on",
         whoop: body.toolPins?.whoop === "on",
       }
-    : resolveToolSelection(text, body.toolPins);
+    : resolveToolSelection(text, body.toolPins));
 
   let userMessage;
   let attachmentMeta;
@@ -1574,6 +1722,15 @@ app.post("/sessions/:sessionId/messages", async (c) => {
       notesPath,
       settings.vaultName,
     );
+    if (body.focusContext) {
+      const focusSection = await buildFocusContextSection(body.focusContext, notesPath);
+      if (focusSection) {
+        userMessage = {
+          ...userMessage,
+          text: `[System: ${focusSection}]\n\n${userMessage.text}`,
+        };
+      }
+    }
     attachmentMeta = built.attachmentMeta;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid attachments";

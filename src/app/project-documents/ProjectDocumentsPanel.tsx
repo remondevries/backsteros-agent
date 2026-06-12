@@ -4,6 +4,7 @@ import {
   compareDocumentsNewestFirst,
   documentStatusGroupVariant,
 } from "../../lib/documentStatusGroups";
+import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../../hooks/useLinearProjectDocuments";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { DocumentStatusIcon } from "../workspace-list/DocumentStatusIcon";
@@ -26,12 +27,20 @@ export function ProjectDocumentsPanel({
   const { setActiveVaultDocument } = useContentPanelNavigation();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const { documents, loading, error, refresh } = useLinearProjectDocuments({
+  const { documents, loading, refreshing, error, refresh } = useLinearProjectDocuments({
     projectId,
     teamId,
     enabled,
   });
   const { collapsedGroups, toggleGroup, expandGroup } = useCollapsibleGroups();
+
+  useContentPanelBarState({
+    error,
+    loading: loading && documents.length === 0,
+    loadingMessage: "Loading documents…",
+    refreshing,
+    onRefresh: refresh,
+  });
 
   const handleCreateDocument = useCallback(async () => {
     if (!projectId || creating) return;

@@ -37,10 +37,23 @@ describe("resolveRightPanelAgent", () => {
     });
     expect(resolved.requested).toBe("linear");
     expect(resolved.active).toBe("cursor");
-    expect(resolved.fallbackReason).toContain("Linear agent");
+    expect(resolved.fallbackReason).toContain("Connect Linear");
   });
 
-  test("prefers cursor when linear agent is not implemented even with oauth connected", () => {
+  test("uses linear agent when linear focus is active and linear is connected", () => {
+    const resolved = resolveRightPanelAgent({
+      activeView: "chat",
+      integrationsStatus: {
+        ...baseStatus,
+        linearApiKey: { configured: true },
+      },
+      hasLinearFocus: true,
+    });
+    expect(resolved.requested).toBe("linear");
+    expect(resolved.active).toBe("linear");
+  });
+
+  test("uses linear agent on linear view when oauth is connected", () => {
     const resolved = resolveRightPanelAgent({
       activeView: "linear",
       integrationsStatus: {
@@ -53,7 +66,7 @@ describe("resolveRightPanelAgent", () => {
         },
       },
     });
-    expect(resolved.active).toBe("cursor");
-    expect(resolved.fallbackReason).toContain("Linear agent");
+    expect(resolved.requested).toBe("linear");
+    expect(resolved.active).toBe("linear");
   });
 });

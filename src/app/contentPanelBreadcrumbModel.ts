@@ -3,6 +3,7 @@ import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavIte
 import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
   mergeContentPanelBreadcrumbs,
+  type ActiveLinearIssue,
   type ActiveVaultDocument,
   type ContentPanelBreadcrumbSegment,
 } from "./contentPanelNavigation";
@@ -22,7 +23,9 @@ export function buildContentPanelBreadcrumbSegments(options: {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   linearSelection?: LinearWorkspaceSelection | null;
   activeVaultDocument?: ActiveVaultDocument | null;
+  activeLinearIssue?: ActiveLinearIssue | null;
   onClearActiveVaultDocument?: () => void;
+  onClearActiveLinearIssue?: () => void;
   linearWorkspaceView?: LinearWorkspaceViewId | null;
 }): ContentPanelBreadcrumbSegment[] {
   const {
@@ -34,7 +37,9 @@ export function buildContentPanelBreadcrumbSegments(options: {
     sidebarSegments,
     linearSelection,
     activeVaultDocument,
+    activeLinearIssue,
     onClearActiveVaultDocument,
+    onClearActiveLinearIssue,
     linearWorkspaceView,
   } = options;
 
@@ -56,19 +61,23 @@ export function buildContentPanelBreadcrumbSegments(options: {
   const contentSegments: ContentPanelBreadcrumbSegment[] = [];
 
   if (linearSelection) {
-    const clearDocument = activeVaultDocument ? onClearActiveVaultDocument : undefined;
+    const clearFocus = activeVaultDocument
+      ? onClearActiveVaultDocument
+      : activeLinearIssue
+        ? onClearActiveLinearIssue
+        : undefined;
 
     contentSegments.push({
       id: linearWorkspaceSelectionId(linearSelection),
       label: linearSelection.name,
-      ...(clearDocument ? { onActivate: clearDocument } : {}),
+      ...(clearFocus ? { onActivate: clearFocus } : {}),
     });
 
     if (linearWorkspaceView && linearWorkspaceView !== "overview") {
       contentSegments.push({
         id: `linear-tab-${linearSelection.kind}-${linearWorkspaceView}`,
         label: linearWorkspaceViewLabel(linearSelection.kind, linearWorkspaceView),
-        ...(clearDocument ? { onActivate: clearDocument } : {}),
+        ...(clearFocus ? { onActivate: clearFocus } : {}),
       });
     }
   } else if (
@@ -92,6 +101,13 @@ export function buildContentPanelBreadcrumbSegments(options: {
     contentSegments.push({
       id: `vault-doc-${activeVaultDocument.path}`,
       label: activeVaultDocument.title,
+    });
+  }
+
+  if (activeLinearIssue) {
+    contentSegments.push({
+      id: `linear-issue-${activeLinearIssue.id}`,
+      label: `${activeLinearIssue.identifier} ${activeLinearIssue.title}`,
     });
   }
 

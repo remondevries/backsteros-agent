@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TiptapEditor } from "../../editor/TiptapEditor";
+import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useVaultDocument } from "../../hooks/useVaultDocument";
+import { useVaultDocumentWhoopSnapshot } from "../../hooks/useVaultDocumentWhoopSnapshot";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { DocumentNoteIcon } from "./DocumentNoteIcon";
+import { VaultDocumentWhoopHeader } from "./VaultDocumentWhoopHeader";
 
 const SAVE_DEBOUNCE_MS = 800;
 
 export function VaultDocumentView({ path }: { path: string }) {
-  const { updateActiveVaultDocument } = useContentPanelNavigation();
-  const { document, loading, error, save } = useVaultDocument(path);
+  const { updateActiveVaultDocument, setFocusContentSnapshot } = useContentPanelNavigation();
+  const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
+  const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
+  const { snapshot: whoopSnapshot, loading: whoopLoading } = useVaultDocumentWhoopSnapshot(
+    document,
+    { refreshKey: whoopRefreshKey },
+  );
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -20,6 +28,19 @@ export function VaultDocumentView({ path }: { path: string }) {
   const userEditedRef = useRef(false);
   titleRef.current = titleDraft;
   bodyRef.current = bodyDraft;
+
+  useContentPanelBarState({
+    saving,
+    dirty,
+    error: saveError ?? error,
+    loading: loading && !document,
+    loadingMessage: "Loading document…",
+    refreshing,
+    onRefresh: () => {
+      setWhoopRefreshKey((current) => current + 1);
+      void refresh();
+    },
+  });
 
   useEffect(() => {
     setDirty(false);
@@ -33,6 +54,15 @@ export function VaultDocumentView({ path }: { path: string }) {
     setTitleDraft(document.title);
     setBodyDraft(document.body);
   }, [dirty, document, path]);
+
+  useEffect(() => {
+    if (!document || document.path !== path) return;
+    setFocusContentSnapshot({
+      kind: "vault_document",
+      title: titleDraft,
+      body: bodyDraft,
+    });
+  }, [bodyDraft, document, path, setFocusContentSnapshot, titleDraft]);
 
   const persist = useCallback(
     async (title: string, body: string) => {
@@ -110,29 +140,21 @@ export function VaultDocumentView({ path }: { path: string }) {
     }
   };
 
-  if (loading && !document) {
-    return (
-      <div className="vault-document-scroll">
-        <p className="vault-document-loading">Loading document…</p>
-      </div>
-    );
-  }
-
-  if (error || !document) {
-    return (
-      <div className="vault-document-scroll">
-        <div className="vault-document-error" role="alert">
-          {error ?? "Failed to load document."}
-        </div>
-      </div>
-    );
+  if (!document) {
+    return <div className="vault-document-scroll" />;
   }
 
   return (
     <div className="vault-document-scroll">
       <article className="vault-document">
+        {whoopSnapshot ? <VaultDocumentWhoopHeader snapshot={whoopSnapshot} /> : null}
+        {!whoopSnapshot && whoopLoading && document.date ? (
+          <p className="vault-document-whoop-status">Loading Whoop…</p>
+        ) : null}
         <header className="vault-document-header">
-          <DocumentNoteIcon className="vault-document-icon" size={20} />
+          <div className="vault-document-icon" aria-hidden="true">
+            <DocumentNoteIcon size={16} />
+          </div>
           <input
             type="text"
             className="vault-document-title"
@@ -143,17 +165,7 @@ export function VaultDocumentView({ path }: { path: string }) {
             placeholder="Untitled"
             aria-label="Document title"
           />
-          {saving ? (
-            <span className="vault-document-status">Saving…</span>
-          ) : dirty ? (
-            <span className="vault-document-status">Unsaved changes</span>
-          ) : null}
         </header>
-        {saveError ? (
-          <p className="vault-document-save-error" role="alert">
-            {saveError}
-          </p>
-        ) : null}
         <div className="vault-document-body-editor">
           <TiptapEditor
             value={bodyDraft}

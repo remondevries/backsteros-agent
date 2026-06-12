@@ -1,9 +1,18 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { linearGraphqlRequest } from "../linear/graphql.ts";
 import { splitFrontmatter } from "../daily-note.ts";
 import { listVaultFiles } from "../vault-files.ts";
 import { normalizeVaultRelativePath, shouldSkipVaultDirectory } from "../vault-paths.ts";
+import { debugLog } from "../debug-log.ts";
+import {
+  createLinearApiDocument,
+  fetchLinearApiProjectDocuments,
+} from "../linear/project-documents-api.ts";
+import {
+  syncLinearDocumentsToVault,
+  upsertLinearDocumentInVault,
+} from "./linear-document-sync.ts";
 
 export type ProjectDocumentRecord = {
   id: string;
@@ -260,6 +269,29 @@ export async function fetchLinearProjectDocuments(
   if (!id) return [];
 
   const { projectName, teamId } = await resolveProjectContext(id);
+  let linearCount = 0;
+
+  if (teamId) {
+    try {
+      const linearDocuments = await fetchLinearApiProjectDocuments(id);
+      linearCount = linearDocuments.length;
+      syncLinearDocumentsToVault(notesPath, teamId, id, projectName || "Untitled Project", linearDocuments);
+    } catch (error) {
+      // #region agent log
+      debugLog(
+        "project-documents.ts:fetchLinearProjectDocuments",
+        "Linear document sync failed; falling back to local vault scan",
+        {
+          projectId: id,
+          teamId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+        "H2",
+      );
+      // #endregion
+    }
+  }
+
   const records: ProjectDocumentRecord[] = [];
 
   if (teamId) {
@@ -274,7 +306,24 @@ export async function fetchLinearProjectDocuments(
     records.push(...listLinkedInboxDocuments(notesPath, projectName));
   }
 
-  return mergeDocuments(records);
+  const merged = mergeDocuments(records);
+  // #region agent log
+  debugLog(
+    "project-documents.ts:fetchLinearProjectDocuments",
+    "Fetched project documents with Linear sync",
+    {
+      projectId: id,
+      teamId,
+      projectName,
+      linearCount,
+      localCount: merged.length,
+      linearApiCalled: true,
+      notesPath,
+    },
+    "H2",
+  );
+  // #endregion
+  return merged;
 }
 
 export async function fetchLinearTeamDocuments(
@@ -295,48 +344,6 @@ export async function fetchLinearTeamDocuments(
   return mergeDocuments(records);
 }
 
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-function formatLocalDateTime(date: Date): string {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
-}
-
-function escapeYamlString(value: string): string {
-  return value.replace(/"/g, '\\"');
-}
-
-function buildProjectNoteBody(dateStr: string, projectName: string, organizationName = ""): string {
-  const organizationLine = organizationName.trim()
-    ? `organization: "${escapeYamlString(organizationName)}"\n`
-    : "";
-  return `---
-category: Note
-date: "${dateStr}"
-project: "${escapeYamlString(projectName)}"
-${organizationLine}status: Inbox
-owner: []
-tags: []
-type: note
----
-
-`;
-}
-
-function getUniqueFilePath(directoryAbs: string, baseFileName: string): string {
-  const ext = ".md";
-  const base = baseFileName.endsWith(ext) ? baseFileName.slice(0, -ext.length) : baseFileName;
-  let candidate = join(directoryAbs, `${base}${ext}`);
-  if (!existsSync(candidate)) return candidate;
-
-  let index = 2;
-  while (existsSync(join(directoryAbs, `${base} ${index}${ext}`))) {
-    index += 1;
-  }
-  return join(directoryAbs, `${base} ${index}${ext}`);
-}
-
 export async function createProjectDocument(
   notesPath: string,
   projectId: string,
@@ -351,21 +358,32 @@ export async function createProjectDocument(
     throw new Error("Could not resolve Linear team for this project");
   }
 
-  const folderRelative = `Organizations/${teamId}/${id}`;
-  const folderAbs = join(notesPath, folderRelative);
-  mkdirSync(folderAbs, { recursive: true });
-
-  const absPath = getUniqueFilePath(folderAbs, "Untitled note.md");
-  const relativePath = normalizeVaultRelativePath(absPath.slice(notesPath.length + 1));
-  const content = buildProjectNoteBody(
-    formatLocalDateTime(new Date()),
+  const linearDocument = await createLinearApiDocument(id, "Untitled note", "");
+  const relativePath = upsertLinearDocumentInVault(
+    notesPath,
+    teamId,
+    id,
     projectName || "Untitled Project",
+    linearDocument,
   );
-  writeFileSync(absPath, content, "utf8");
 
   const record = readDocumentRecord(notesPath, relativePath);
   if (!record) {
     throw new Error("Failed to read created document");
   }
+  // #region agent log
+  debugLog(
+    "project-documents.ts:createProjectDocument",
+    "Created Linear document and mirrored to vault",
+    {
+      projectId: id,
+      teamId,
+      path: relativePath,
+      linearDocumentId: linearDocument.id,
+      linearApiCalled: true,
+    },
+    "H3",
+  );
+  // #endregion
   return record;
 }

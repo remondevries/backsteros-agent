@@ -1,12 +1,11 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { ContentPanelBreadcrumb } from "./ContentPanelBreadcrumb";
+import { ContentPanelBreadcrumbBar } from "./ContentPanelBreadcrumbBar";
 import { ContentPanelSidebar } from "./ContentPanelSidebar";
 import { ResizablePanel } from "./ResizablePanel";
 import type { AppView } from "./appViews";
 import { buildContentPanelBreadcrumbSegments } from "./contentPanelBreadcrumbModel";
 import {
-  ContentPanelNavigationProvider,
   useContentPanelNavigation,
 } from "./contentPanelNavigation";
 import { ContentPanelMainSlot } from "./ContentPanelMainSlot";
@@ -32,9 +31,7 @@ function ContentPanelFrame({
 }) {
   return (
     <div className="content-panel">
-      <header className="content-panel-breadcrumb-bar">
-        <ContentPanelBreadcrumb segments={breadcrumbSegments} />
-      </header>
+      <ContentPanelBreadcrumbBar segments={breadcrumbSegments} />
       <div className="content-panel-main">
         {!hideSidebar ? (
           <ResizablePanel
@@ -84,7 +81,9 @@ function ContentPanelWithBreadcrumbs({
     sidebarSegments,
     linearSelection,
     activeVaultDocument,
+    activeLinearIssue,
     clearActiveVaultDocument,
+    clearActiveLinearIssue,
     linearWorkspaceView,
   } = useContentPanelNavigation();
   const breadcrumbSegments = useMemo(
@@ -98,15 +97,19 @@ function ContentPanelWithBreadcrumbs({
         sidebarSegments,
         linearSelection,
         activeVaultDocument,
+        activeLinearIssue,
         onClearActiveVaultDocument: clearActiveVaultDocument,
+        onClearActiveLinearIssue: clearActiveLinearIssue,
         linearWorkspaceView,
       }),
     [
+      activeLinearIssue,
       activeSessionTitle,
       activeSettingsTab,
       activeVaultDocument,
       activeVaultNavItem,
       activeView,
+      clearActiveLinearIssue,
       clearActiveVaultDocument,
       linearSelection,
       linearWorkspaceView,
@@ -150,24 +153,22 @@ export function ContentPanel({
   children: ReactNode;
 }) {
   return (
-    <ContentPanelNavigationProvider>
-      <ContentPanelWithBreadcrumbs
-        sidebarOpen={sidebarOpen}
-        hideSidebar={hideSidebar}
-        activeVaultNavItem={activeVaultNavItem}
-        vaultExplorerEnabled={vaultExplorerEnabled}
+    <ContentPanelWithBreadcrumbs
+      sidebarOpen={sidebarOpen}
+      hideSidebar={hideSidebar}
+      activeVaultNavItem={activeVaultNavItem}
+      vaultExplorerEnabled={vaultExplorerEnabled}
+      settingsOpen={settingsOpen}
+      activeSettingsTab={activeSettingsTab}
+      activeView={activeView}
+      activeSessionTitle={activeSessionTitle}
+    >
+      <ContentPanelMainSlot
         settingsOpen={settingsOpen}
-        activeSettingsTab={activeSettingsTab}
-        activeView={activeView}
-        activeSessionTitle={activeSessionTitle}
+        vaultStructureEnabled={vaultExplorerEnabled}
       >
-        <ContentPanelMainSlot
-          settingsOpen={settingsOpen}
-          vaultStructureEnabled={vaultExplorerEnabled}
-        >
-          {children}
-        </ContentPanelMainSlot>
-      </ContentPanelWithBreadcrumbs>
-    </ContentPanelNavigationProvider>
+        {children}
+      </ContentPanelMainSlot>
+    </ContentPanelWithBreadcrumbs>
   );
 }
