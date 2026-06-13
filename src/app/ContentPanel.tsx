@@ -139,12 +139,15 @@ function ContentPanelFrame({
     restoreContentPanelTabSnapshot,
   } = useContentPanelNavigation();
 
+  const sidebarFolderKey = sidebarSegments.map((segment) => segment.id).join("/");
+
   const currentSelectionKey = [
     activeVaultNavItem ?? "",
     linearSelection ? `${linearSelection.kind}:${linearSelection.id}` : "",
     activeVaultDocument?.path ?? "",
     activeLinearDocument?.id ?? "",
     activeLinearIssue?.id ?? "",
+    sidebarFolderKey,
   ].join("|");
 
   useEffect(() => {
@@ -173,6 +176,11 @@ function ContentPanelFrame({
     setNarrowSidebarInitialSelectionKey(currentSelectionKey);
     setNarrowContentSidebar(true);
   }, [activeVaultNavItem, currentSelectionKey, hideSidebar, narrowContentLayout]);
+
+  const closeNarrowContentSidebar = useCallback(() => {
+    setNarrowContentSidebar(false);
+    setNarrowSidebarInitialSelectionKey(null);
+  }, []);
 
   const captureSnapshot = useCallback((): ContentPanelTabSnapshot => {
     return {
@@ -339,7 +347,21 @@ function ContentPanelFrame({
       const fallbackTab =
         tabs[tabIndex + 1] ?? tabs[tabIndex - 1] ?? tabs.find((tab) => tab.id !== tabId) ?? null;
 
-      setTabs((current) => current.filter((tab) => tab.id !== tabId));
+      setTabs((current) => {
+        const withSavedActive = closingActiveTab
+          ? current.map((tab) =>
+              tab.id === activeTabId
+                ? {
+                    ...tab,
+                    label: activeTabLabel,
+                    snapshot: captureSnapshot(),
+                    activeVaultNavItem,
+                  }
+                : tab,
+            )
+          : current;
+        return withSavedActive.filter((tab) => tab.id !== tabId);
+      });
 
       if (!closingActiveTab || !fallbackTab) return;
       if (fallbackTab.activeVaultNavItem !== activeVaultNavItem) {
@@ -350,7 +372,9 @@ function ContentPanelFrame({
     },
     [
       activeTabId,
+      activeTabLabel,
       activeVaultNavItem,
+      captureSnapshot,
       onVaultNavItemChange,
       restoreContentPanelTabSnapshot,
       tabs,
@@ -403,6 +427,15 @@ function ContentPanelFrame({
         <div className="content-panel-main">
           {narrowContentSidebar && !hideSidebar ? (
             <div className="content-panel-narrow-sidebar">
+              <div className="content-panel-narrow-sidebar-header">
+                <button
+                  type="button"
+                  className="content-panel-narrow-sidebar-done"
+                  onClick={closeNarrowContentSidebar}
+                >
+                  Done
+                </button>
+              </div>
               <ContentPanelSidebar
                 activeVaultNavItem={activeVaultNavItem}
                 vaultExplorerEnabled={vaultExplorerEnabled}

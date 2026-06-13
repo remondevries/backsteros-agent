@@ -17,11 +17,14 @@ import {
 const SEARCH_DEBOUNCE_MS = 280;
 const MAX_RESULTS_PER_SECTION = 20;
 
+let cachedVaultSearchIndex: VaultSearchIndexEntry[] | null = null;
+
 type CommandPaletteSearchState = {
   query: string;
   setQuery: (value: string) => void;
   groupedItems: Record<CommandPaletteSection, CommandPaletteItem[]>;
   loading: boolean;
+  remoteError: string | null;
   reset: () => void;
 };
 
@@ -36,7 +39,10 @@ export function useCommandPaletteSearch({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [remoteItems, setRemoteItems] = useState<CommandPaletteItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [vaultIndex, setVaultIndex] = useState<VaultSearchIndexEntry[]>([]);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [vaultIndex, setVaultIndex] = useState<VaultSearchIndexEntry[]>(
+    () => cachedVaultSearchIndex ?? [],
+  );
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -48,16 +54,20 @@ export function useCommandPaletteSearch({
 
   useEffect(() => {
     if (!enabled || !vaultExplorerEnabled) {
-      setVaultIndex([]);
+      return;
+    }
+
+    if (cachedVaultSearchIndex) {
+      setVaultIndex(cachedVaultSearchIndex);
       return;
     }
 
     let cancelled = false;
     void fetchVaultSearchIndex()
       .then((result) => {
-        if (!cancelled) {
-          setVaultIndex(result.entries ?? []);
-        }
+        if (cancelled) return;
+        cachedVaultSearchIndex = result.entries ?? [];
+        setVaultIndex(cachedVaultSearchIndex);
       })
       .catch(() => {
         if (!cancelled) {
@@ -118,32 +128,41 @@ export function useCommandPaletteSearch({
   useEffect(() => {
     if (!enabled) {
       setRemoteItems([]);
+      setRemoteError(null);
       setLoading(false);
       return;
     }
 
     if (!debouncedQuery) {
       setRemoteItems([]);
+      setRemoteError(null);
       setLoading(false);
       return;
     }
 
     const requestId = ++requestIdRef.current;
     setLoading(true);
+    setRemoteError(null);
 
     void Promise.all([
-      searchLinearIssues(debouncedQuery, { limit: MAX_RESULTS_PER_SECTION }).catch(() => ({
+      searchLinearIssues(debouncedQuery, { limit: MAX_RESULTS_PER_SECTION }).catch((error) => ({
         issues: [] as Awaited<ReturnType<typeof searchLinearIssues>>["issues"],
-        error: undefined,
+        error: error instanceof Error ? error.message : "Failed to search Linear issues",
       })),
       fetchLinearProjectsPage({ query: debouncedQuery, first: MAX_RESULTS_PER_SECTION }).catch(
-        () => ({
+        (error) => ({
           projects: [] as Awaited<ReturnType<typeof fetchLinearProjectsPage>>["projects"],
+          error: error instanceof Error ? error.message : "Failed to search Linear projects",
         }),
       ),
     ])
       .then(([issueResult, projectResult]) => {
         if (requestId !== requestIdRef.current) return;
+
+        const errors = [issueResult.error, projectResult.error].filter(
+          (message): message is string => Boolean(message),
+        );
+        setRemoteError(errors[0] ?? null);
 
         const issueItems: CommandPaletteItem[] = (issueResult.issues ?? []).map((issue) => ({
           kind: "linear-issue",
@@ -200,6 +219,7 @@ export function useCommandPaletteSearch({
     setQuery("");
     setDebouncedQuery("");
     setRemoteItems([]);
+    setRemoteError(null);
     setLoading(false);
   }, []);
 
@@ -208,6 +228,7 @@ export function useCommandPaletteSearch({
     setQuery,
     groupedItems,
     loading,
+    remoteError,
     reset,
   };
 }

@@ -23,7 +23,7 @@ export function CommandPalette({
   onSettingsTabChange: (tab: SettingsTabId) => void;
 }) {
   const { open, setOpen } = useCommandPalette();
-  const { query, setQuery, groupedItems, loading, reset } = useCommandPaletteSearch({
+  const { query, setQuery, groupedItems, loading, remoteError, reset } = useCommandPaletteSearch({
     enabled: open,
     vaultExplorerEnabled,
   });
@@ -63,7 +63,10 @@ export function CommandPalette({
         />
         <Command.List className="command-palette-list">
           {loading ? <div className="command-palette-status">Searching…</div> : null}
-          {!loading && !hasResults ? (
+          {remoteError ? (
+            <div className="command-palette-status command-palette-status--error">{remoteError}</div>
+          ) : null}
+          {!loading && !remoteError && !hasResults ? (
             <Command.Empty className="command-palette-empty">No results found.</Command.Empty>
           ) : null}
           {COMMAND_PALETTE_SECTIONS.map((section) => {
