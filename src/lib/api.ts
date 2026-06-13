@@ -749,6 +749,26 @@ export async function fetchLinearProjectsPage(options: {
   }>(`/linear/projects${query ? `?${query}` : ""}`);
 }
 
+export async function searchLinearIssues(term: string, options: { limit?: number } = {}) {
+  const params = new URLSearchParams();
+  params.set("q", term.trim());
+  if (options.limit != null) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return request<{ issues: LinearIssueEntity[]; error?: string }>(
+    `/linear/issues/search?${query}`,
+  );
+}
+
+export type VaultSearchIndexEntry = {
+  path: string;
+  title: string;
+  folder: string;
+};
+
+export async function fetchVaultSearchIndex() {
+  return request<{ entries: VaultSearchIndexEntry[]; error?: string }>("/vault/search-index");
+}
+
 export async function fetchLinearProjectById(projectId: string) {
   return request<{ project: LinearProjectSummary }>(
     `/linear/projects/${encodeURIComponent(projectId)}`,

@@ -41,6 +41,14 @@ export function LinearProjectTableRow({
         <span className="linear-project-table-row__name">
           <LinearProjectIcon title={project.name} />
           <span className="linear-project-table-row__name-text">{project.name}</span>
+          {project.health ? (
+            <span className="linear-project-table-row__health linear-project-table-row__health--inline">
+              <LinearProjectHealthLabel health={project.health} />
+            </span>
+          ) : null}
+          <span className="linear-project-table-row__priority linear-project-table-row__priority--inline" title={priorityLabel}>
+            <LinearPriorityIcon priority={project.priority} title={priorityLabel} />
+          </span>
         </span>
         <span className="linear-project-table-row__health">
           {project.health ? <LinearProjectHealthLabel health={project.health} /> : null}

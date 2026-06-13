@@ -80,6 +80,7 @@ import {
   respondToPendingDeleteFile,
 } from "./delete-file.ts";
 import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
+import { searchLinearIssues } from "./linear/search.ts";
 import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
 import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
 import { fetchLinearIssuesByDueDates } from "./linear/issues-by-due-date.ts";
@@ -170,6 +171,7 @@ import {
   listVaultDirectoryEntries,
   VAULT_NAV_FOLDER_NAMES,
 } from "./vault-nav-structure.ts";
+import { buildVaultSearchIndex } from "./vault/search-index.ts";
 import {
   appendWorkoutSets,
   assertWorkoutDateKey,
@@ -470,6 +472,34 @@ app.post("/llm-extract", async (c) => {
   } catch (error) {
     const messageText = error instanceof Error ? error.message : "Extraction failed";
     return c.json({ error: messageText }, 500);
+  }
+});
+
+app.get("/linear/issues/search", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        issues: [],
+      },
+      400,
+    );
+  }
+
+  const term = c.req.query("q")?.trim() ?? "";
+  if (!term) {
+    return c.json({ issues: [] });
+  }
+
+  const limitRaw = Number(c.req.query("limit"));
+  const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+
+  try {
+    const issues = await searchLinearIssues(term, { limit });
+    return c.json({ issues });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to search Linear issues";
+    return c.json({ error: message, issues: [] }, 500);
   }
 });
 
@@ -1324,34 +1354,35 @@ app.get("/linear/today", async (c) => {
 });
 
 app.post("/linear/issues/by-due-dates", async (c) => {
-  if (!getLinearAuthToken()) {
-    return c.json(
-      {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
-        issuesByDueDate: {},
-      },
-      400,
-    );
-  }
-
+  const configured = Boolean(getLinearAuthToken());
   const body = (await c.req.json().catch(() => ({}))) as { dueDates?: unknown };
   if (!Array.isArray(body.dueDates)) {
-    return c.json({ error: "dueDates must be an array", issuesByDueDate: {} }, 400);
+    return c.json({ error: "dueDates must be an array", issuesByDueDate: {}, configured }, 400);
   }
 
   const dueDates = body.dueDates
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter(Boolean);
   if (dueDates.length > 120) {
-    return c.json({ error: "dueDates cannot contain more than 120 values", issuesByDueDate: {} }, 400);
+    return c.json(
+      { error: "dueDates cannot contain more than 120 values", issuesByDueDate: {}, configured },
+      400,
+    );
+  }
+
+  if (!configured) {
+    return c.json({
+      configured: false,
+      issuesByDueDate: Object.fromEntries(dueDates.map((dueDate) => [dueDate, []])),
+    });
   }
 
   try {
     const issuesByDueDate = await fetchLinearIssuesByDueDates(dueDates);
-    return c.json({ issuesByDueDate });
+    return c.json({ configured: true, issuesByDueDate });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load Linear issues";
-    return c.json({ error: message, issuesByDueDate: {} }, 500);
+    return c.json({ error: message, issuesByDueDate: {}, configured: true }, 500);
   }
 });
 
@@ -1759,6 +1790,17 @@ app.post("/vault/linear-workspace-structure", async (c) => {
     const message =
       error instanceof Error ? error.message : "Failed to create Linear workspace folders";
     return c.json({ error: message, created: [] }, 400);
+  }
+});
+
+app.get("/vault/search-index", (c) => {
+  const notesPath = resolveNotesPath();
+  try {
+    const entries = buildVaultSearchIndex(notesPath);
+    return c.json({ entries });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to build vault search index";
+    return c.json({ error: message, entries: [] }, 500);
   }
 });
 

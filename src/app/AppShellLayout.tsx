@@ -10,7 +10,10 @@ import type { SettingsTabId } from "../settings/settingsTabs";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import { ResizablePanel } from "./ResizablePanel";
 import { useSidePanelToggleShortcuts } from "../hooks/useSidePanelToggleShortcuts";
+import { useCommandPaletteShortcut } from "../hooks/useCommandPaletteShortcut";
 import { useSidePanelToggles } from "../hooks/useSidePanelToggles";
+import { CommandPalette } from "../command-palette/CommandPalette";
+import { CommandPaletteProvider } from "../command-palette/CommandPaletteContext";
 import { showTrafficLights } from "../lib/traffic-lights";
 import { isTauriRuntime } from "../lib/tauriRuntime";
 
@@ -149,6 +152,8 @@ function AppMainShell({
     onToggleRightSidePanel: toggleRightSidePanel,
     onToggleContentPanelSidebar: toggleContentPanelSidebar,
   });
+
+  useCommandPaletteShortcut({ enabled: !settingsOpen });
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -335,6 +340,12 @@ function AppMainShell({
           />
         </div>
       ) : null}
+      <CommandPalette
+        vaultExplorerEnabled={vaultExplorerEnabled}
+        onVaultNavItemChange={handleVaultNavItemChange}
+        onOpenSettings={handleOpenSettings}
+        onSettingsTabChange={onSettingsTabChange}
+      />
     </div>
   );
 }
@@ -393,7 +404,8 @@ export function AppShellLayout({
 
   return (
     <ContentPanelNavigationProvider>
-      <AppMainShell
+      <CommandPaletteProvider>
+        <AppMainShell
         activeView={activeView}
         onViewChange={onViewChange}
         settingsOpen={settingsOpen}
@@ -421,6 +433,7 @@ export function AppShellLayout({
       >
         {children}
       </AppMainShell>
+      </CommandPaletteProvider>
     </ContentPanelNavigationProvider>
   );
 }

@@ -119,6 +119,13 @@ function ContentPanelFrame({
   onOpenNavigation?: () => void;
   children: ReactNode;
 }) {
+  const [narrowContentSidebar, setNarrowContentSidebar] = useState(false);
+  const [narrowSidebarInitialSelectionKey, setNarrowSidebarInitialSelectionKey] = useState<string | null>(
+    null,
+  );
+  const [narrowContentLayout, setNarrowContentLayout] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia("(max-width: 720px)").matches,
+  );
   const {
     sidebarSegments,
     linearSelection,
@@ -131,6 +138,41 @@ function ContentPanelFrame({
     watchersPanelMode,
     restoreContentPanelTabSnapshot,
   } = useContentPanelNavigation();
+
+  const currentSelectionKey = [
+    activeVaultNavItem ?? "",
+    linearSelection ? `${linearSelection.kind}:${linearSelection.id}` : "",
+    activeVaultDocument?.path ?? "",
+    activeLinearDocument?.id ?? "",
+    activeLinearIssue?.id ?? "",
+  ].join("|");
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 720px)");
+    const handleChange = () => {
+      setNarrowContentLayout(mediaQuery.matches);
+      if (!mediaQuery.matches) {
+        setNarrowContentSidebar(false);
+        setNarrowSidebarInitialSelectionKey(null);
+      }
+    };
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!narrowContentSidebar || narrowSidebarInitialSelectionKey === null) return;
+    if (currentSelectionKey === narrowSidebarInitialSelectionKey) return;
+    setNarrowContentSidebar(false);
+    setNarrowSidebarInitialSelectionKey(null);
+  }, [currentSelectionKey, narrowContentSidebar, narrowSidebarInitialSelectionKey]);
+
+  const openNarrowContentSidebar = useCallback(() => {
+    if (!narrowContentLayout || !activeVaultNavItem || hideSidebar) return;
+    setNarrowSidebarInitialSelectionKey(currentSelectionKey);
+    setNarrowContentSidebar(true);
+  }, [activeVaultNavItem, currentSelectionKey, hideSidebar, narrowContentLayout]);
 
   const captureSnapshot = useCallback((): ContentPanelTabSnapshot => {
     return {
@@ -287,6 +329,55 @@ function ContentPanelFrame({
     restoreContentPanelTabSnapshot,
   ]);
 
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (tabs.length <= 1) return;
+      const tabIndex = tabs.findIndex((tab) => tab.id === tabId);
+      if (tabIndex === -1) return;
+
+      const closingActiveTab = tabId === activeTabId;
+      const fallbackTab =
+        tabs[tabIndex + 1] ?? tabs[tabIndex - 1] ?? tabs.find((tab) => tab.id !== tabId) ?? null;
+
+      setTabs((current) => current.filter((tab) => tab.id !== tabId));
+
+      if (!closingActiveTab || !fallbackTab) return;
+      if (fallbackTab.activeVaultNavItem !== activeVaultNavItem) {
+        onVaultNavItemChange(fallbackTab.activeVaultNavItem);
+      }
+      restoreContentPanelTabSnapshot(fallbackTab.snapshot);
+      setActiveTabId(fallbackTab.id);
+    },
+    [
+      activeTabId,
+      activeVaultNavItem,
+      onVaultNavItemChange,
+      restoreContentPanelTabSnapshot,
+      tabs,
+    ],
+  );
+
+  const displayedBreadcrumbSegments = useMemo(() => {
+    if (!narrowContentLayout || !activeVaultNavItem || hideSidebar || breadcrumbSegments.length === 0) {
+      return breadcrumbSegments;
+    }
+    const [firstSegment, ...restSegments] = breadcrumbSegments;
+    if (!firstSegment?.navItemId) return breadcrumbSegments;
+    return [
+      {
+        ...firstSegment,
+        onActivate: openNarrowContentSidebar,
+      },
+      ...restSegments,
+    ];
+  }, [
+    activeVaultNavItem,
+    breadcrumbSegments,
+    hideSidebar,
+    narrowContentLayout,
+    openNarrowContentSidebar,
+  ]);
+
   return (
     <div className="content-panel-shell">
       <ContentPanelTabsBar
@@ -303,13 +394,21 @@ function ContentPanelFrame({
         activeTabId={activeTabId}
         onSelectTab={handleSelectTab}
         onAddTab={handleAddTab}
+        onCloseTab={handleCloseTab}
         navigationCollapsed={navigationCollapsed}
         onOpenNavigation={onOpenNavigation}
       />
       <div className="content-panel">
-        <ContentPanelBreadcrumbBar segments={breadcrumbSegments} />
+        <ContentPanelBreadcrumbBar segments={displayedBreadcrumbSegments} />
         <div className="content-panel-main">
-          {!hideSidebar ? (
+          {narrowContentSidebar && !hideSidebar ? (
+            <div className="content-panel-narrow-sidebar">
+              <ContentPanelSidebar
+                activeVaultNavItem={activeVaultNavItem}
+                vaultExplorerEnabled={vaultExplorerEnabled}
+              />
+            </div>
+          ) : !hideSidebar ? (
             <ResizablePanel
               side="left"
               className="app-resizable-panel-inset"
@@ -326,7 +425,9 @@ function ContentPanelFrame({
               />
             </ResizablePanel>
           ) : null}
-          <div className="content-panel-content">{children}</div>
+          {!narrowContentSidebar ? (
+            <div className="content-panel-content">{children}</div>
+          ) : null}
         </div>
       </div>
     </div>

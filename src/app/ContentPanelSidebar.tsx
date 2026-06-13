@@ -104,30 +104,23 @@ export function ContentPanelSidebar({
   return (
     <div className="content-panel-sidebar">
       <div className="content-panel-sidebar-body">
-        {SIDEBAR_VAULT_NAV_ITEM_IDS.map((itemId) => (
-          <div
-            key={itemId}
-            className="content-panel-sidebar-pane"
-            hidden={activeVaultNavItem !== itemId}
-          >
-            {itemId === "organizations" ? (
-              <OrganizationTeamsList
-                enabled={vaultExplorerEnabled && activeVaultNavItem === itemId}
-              />
-            ) : (
-              <VaultFolderExplorer
-                activeNavItem={itemId}
-                enabled={vaultExplorerEnabled && activeVaultNavItem === itemId}
-              />
-            )}
-          </div>
-        ))}
+        {SIDEBAR_VAULT_NAV_ITEM_IDS.map((itemId) =>
+          activeVaultNavItem === itemId ? (
+            <div key={itemId} className="content-panel-sidebar-pane">
+              {itemId === "organizations" ? (
+                <OrganizationTeamsList enabled={vaultExplorerEnabled} />
+              ) : (
+                <VaultFolderExplorer activeNavItem={itemId} enabled={vaultExplorerEnabled} />
+              )}
+            </div>
+          ) : null,
+        )}
 
-        <div className="content-panel-sidebar-pane" hidden={activeVaultNavItem !== "projects"}>
-          <LinearWorkspacePanel
-            enabled={vaultExplorerEnabled && activeVaultNavItem === "projects"}
-          />
-        </div>
+        {activeVaultNavItem === "projects" ? (
+          <div className="content-panel-sidebar-pane">
+            <LinearWorkspacePanel enabled={vaultExplorerEnabled} />
+          </div>
+        ) : null}
 
         {showEmptyState ? (
           <p className="content-panel-sidebar-empty">

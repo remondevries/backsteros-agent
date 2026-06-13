@@ -24,6 +24,34 @@ type PersistedContentPanelState = {
 
 const CONTENT_PANEL_STATE_STORAGE_KEY = "backsteros.content-panel.state";
 
+export const EMPTY_BREADCRUMB_SEGMENTS: ContentPanelBreadcrumbSegment[] = [];
+
+function breadcrumbSegmentsEqual(
+  left: ContentPanelBreadcrumbSegment[],
+  right: ContentPanelBreadcrumbSegment[],
+): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  return left.every((segment, index) => {
+    const other = right[index];
+    return (
+      segment.id === other.id &&
+      segment.label === other.label &&
+      segment.kind === other.kind &&
+      segment.navItemId === other.navItemId
+    );
+  });
+}
+
+function breadcrumbSegmentsKey(segments: ContentPanelBreadcrumbSegment[]): string {
+  return segments
+    .map(
+      (segment) =>
+        `${segment.id}\0${segment.label}\0${segment.navItemId ?? ""}\0${segment.kind ?? ""}`,
+    )
+    .join("\n");
+}
+
 function parsePersistedLinearSelection(value: unknown): LinearWorkspaceSelection | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Partial<LinearWorkspaceSelection>;
@@ -320,7 +348,9 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   }, [linearSelectionKey]);
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
-    setSidebarSegmentsState(segments);
+    setSidebarSegmentsState((current) =>
+      breadcrumbSegmentsEqual(current, segments) ? current : segments,
+    );
   }, []);
 
   const setLinearSelection = useCallback((selection: LinearWorkspaceSelection | null) => {
@@ -576,15 +606,12 @@ export function useContentPanelSidebarBreadcrumbs(
   enabled = true,
 ) {
   const { setSidebarSegments } = useContentPanelNavigation();
+  const segmentsKey = useMemo(() => breadcrumbSegmentsKey(segments), [segments]);
 
   useEffect(() => {
-    if (!enabled) {
-      setSidebarSegments([]);
-      return;
-    }
+    if (!enabled) return;
     setSidebarSegments(segments);
-    return () => setSidebarSegments([]);
-  }, [enabled, segments, setSidebarSegments]);
+  }, [enabled, segments, segmentsKey, setSidebarSegments]);
 }
 
 export function mergeContentPanelBreadcrumbs(

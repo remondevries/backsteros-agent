@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { fetchLinearTeams, type LinearTeamSummary } from "../lib/api";
-import { useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
+import {
+  EMPTY_BREADCRUMB_SEGMENTS,
+  useContentPanelSidebarBreadcrumbs,
+} from "./contentPanelNavigation";
 
 export function OrganizationTeamsList({ enabled }: { enabled: boolean }) {
   const [teams, setTeams] = useState<LinearTeamSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useContentPanelSidebarBreadcrumbs([], enabled);
+  useContentPanelSidebarBreadcrumbs(EMPTY_BREADCRUMB_SEGMENTS, enabled);
 
   useEffect(() => {
     if (!enabled) return;

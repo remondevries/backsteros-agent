@@ -16,6 +16,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
   const { linearSelection, setLinearSelection } = useContentPanelNavigation();
   const [view, setView] = useState<LinearWorkspaceView>("teams");
   const [search, setSearch] = useState("");
+  const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(() => new Set());
   const teamsQuery = useLinearTeams(enabled && view === "teams");
   const projectsQuery = useLinearProjects(enabled && view === "projects");
   const normalizedSearch = search.trim().toLowerCase();
@@ -55,6 +56,18 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
     () => groupLinearProjectsByStatus(filteredProjects),
     [filteredProjects],
   );
+
+  const toggleProjectGroup = (groupKey: string) => {
+    setCollapsedProjectGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="vault-folder-explorer linear-workspace-panel">
@@ -140,18 +153,37 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
             {!projectsQuery.loading && !projectsQuery.error ? (
               groupedProjects.length > 0 ? (
                 <div className="linear-project-groups" aria-label="Linear projects">
-                  {groupedProjects.map((group) => (
+                  {groupedProjects.map((group) => {
+                    const groupKey = group.status?.id ?? "no-status";
+                    const collapsed = collapsedProjectGroups.has(groupKey);
+                    return (
                     <section
-                      key={group.status?.id ?? "no-status"}
+                      key={groupKey}
                       className="linear-project-group"
-                      aria-labelledby={`linear-project-group-${group.status?.id ?? "no-status"}`}
+                      aria-labelledby={`linear-project-group-${groupKey}`}
                     >
-                      <h3
-                        id={`linear-project-group-${group.status?.id ?? "no-status"}`}
+                      <button
+                        type="button"
+                        id={`linear-project-group-${groupKey}`}
                         className="linear-project-group-header"
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleProjectGroup(groupKey)}
                       >
-                        {group.label}
-                      </h3>
+                        <span
+                          className={[
+                            "sidebar-list-group-chevron",
+                            !collapsed ? "sidebar-list-group-chevron--expanded" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          aria-hidden="true"
+                        >
+                          &gt;
+                        </span>
+                        <span className="sidebar-list-group-title">{group.label}</span>
+                        <span className="sidebar-list-group-count">{group.projects.length}</span>
+                      </button>
+                      {!collapsed ? (
                       <ul className="vault-folder-explorer-list">
                         {group.projects.map((project) => {
                           const selected =
@@ -185,8 +217,10 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                           );
                         })}
                       </ul>
+                      ) : null}
                     </section>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="vault-folder-explorer-status">

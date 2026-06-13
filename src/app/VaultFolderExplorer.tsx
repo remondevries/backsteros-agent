@@ -101,6 +101,7 @@ export function VaultFolderExplorer({
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
   const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedWeekGroups, setCollapsedWeekGroups] = useState<Set<string>>(() => new Set());
   const [dailyIssuesByDueDate, setDailyIssuesByDueDate] = useState<
     Record<string, LinearIssueEntity[]>
   >({});
@@ -208,6 +209,8 @@ export function VaultFolderExplorer({
     return [...dueDates].sort((left, right) => right.localeCompare(left));
   }, [orderedEntries, showDailyWeekGroups]);
 
+  const dailyDueDatesKey = useMemo(() => dailyDueDates.join("\0"), [dailyDueDates]);
+
   useEffect(() => {
     if (!enabled || !showDailyWeekGroups) {
       setDailyIssuesByDueDate({});
@@ -233,7 +236,7 @@ export function VaultFolderExplorer({
     return () => {
       cancelled = true;
     };
-  }, [dailyDueDates, enabled, showDailyWeekGroups]);
+  }, [dailyDueDates, dailyDueDatesKey, enabled, showDailyWeekGroups]);
 
   const groupedDailyEntries = useMemo(() => {
     if (!showDailyWeekGroups) return [];
@@ -279,6 +282,18 @@ export function VaultFolderExplorer({
       title: issue.title,
       status: issue.status,
       stateType: issue.stateType,
+    });
+  };
+
+  const toggleWeekGroup = (groupKey: string) => {
+    setCollapsedWeekGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
     });
   };
 
@@ -348,11 +363,33 @@ export function VaultFolderExplorer({
                   </li>
                 ))}
 
-                {groupedDailyEntries.map((group) => (
-                  <li key={group.key} className="vault-folder-explorer-week-group">
-                    <p className="vault-folder-explorer-week-header">{group.label}</p>
-                    <ul className="vault-folder-explorer-week-group-list">
-                      {group.entries.map((entry) => {
+                {groupedDailyEntries.map((group) => {
+                  const collapsed = collapsedWeekGroups.has(group.key);
+                  return (
+                    <li key={group.key} className="vault-folder-explorer-week-group">
+                      <button
+                        type="button"
+                        className="vault-folder-explorer-week-header"
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleWeekGroup(group.key)}
+                      >
+                        <span
+                          className={[
+                            "sidebar-list-group-chevron",
+                            !collapsed ? "sidebar-list-group-chevron--expanded" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          aria-hidden="true"
+                        >
+                          &gt;
+                        </span>
+                        <span className="sidebar-list-group-title">{group.label}</span>
+                        <span className="sidebar-list-group-count">{group.entries.length}</span>
+                      </button>
+                      {!collapsed ? (
+                        <ul className="vault-folder-explorer-week-group-list">
+                          {group.entries.map((entry) => {
                         const displayName = formatVaultNoteDisplayName(entry.name);
                         const selected = activeVaultDocument?.path === entry.path;
                         const dueDateKey = resolveEntryDueDateKey(entry.date);
@@ -395,10 +432,12 @@ export function VaultFolderExplorer({
                             ) : null}
                           </li>
                         );
-                      })}
-                    </ul>
-                  </li>
-                ))}
+                          })}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </>
             ) : (
               filteredEntries.map((entry) => {

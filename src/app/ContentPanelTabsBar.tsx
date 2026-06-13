@@ -27,6 +27,7 @@ export function ContentPanelTabsBar({
   activeTabId,
   onSelectTab,
   onAddTab,
+  onCloseTab,
   navigationCollapsed = false,
   onOpenNavigation,
 }: {
@@ -34,6 +35,7 @@ export function ContentPanelTabsBar({
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onAddTab: () => void;
+  onCloseTab: (tabId: string) => void;
   navigationCollapsed?: boolean;
   onOpenNavigation?: () => void;
 }) {
@@ -68,10 +70,10 @@ export function ContentPanelTabsBar({
         {tabs.map((tab) => {
           const active = tab.id === activeTabId;
           return (
-            <button
+            <span
               key={tab.id}
-              type="button"
               role="tab"
+              tabIndex={0}
               aria-selected={active}
               className={[
                 "content-panel-tab",
@@ -80,6 +82,12 @@ export function ContentPanelTabsBar({
                 .filter(Boolean)
                 .join(" ")}
               onClick={() => onSelectTab(tab.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectTab(tab.id);
+                }
+              }}
               title={tab.label}
             >
               <span className="content-panel-tab-content">
@@ -88,7 +96,20 @@ export function ContentPanelTabsBar({
                 </span>
                 <span className="content-panel-tab-label">{tab.label}</span>
               </span>
-            </button>
+              <span className="content-panel-tab-close-fade" aria-hidden="true" />
+              <button
+                type="button"
+                className="content-panel-tab-close"
+                aria-label={`Close ${tab.label}`}
+                title={`Close ${tab.label}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseTab(tab.id);
+                }}
+              >
+                ×
+              </button>
+            </span>
           );
         })}
       </div>
