@@ -159,9 +159,10 @@ export function useCommandPaletteSearch({
       .then(([issueResult, projectResult]) => {
         if (requestId !== requestIdRef.current) return;
 
-        const errors = [issueResult.error, projectResult.error].filter(
-          (message): message is string => Boolean(message),
-        );
+        const errors = [
+          "error" in issueResult ? issueResult.error : undefined,
+          "error" in projectResult ? projectResult.error : undefined,
+        ].filter((message): message is string => Boolean(message));
         setRemoteError(errors[0] ?? null);
 
         const issueItems: CommandPaletteItem[] = (issueResult.issues ?? []).map((issue) => ({

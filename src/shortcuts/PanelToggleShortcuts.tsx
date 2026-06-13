@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { PANEL_TOGGLE_SHORTCUTS } from "./panelToggleShortcutBindings";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -8,7 +9,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
-export function useSidePanelToggleShortcuts({
+const PANEL_TOGGLE_KEYS: Record<string, (typeof PANEL_TOGGLE_SHORTCUTS)[number]["action"]> = {
+  "[": "left",
+  "]": "right",
+  "\\": "content-sidebar",
+};
+
+export function PanelToggleShortcuts({
   enabled,
   onToggleLeftSidePanel,
   onToggleRightSidePanel,
@@ -19,32 +26,25 @@ export function useSidePanelToggleShortcuts({
   onToggleRightSidePanel: () => void;
   onToggleContentPanelSidebar: () => void;
 }) {
+  const actionHandlers = {
+    left: onToggleLeftSidePanel,
+    right: onToggleRightSidePanel,
+    "content-sidebar": onToggleContentPanelSidebar,
+  } as const;
+
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) return undefined;
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableTarget(event.target)) return;
 
-      if (event.key === "[") {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggleLeftSidePanel();
-        return;
-      }
+      const action = PANEL_TOGGLE_KEYS[event.key];
+      if (!action) return;
 
-      if (event.key === "]") {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggleRightSidePanel();
-        return;
-      }
-
-      if (event.key === "\\") {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggleContentPanelSidebar();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      actionHandlers[action]();
     }
 
     window.addEventListener("keydown", onKeyDown, true);
@@ -55,4 +55,6 @@ export function useSidePanelToggleShortcuts({
     onToggleLeftSidePanel,
     onToggleRightSidePanel,
   ]);
+
+  return null;
 }

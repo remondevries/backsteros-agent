@@ -55,6 +55,50 @@ export function computePersonalRecordFromSets(
   };
 }
 
+/** Single-pass aggregation of personal records for all exercises in a set list. */
+export function computeAllPersonalRecordsFromSets(sets: WorkoutSet[]): Map<string, PersonalRecord> {
+  const byExercise = new Map<
+    string,
+    { maxWeight: number; repsAtMax: number; maxWeightDate: string; bestReps: number; bestRepsDate: string }
+  >();
+
+  for (const set of sets) {
+    const exerciseKey = personalRecordExerciseKey(set.exercise);
+    if (!exerciseKey) continue;
+
+    let agg = byExercise.get(exerciseKey);
+    if (!agg) {
+      agg = { maxWeight: 0, repsAtMax: 0, maxWeightDate: '', bestReps: 0, bestRepsDate: '' };
+      byExercise.set(exerciseKey, agg);
+    }
+
+    if (set.reps > agg.bestReps) {
+      agg.bestReps = set.reps;
+      agg.bestRepsDate = set.date;
+    }
+    if (set.isBodyweight || set.weight <= 0) continue;
+    if (set.weight > agg.maxWeight || (set.weight === agg.maxWeight && set.reps > agg.repsAtMax)) {
+      agg.maxWeight = set.weight;
+      agg.repsAtMax = set.reps;
+      agg.maxWeightDate = set.date;
+    }
+  }
+
+  const records = new Map<string, PersonalRecord>();
+  for (const [exerciseKey, agg] of byExercise) {
+    if (agg.maxWeight <= 0 && agg.bestReps <= 0) continue;
+    records.set(exerciseKey, {
+      exercise: exerciseKey,
+      maxWeight: agg.maxWeight,
+      reps: agg.repsAtMax,
+      date: agg.maxWeightDate || agg.bestRepsDate,
+      bestReps: agg.bestReps,
+      bestRepsDate: agg.bestRepsDate || agg.maxWeightDate,
+    });
+  }
+  return records;
+}
+
 export function compareSetToRecord(
   set: WorkoutSet,
   record: PersonalRecord | null | undefined,

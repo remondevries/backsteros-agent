@@ -1,31 +1,20 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShellLayout } from "./app/AppShellLayout";
-import { CommandPanel } from "./app/CommandPanel";
-import type { AppView } from "./app/appViews";
-import { ChatView, type ChatViewHandle } from "./chat/ChatView";
 import { UiPreviewProvider } from "./chat/dev/UiPreviewContext";
 import { NotificationProvider } from "./app/notifications/NotificationProvider";
 import { subscribeToLinearWatcherEvents } from "./lib/linearWatcherEvents";
 import { startLinearIssueAgentDispatch } from "./lib/linearIssueAgentDispatch";
 import { LinearIssueAgentDispatchHost } from "./app/project-issues/LinearIssueAgentDispatchHost";
-import { SessionTabBar } from "./chat/SessionTabBar";
 import type { ModelMode } from "./chat/types";
-import { useCommandPanelShortcuts } from "./hooks/useCommandPanelShortcuts";
-import { useAppViewNavigationShortcuts } from "./hooks/useAppViewNavigationShortcuts";
-import { useSessionTabShortcuts } from "./hooks/useSessionTabShortcuts";
-import { useLookupSessionTabs } from "./hooks/useLookupSessionTabs";
-import { useSessionTabs } from "./hooks/useSessionTabs";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import { useRightPanelSession } from "./hooks/useRightPanelSession";
 import {
-  readPersistedAppView,
   readPersistedSettingsTab,
   readPersistedShowSettings,
   readPersistedVaultNavItem,
   writePersistedAppState,
 } from "./hooks/usePersistedAppState";
 import type { SidebarNavItemId } from "./lib/sidebarNavItems";
-import { LookupView, type LookupViewHandle } from "./lookup/LookupView";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import type { SettingsTabId } from "./settings/settingsTabs";
 import { VaultProvider } from "./chat/VaultContext";
@@ -45,24 +34,6 @@ import { isTauriRuntime } from "./lib/tauriRuntime";
 import { setLinearIssueLinkMode } from "./lib/linear/linearLink";
 import { pushNotification } from "./lib/notifications";
 import { openExternalUrl } from "./lib/openExternalUrl";
-
-type DashboardView = Extract<AppView, "whoop" | "linear" | "obsidian">;
-
-const DASHBOARD_VIEWS = new Set<DashboardView>(["whoop", "linear", "obsidian"]);
-
-function isDashboardView(view: AppView): view is DashboardView {
-  return DASHBOARD_VIEWS.has(view as DashboardView);
-}
-
-const WhoopDashboard = lazy(() =>
-  import("./whoop/WhoopDashboard").then((module) => ({ default: module.WhoopDashboard })),
-);
-const LinearDashboard = lazy(() =>
-  import("./linear/LinearDashboard").then((module) => ({ default: module.LinearDashboard })),
-);
-const ObsidianDashboard = lazy(() =>
-  import("./obsidian/ObsidianDashboard").then((module) => ({ default: module.ObsidianDashboard })),
-);
 
 async function loadTauriConnection() {
   try {
@@ -101,112 +72,15 @@ export default function App() {
   const [calendarConnecting, setCalendarConnecting] = useState(false);
   const [needsCalendarConnect, setNeedsCalendarConnect] = useState(false);
   const [whoopWarning, setWhoopWarning] = useState<string | null>(null);
-  const [geminiWarning, setGeminiWarning] = useState<string | null>(null);
-  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
-  const [renamingLookupSessionId, setRenamingLookupSessionId] = useState<string | null>(null);
-  const [appView, setAppView] = useState<AppView>(() => readPersistedAppView() ?? "chat");
   const [activeVaultNavItem, setActiveVaultNavItem] = useState<SidebarNavItemId | null>(
     () => readPersistedVaultNavItem() ?? "inbox",
   );
-  const [mountedDashboardViews, setMountedDashboardViews] = useState<Set<DashboardView>>(() => {
-    const persistedView = readPersistedAppView();
-    if (persistedView && isDashboardView(persistedView)) {
-      return new Set([persistedView]);
-    }
-    return new Set();
-  });
-  const [commandPanelOpen, setCommandPanelOpen] = useState(false);
-  const activeChatRef = useRef<ChatViewHandle>(null);
-  const activeLookupRef = useRef<LookupViewHandle>(null);
   const sidecarBuildSignatureRef = useRef<string | null>(null);
   const sidecarBuildSignatureInitializedRef = useRef(false);
 
-  const focusActiveComposer = useCallback(() => {
-    activeChatRef.current?.focusComposer();
-  }, []);
-
-  const focusActiveLookupComposer = useCallback(() => {
-    activeLookupRef.current?.focusComposer();
-  }, []);
-
-  const handleAppViewChange = useCallback(
-    (nextView: AppView) => {
-      setAppView(nextView);
-      setActiveVaultNavItem(null);
-      setCommandPanelOpen(false);
-      if (nextView === "chat") {
-        focusActiveComposer();
-      }
-      if (nextView === "lookup") {
-        focusActiveLookupComposer();
-      }
-    },
-    [focusActiveComposer, focusActiveLookupComposer],
-  );
-
   const chatEnabled = ready && Boolean(notesPath);
-  const lookupEnabled = chatEnabled;
-  const {
-    tabs,
-    activeSessionId,
-    mountedSessionIds,
-    loading: tabsLoading,
-    selectTab,
-    newTab,
-    closeTab,
-    selectRelativeTab,
-    updateTabTitle,
-    renameTab,
-    cancelPendingTabStateSave,
-    resetTabState,
-    saveTabState,
-    reloadTabs,
-  } = useSessionTabs(chatEnabled);
-
-  const {
-    tabs: lookupTabs,
-    activeSessionId: activeLookupSessionId,
-    mountedSessionIds: mountedLookupSessionIds,
-    loading: lookupTabsLoading,
-    selectTab: selectLookupTab,
-    newTab: newLookupTab,
-    closeTab: closeLookupTab,
-    selectRelativeTab: selectRelativeLookupTab,
-    updateTabTitle: updateLookupTabTitle,
-    renameTab: renameLookupTab,
-    saveTabState: saveLookupTabState,
-  } = useLookupSessionTabs(lookupEnabled);
-
-  const mountedChatSessionIds = useMemo(
-    () => new Set(mountedSessionIds),
-    [mountedSessionIds],
-  );
-  const mountedLookupSessionIdSet = useMemo(
-    () => new Set(mountedLookupSessionIds),
-    [mountedLookupSessionIds],
-  );
-
-  const activeSessionTitle = useMemo(() => {
-    if (appView === "chat") {
-      return tabs.find((tab) => tab.sessionId === activeSessionId)?.title ?? null;
-    }
-    if (appView === "lookup") {
-      return lookupTabs.find((tab) => tab.sessionId === activeLookupSessionId)?.title ?? null;
-    }
-    return null;
-  }, [activeLookupSessionId, activeSessionId, appView, lookupTabs, tabs]);
 
   useSystemTheme();
-
-  useEffect(() => {
-    if (!isDashboardView(appView)) return;
-    setMountedDashboardViews((current) => {
-      if (current.has(appView)) return current;
-      const next = new Set(current);
-      next.add(appView);
-      return next;
-    });
-  }, [appView]);
 
   const settingsMode = !notesPath || showSettings;
   const rightPanelChatEnabled = chatEnabled && !settingsMode;
@@ -220,12 +94,12 @@ export default function App() {
   useEffect(() => {
     if (!ready || !notesPath) return;
     writePersistedAppState({
-      appView,
+      appView: "chat",
       showSettings,
       activeSettingsTab,
       activeVaultNavItem: activeVaultNavItem ?? undefined,
     });
-  }, [activeSettingsTab, activeVaultNavItem, appView, notesPath, ready, showSettings]);
+  }, [activeSettingsTab, activeVaultNavItem, notesPath, ready, showSettings]);
 
   const handleOpenSettings = useCallback(() => {
     setActiveSettingsTab("general");
@@ -235,24 +109,22 @@ export default function App() {
   const handleExitSettings = useCallback(() => {
     if (!notesPath) return;
     setShowSettings(false);
-    window.requestAnimationFrame(() => focusActiveComposer());
-  }, [focusActiveComposer, notesPath]);
+  }, [notesPath]);
 
   const handleToggleSettings = useCallback(() => {
     if (!notesPath) return;
     setShowSettings((open) => {
       if (open) {
-        window.requestAnimationFrame(() => focusActiveComposer());
         return false;
       }
       setActiveSettingsTab("general");
       return true;
     });
-  }, [focusActiveComposer, notesPath]);
+  }, [notesPath]);
 
   useEffect(() => {
     if (!notesPath && ready) {
-      setActiveSettingsTab("obsidian");
+      setActiveSettingsTab("general");
     }
   }, [notesPath, ready]);
 
@@ -274,20 +146,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleExitSettings, handleToggleSettings, notesPath, showSettings]);
 
-  const commandPanelEnabled = ready && Boolean(notesPath);
-
-  useCommandPanelShortcuts({
-    enabled: commandPanelEnabled,
-    commandPanelOpen,
-    onOpen: () => setCommandPanelOpen(true),
-    onNavigate: handleAppViewChange,
-  });
-
-  useAppViewNavigationShortcuts({
-    enabled: commandPanelEnabled,
-    activeView: appView,
-    onNavigate: handleAppViewChange,
-  });
 
   const connectToSidecar = useCallback(async () => {
     setConnecting(true);
@@ -302,19 +160,12 @@ export default function App() {
         healthTimeoutMs: usingTauri || isTauriRuntime() ? 2_000 : 8_000,
       });
 
-      const [health, settings] = await Promise.all([getHealth({ force: true }), getSettings()]);
+      const [health, settings] = await Promise.all([getHealth(), getSettings()]);
       if (!health.hasApiKey) {
         setHealthError("Add your Cursor API key in Settings → Cursor.");
         return;
       }
 
-      if (!health.hasGeminiApiKey) {
-        setGeminiWarning(
-          "Gemini Lookup is not configured. Add GEMINI_API_KEY to ~/.backsteros-agent/.env.",
-        );
-      } else {
-        setGeminiWarning(null);
-      }
       if (!health.hasLinearApiKey) {
         setLinearWarning("Linear MCP is not configured. Add LINEAR_API_KEY to ~/.backsteros-agent/.env.");
       } else {
@@ -420,115 +271,9 @@ export default function App() {
     };
   }, [ready]);
 
-  const handleCloseActiveTab = useCallback(async () => {
-    if (appView === "lookup") {
-      if (!activeLookupSessionId || lookupTabs.length <= 1) return;
-      await closeLookupTab(activeLookupSessionId);
-      return;
-    }
-    if (!activeSessionId || tabs.length <= 1) return;
-    await closeTab(activeSessionId);
-  }, [
-    activeLookupSessionId,
-    activeSessionId,
-    appView,
-    closeLookupTab,
-    closeTab,
-    lookupTabs.length,
-    tabs.length,
-  ]);
-
-  const handleRenameCommit = useCallback(
-    (sessionId: string, title: string) => {
-      renameTab(sessionId, title);
-      setRenamingSessionId(null);
-      focusActiveComposer();
-    },
-    [focusActiveComposer, renameTab],
-  );
-
-  const handleRenameCancel = useCallback(() => {
-    setRenamingSessionId(null);
-    focusActiveComposer();
-  }, [focusActiveComposer]);
-
-  useEffect(() => {
-    setRenamingSessionId((current) =>
-      current && current !== activeSessionId ? null : current,
-    );
-  }, [activeSessionId]);
-
-  const shortcutHandlers = useMemo(
-    () => ({
-      onNewTab: () => {
-        if (appView === "lookup") {
-          void newLookupTab().then(focusActiveLookupComposer);
-          return;
-        }
-        void newTab();
-      },
-      onCloseTab: handleCloseActiveTab,
-      onRenameTab: () => {
-        if (appView === "lookup") {
-          if (activeLookupSessionId) {
-            setRenamingLookupSessionId(activeLookupSessionId);
-          }
-          return;
-        }
-        if (activeSessionId) {
-          setRenamingSessionId(activeSessionId);
-        }
-      },
-      onPreviousTab: () => {
-        if (appView === "lookup") {
-          selectRelativeLookupTab(-1);
-          return;
-        }
-        selectRelativeTab(-1);
-      },
-      onNextTab: () => {
-        if (appView === "lookup") {
-          selectRelativeLookupTab(1);
-          return;
-        }
-        selectRelativeTab(1);
-      },
-    }),
-    [
-      activeLookupSessionId,
-      activeSessionId,
-      appView,
-      focusActiveLookupComposer,
-      handleCloseActiveTab,
-      newLookupTab,
-      newTab,
-      selectRelativeLookupTab,
-      selectRelativeTab,
-    ],
-  );
-
-  useSessionTabShortcuts(chatEnabled, shortcutHandlers);
-
-  useEffect(() => {
-    if (!chatEnabled || !activeSessionId || appView !== "chat") return;
-    focusActiveComposer();
-  }, [activeSessionId, appView, chatEnabled, focusActiveComposer]);
-
-  useEffect(() => {
-    if (!lookupEnabled || !activeLookupSessionId || appView !== "lookup") return;
-    focusActiveLookupComposer();
-  }, [activeLookupSessionId, appView, focusActiveLookupComposer, lookupEnabled]);
-
-  useEffect(() => {
-    setRenamingLookupSessionId((current) =>
-      current && current !== activeLookupSessionId ? null : current,
-    );
-  }, [activeLookupSessionId]);
-
   async function handleSettingsUpdated(path: string, nextVaultName?: string | null) {
     setNotesPath(path);
     setVaultName(nextVaultName ?? null);
-    await reloadTabs();
   }
 
   async function handleConnectGoogleCalendar() {
@@ -627,23 +372,10 @@ export default function App() {
           </button>
         </div>
       )}
-      {!healthError && geminiWarning && appView === "lookup" && (
-        <div className="warning-banner">{geminiWarning}</div>
-      )}
 
       {notesPath ? (
         <VaultProvider notesPath={notesPath} vaultNameOverride={vaultName}>
-          {commandPanelOpen && (
-            <CommandPanel
-              activeView={appView}
-              onClose={() => setCommandPanelOpen(false)}
-              onSelect={handleAppViewChange}
-            />
-          )}
-
           <AppShellLayout
-            activeView={appView}
-            onViewChange={handleAppViewChange}
             settingsOpen={settingsMode}
             activeSettingsTab={activeSettingsTab}
             onSettingsTabChange={setActiveSettingsTab}
@@ -657,7 +389,6 @@ export default function App() {
             activeVaultNavItem={activeVaultNavItem}
             onVaultNavItemChange={setActiveVaultNavItem}
             vaultExplorerEnabled={vaultExplorerEnabled}
-            activeSessionTitle={activeSessionTitle}
           >
             {settingsMode ? (
               <SettingsPanel
@@ -673,155 +404,11 @@ export default function App() {
                   void handleSettingsUpdated(path, nextVaultName);
                 }}
               />
-            ) : (
-              <>
-              {(appView === "chat" || appView === "lookup") && (
-                <SessionTabBar
-                  tabs={appView === "lookup" ? lookupTabs : tabs}
-                  activeSessionId={
-                    appView === "lookup" ? activeLookupSessionId : activeSessionId
-                  }
-                  renamingSessionId={
-                    appView === "lookup" ? renamingLookupSessionId : renamingSessionId
-                  }
-                  onSelect={(sessionId) => {
-                    if (appView === "lookup") {
-                      selectLookupTab(sessionId);
-                      focusActiveLookupComposer();
-                      return;
-                    }
-                    selectTab(sessionId);
-                    focusActiveComposer();
-                  }}
-                  onClose={(sessionId) => {
-                    if (appView === "lookup") {
-                      void closeLookupTab(sessionId);
-                      return;
-                    }
-                    void closeTab(sessionId);
-                  }}
-                  onNewTab={() => {
-                    if (appView === "lookup") {
-                      void newLookupTab().then(focusActiveLookupComposer);
-                      return;
-                    }
-                    void newTab().then(focusActiveComposer);
-                  }}
-                  onRenameCommit={(sessionId, title) => {
-                    if (appView === "lookup") {
-                      renameLookupTab(sessionId, title);
-                      setRenamingLookupSessionId(null);
-                      focusActiveLookupComposer();
-                      return;
-                    }
-                    handleRenameCommit(sessionId, title);
-                  }}
-                  onRenameCancel={() => {
-                    if (appView === "lookup") {
-                      setRenamingLookupSessionId(null);
-                      focusActiveLookupComposer();
-                      return;
-                    }
-                    handleRenameCancel();
-                  }}
-                />
-              )}
-
-              <div className="chat-views" hidden={appView !== "chat"}>
-                {tabsLoading && tabs.length === 0 ? (
-                  <div className="app-shell loading">Loading sessions…</div>
-                ) : (
-                  tabs
-                    .filter((tab) => mountedChatSessionIds.has(tab.sessionId))
-                    .map((tab) => (
-                    <div
-                      key={tab.sessionId}
-                      className={`chat-view-pane ${tab.sessionId === activeSessionId ? "chat-view-pane-active" : ""}`}
-                      hidden={tab.sessionId !== activeSessionId}
-                    >
-                      <ChatView
-                        ref={tab.sessionId === activeSessionId ? activeChatRef : undefined}
-                        sessionId={tab.sessionId}
-                        isActive={tab.sessionId === activeSessionId && appView === "chat"}
-                        initialMessages={tab.initialMessages}
-                        initialRuns={tab.initialRuns}
-                        onBeforeSessionClear={() => cancelPendingTabStateSave(tab.sessionId)}
-                        onTitleChange={(title) => updateTabTitle(tab.sessionId, title)}
-                        onStateChange={(messages, runs) =>
-                          saveTabState(tab.sessionId, messages, runs)
-                        }
-                        onSessionClear={(title) => {
-                          void resetTabState(tab.sessionId);
-                          renameTab(tab.sessionId, title);
-                        }}
-                        onNavigateToView={handleAppViewChange}
-                      />
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="chat-views" hidden={appView !== "lookup"}>
-                {lookupTabsLoading && lookupTabs.length === 0 ? (
-                  <div className="app-shell loading">Loading lookup sessions…</div>
-                ) : (
-                  lookupTabs
-                    .filter((tab) => mountedLookupSessionIdSet.has(tab.sessionId))
-                    .map((tab) => (
-                    <div
-                      key={tab.sessionId}
-                      className={`chat-view-pane ${tab.sessionId === activeLookupSessionId ? "chat-view-pane-active" : ""}`}
-                      hidden={tab.sessionId !== activeLookupSessionId}
-                    >
-                      <LookupView
-                        ref={
-                          tab.sessionId === activeLookupSessionId ? activeLookupRef : undefined
-                        }
-                        sessionId={tab.sessionId}
-                        isActive={tab.sessionId === activeLookupSessionId && appView === "lookup"}
-                        initialMessages={tab.initialMessages}
-                        initialRuns={tab.initialRuns}
-                        onTitleChange={(title) => updateLookupTabTitle(tab.sessionId, title)}
-                        onStateChange={(messages, runs) =>
-                          saveLookupTabState(tab.sessionId, messages, runs)
-                        }
-                      />
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {mountedDashboardViews.has("whoop") ? (
-                <div className="app-view-pane" hidden={appView !== "whoop"}>
-                  <Suspense fallback={<div className="app-shell loading">Loading Whoop…</div>}>
-                    <WhoopDashboard isActive={appView === "whoop"} />
-                  </Suspense>
-                </div>
-              ) : null}
-
-              {mountedDashboardViews.has("linear") ? (
-                <div className="app-view-pane" hidden={appView !== "linear"}>
-                  <Suspense fallback={<div className="app-shell loading">Loading Linear…</div>}>
-                    <LinearDashboard isActive={appView === "linear"} />
-                  </Suspense>
-                </div>
-              ) : null}
-
-              {mountedDashboardViews.has("obsidian") ? (
-                <div className="app-view-pane" hidden={appView !== "obsidian"}>
-                  <Suspense fallback={<div className="app-shell loading">Loading vault…</div>}>
-                    <ObsidianDashboard />
-                  </Suspense>
-                </div>
-              ) : null}
-              </>
-            )}
+            ) : null}
           </AppShellLayout>
         </VaultProvider>
       ) : (
         <AppShellLayout
-          activeView={appView}
-          onViewChange={handleAppViewChange}
           settingsOpen
           activeSettingsTab={activeSettingsTab}
           onSettingsTabChange={setActiveSettingsTab}
@@ -834,7 +421,6 @@ export default function App() {
           activeVaultNavItem={null}
           onVaultNavItemChange={() => undefined}
           vaultExplorerEnabled={false}
-          activeSessionTitle={null}
         >
           <SettingsPanel
             activeTab={activeSettingsTab}

@@ -4,13 +4,7 @@ import { isSidebarNavItemId, type SidebarNavItemId } from "../lib/sidebarNavItem
 
 const APP_STATE_STORAGE_KEY = "backsteros.app.state";
 
-const APP_VIEWS = new Set<AppView>([
-  "chat",
-  "lookup",
-  "whoop",
-  "linear",
-  "obsidian",
-]);
+const APP_VIEWS = new Set<AppView>(["chat"]);
 
 const SETTINGS_TABS = new Set<SettingsTabId>([
   "general",

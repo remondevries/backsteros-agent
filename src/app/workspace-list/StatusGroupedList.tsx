@@ -1,6 +1,7 @@
 import { Fragment, type DragEvent, type ReactNode } from "react";
 import type { GroupVariant } from "../../lib/groupVariantFromStatusKey";
 import type { StatusMoveDropIndicator, StatusMoveTargetGroup } from "../../lib/linearIssueStatusMove";
+import { VirtualList } from "../../ui/VirtualList";
 import { CollapsibleStatusSection } from "./CollapsibleStatusSection";
 
 export interface StatusListGroup<T> {
@@ -34,6 +35,7 @@ export function StatusGroupedList<T extends { id: string }>({
   className,
   listClassName,
   dragDrop,
+  virtualizeItemThreshold = 40,
 }: {
   groups: StatusListGroup<T>[];
   collapsedGroups: Set<string>;
@@ -43,6 +45,7 @@ export function StatusGroupedList<T extends { id: string }>({
   className?: string;
   listClassName?: string;
   dragDrop?: StatusListDragDrop<T>;
+  virtualizeItemThreshold?: number;
 }) {
   return (
     <div
@@ -94,7 +97,16 @@ export function StatusGroupedList<T extends { id: string }>({
                 dragDrop && dropTarget ? () => dragDrop.onGroupMouseUp(dropTarget) : undefined
               }
             >
-              {group.items.map((item) => {
+              {group.items.length >= virtualizeItemThreshold && !dragDrop ? (
+                <VirtualList
+                  items={group.items}
+                  estimateSize={52}
+                  overscan={8}
+                  getItemKey={(item) => item.id}
+                  renderItem={(item) => renderItem(item, group.key)}
+                />
+              ) : (
+                group.items.map((item) => {
                 const showDividerBefore =
                   dragDrop &&
                   dropTarget?.stateId &&
@@ -109,7 +121,8 @@ export function StatusGroupedList<T extends { id: string }>({
                     {renderItem(item, group.key)}
                   </Fragment>
                 );
-              })}
+              })
+              )}
               {dragDrop &&
               dropTarget?.stateId &&
               dragDrop.dropIndicator?.stateId === dropTarget.stateId &&

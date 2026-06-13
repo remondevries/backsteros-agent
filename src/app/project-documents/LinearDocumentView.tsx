@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearDocument } from "../../hooks/useLinearDocument";
 import { deleteLinearDocument } from "../../lib/api";
-import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
 import { DocumentNoteIcon } from "./DocumentNoteIcon";
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -15,8 +15,7 @@ export function LinearDocumentView({
   documentId: string;
   projectId?: string;
 }) {
-  const { updateActiveLinearDocument, clearActiveLinearDocument, setFocusContentSnapshot } =
-    useContentPanelNavigation();
+  const { updateActiveLinearDocument, clearActiveLinearDocument } = useContentPanelNavigation();
   const { document, loading, refreshing, error, save, refresh } = useLinearDocument(documentId);
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
@@ -54,14 +53,19 @@ export function LinearDocumentView({
     setBodyDraft(document.content);
   }, [dirty, document, documentId]);
 
-  useEffect(() => {
-    if (!document || document.id !== documentId) return;
-    setFocusContentSnapshot({
-      kind: "linear_document",
+  const focusSnapshot = useMemo(() => {
+    if (!document || document.id !== documentId) return null;
+    return {
+      kind: "linear_document" as const,
       title: titleDraft,
       content: bodyDraft,
-    });
-  }, [bodyDraft, document, documentId, setFocusContentSnapshot, titleDraft]);
+    };
+  }, [bodyDraft, document, documentId, titleDraft]);
+
+  useDebouncedFocusContentSnapshot(
+    focusSnapshot,
+    Boolean(document && document.id === documentId),
+  );
 
   const persist = useCallback(
     async (title: string, body: string) => {

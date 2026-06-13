@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import type { AppView } from "./appViews";
 import { RightPanelChatSlot } from "./RightPanelChatSlot";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import { useIntegrationsStatus } from "../settings/useIntegrationsStatus";
@@ -14,13 +13,11 @@ export function RightSidePanel({
   chatEnabled,
   session,
   sessionLoading,
-  onNavigateToView,
   onSaveSessionState,
 }: {
   chatEnabled: boolean;
   session: RightPanelSession | null;
   sessionLoading: boolean;
-  onNavigateToView: (view: AppView) => void;
   onSaveSessionState: (
     sessionId: string,
     messages: ChatMessage[],
@@ -43,7 +40,6 @@ export function RightSidePanel({
       <RightPanelChatSlot
         integrationsStatus={integrationsStatus}
         session={session}
-        onNavigateToView={onNavigateToView}
         onSaveState={onSaveSessionState}
       />
     );

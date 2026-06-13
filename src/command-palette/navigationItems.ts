@@ -1,5 +1,7 @@
 import { SETTINGS_TABS } from "../settings/settingsTabs";
+import { SETTINGS_LEADER_SHORTCUT } from "../shortcuts/navigationShortcutBindings";
 import { SIDEBAR_PRIMARY_ITEMS, SIDEBAR_SECTIONS } from "../app/sidebarNavConfig";
+import { navigationShortcutHint } from "../shortcuts/navigationShortcutBindings";
 import type { CommandPaletteItem } from "./types";
 
 function matchesQuery(value: string, query: string): boolean {
@@ -24,7 +26,7 @@ export function buildNavigationCommandItems(query: string): CommandPaletteItem[]
       id: `nav-${navItem.id}`,
       section: "Navigate",
       label: navItem.label,
-      subtitle: "Open area",
+      subtitle: navigationShortcutHint(navItem.id) ?? "Open area",
       navItemId: navItem.id,
     });
   }
@@ -51,7 +53,7 @@ export function buildNavigationCommandItems(query: string): CommandPaletteItem[]
       id: "settings-root",
       section: "Navigate",
       label: "Settings",
-      subtitle: "Open settings",
+      subtitle: SETTINGS_LEADER_SHORTCUT.hint,
     });
   }
 

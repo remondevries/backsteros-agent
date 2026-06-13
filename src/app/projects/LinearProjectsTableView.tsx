@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { useLinearProjects } from "../../hooks/useLinearProjects";
 import { groupLinearProjectsByStatus } from "../../lib/linearProjectGroups";
+import { buildStatusGroupedNavItems } from "../../lib/buildStatusGroupedNavItems";
+import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
 import { groupVariantFromStatusKey } from "../../lib/groupVariantFromStatusKey";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
@@ -33,6 +35,31 @@ export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
       })),
     [groups],
   );
+
+  const listNavItems = useMemo(
+    () =>
+      buildStatusGroupedNavItems({
+        groups: statusGroups,
+        collapsedGroups: collapsedGroups,
+        onSelect: (project) =>
+          setLinearSelection({
+            kind: "project",
+            id: project.id,
+            name: project.name,
+          }),
+      }),
+    [collapsedGroups, setLinearSelection, statusGroups],
+  );
+
+  const selectedListId =
+    linearSelection?.kind === "project" ? linearSelection.id : null;
+
+  useContentListNavigationRegistration({
+    region: "main",
+    enabled: enabled && listNavItems.length > 0,
+    items: listNavItems,
+    selectedId: selectedListId,
+  });
 
   return (
     <div className="linear-projects-table">

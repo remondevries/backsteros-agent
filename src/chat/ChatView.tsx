@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import { showsBacksterComposerOptions, isLinearOnlyComposer } from "../app/rightPanelAgents";
 import type { PanelChatComposerVariant } from "../app/rightPanelAgents";
 import { ChatTurn } from "./ChatTurn";
@@ -38,7 +39,6 @@ import {
 import { createFlowAssistantMessage } from "./automation/followUp";
 import { useAutomationOrchestration } from "./automation/useAutomationOrchestration";
 import { useTranscriptPacing } from "./useTranscriptPacing";
-import type { AppView } from "../app/appViews";
 import {
   GOOD_MORNING_ACTION_ID,
   isGoodMorningComposerMode,
@@ -126,6 +126,7 @@ import { useTextVoiceInput } from "../hooks/useTextVoiceInput";
 import { useStreamingRunTts } from "../hooks/useStreamingRunTts";
 import {
   getSettings,
+  peekCachedSettings,
   getWorkspaceDiff,
   cancelRun,
   clearSessionChat,
@@ -147,7 +148,7 @@ function isShortcutBlockedTarget(target: EventTarget | null): boolean {
     target instanceof HTMLElement &&
     Boolean(
       target.closest(
-        ".session-tab-rename-input, .attachment-modal-backdrop, .letter-modal-backdrop, .command-panel-root",
+        ".session-tab-rename-input, .attachment-modal-backdrop, .letter-modal-backdrop",
       ),
     )
   );
@@ -322,7 +323,6 @@ export const ChatView = forwardRef<
     onStateChange?: (messages: ChatMessage[], runs: Record<string, RunViewModel>) => void;
     onBeforeSessionClear?: () => void;
     onSessionClear?: (title: string) => void;
-    onNavigateToView?: (view: AppView) => void;
     layout?: "default" | "panel";
     focusContext?: import("../lib/chatFocusContext").ChatFocusContext | null;
     composerContextItems?: ComposerContextItem[];
@@ -340,7 +340,6 @@ export const ChatView = forwardRef<
     onStateChange,
     onBeforeSessionClear,
     onSessionClear,
-    onNavigateToView,
     layout = "default",
     focusContext = null,
     composerContextItems = [],
@@ -783,7 +782,7 @@ export const ChatView = forwardRef<
 
     void (async () => {
       try {
-        const settings = await getSettings();
+        const settings = peekCachedSettings() ?? (await getSettings());
         const nextComposerMode = composerModeFromSettings(
           settings.executionMode,
           settings.modelMode,
@@ -1879,14 +1878,6 @@ export const ChatView = forwardRef<
     }
   }
 
-  const openLinearDashboard = useCallback(() => {
-    onNavigateToView?.("linear");
-  }, [onNavigateToView]);
-
-  const openWhoopDashboard = useCallback(() => {
-    onNavigateToView?.("whoop");
-  }, [onNavigateToView]);
-
   const openAttachmentPreview = useCallback((attachment: MessageAttachment) => {
     setPreviewTarget(toAttachmentPreviewTarget(attachment));
   }, []);
@@ -1908,6 +1899,47 @@ export const ChatView = forwardRef<
       void handleApproval(approvalId, false);
     },
     [handleApproval],
+  );
+
+  const virtualizeTranscript = useVirtualListEnabled(messages.length);
+
+  const renderChatTurn = useCallback(
+    (message: (typeof messages)[number]) => (
+      <ChatTurn
+        key={message.id}
+        message={message}
+        run={message.runId ? runs[message.runId] : undefined}
+        animateMessage={!skipAnimationMessageIdsRef.current.has(message.id)}
+        animateRun={
+          message.runId ? !skipAnimationRunIdsRef.current.has(message.runId) : false
+        }
+        ttsSupported={ttsSupported}
+        voiceModeEnabled={voiceModeEnabled}
+        deleteConfirmState={message.runId ? deleteConfirmResolved[message.runId] : undefined}
+        onOpenAttachmentPreview={openAttachmentPreview}
+        onToggleRun={toggleRunExpanded}
+        onApproveApproval={approveApproval}
+        onRejectApproval={rejectApproval}
+        onRunPresentationComplete={handleRunPresentationComplete}
+        onDeleteFileConfirm={handleDeleteFileConfirm}
+        onDeleteFileReturn={handleDeleteFileReturn}
+        onFlowPresentationComplete={markPresentationComplete}
+      />
+    ),
+    [
+      approveApproval,
+      deleteConfirmResolved,
+      handleDeleteFileConfirm,
+      handleDeleteFileReturn,
+      handleRunPresentationComplete,
+      markPresentationComplete,
+      openAttachmentPreview,
+      rejectApproval,
+      runs,
+      toggleRunExpanded,
+      ttsSupported,
+      voiceModeEnabled,
+    ],
   );
 
   return (
@@ -1950,32 +1982,18 @@ export const ChatView = forwardRef<
             onScroll={handleTranscriptScroll}
           >
           <div className="chat-transcript-inner">
-        {messages.map((message) => (
-          <ChatTurn
-            key={message.id}
-            message={message}
-            run={message.runId ? runs[message.runId] : undefined}
-            animateMessage={!skipAnimationMessageIdsRef.current.has(message.id)}
-            animateRun={
-              message.runId ? !skipAnimationRunIdsRef.current.has(message.runId) : false
-            }
-            ttsSupported={ttsSupported}
-            voiceModeEnabled={voiceModeEnabled}
-            deleteConfirmState={
-              message.runId ? deleteConfirmResolved[message.runId] : undefined
-            }
-            onOpenAttachmentPreview={openAttachmentPreview}
-            onToggleRun={toggleRunExpanded}
-            onApproveApproval={approveApproval}
-            onRejectApproval={rejectApproval}
-            onRunPresentationComplete={handleRunPresentationComplete}
-            onDeleteFileConfirm={handleDeleteFileConfirm}
-            onDeleteFileReturn={handleDeleteFileReturn}
-            onOpenLinearDashboard={openLinearDashboard}
-            onOpenWhoopDashboard={openWhoopDashboard}
-            onFlowPresentationComplete={markPresentationComplete}
+        {virtualizeTranscript ? (
+          <VirtualList
+            items={messages}
+            scrollElementRef={transcriptRef}
+            estimateSize={120}
+            overscan={6}
+            getItemKey={(message) => message.id}
+            renderItem={(message) => renderChatTurn(message)}
           />
-        ))}
+        ) : (
+          messages.map((message) => renderChatTurn(message))
+        )}
 
         {voiceTurnPhase && (
           <VoiceTurnBubble phase={voiceTurnPhase} />

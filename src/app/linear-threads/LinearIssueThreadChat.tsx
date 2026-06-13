@@ -8,7 +8,6 @@ import { shouldRefreshLinearIssueFromAgentReply } from "../../lib/linearIssueAge
 import { useLinearIssueCommentThread } from "../../hooks/useLinearIssueCommentThread";
 import { useTts } from "../../hooks/useTts";
 import type { ChatMessage } from "../../chat/types";
-import type { AppView } from "../appViews";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { linearCommentToChatMessage } from "./linearThreadFormat";
 
@@ -18,14 +17,12 @@ export function LinearIssueThreadChat({
   issueId,
   threadId,
   composerContextItems = [],
-  onNavigateToView,
   onStartThread,
   starting = false,
 }: {
   issueId: string;
   threadId: string | null;
   composerContextItems?: ComposerContextItem[];
-  onNavigateToView?: (view: AppView) => void;
   onStartThread?: (body: string) => Promise<boolean>;
   starting?: boolean;
 }) {
@@ -146,14 +143,6 @@ export function LinearIssueThreadChat({
     }
   }, [messages, requestLinearIssueRefresh]);
 
-  const openLinearDashboard = useCallback(() => {
-    onNavigateToView?.("linear");
-  }, [onNavigateToView]);
-
-  const openWhoopDashboard = useCallback(() => {
-    onNavigateToView?.("whoop");
-  }, [onNavigateToView]);
-
   if (loading && messages.length === 0) {
     return <p className="linear-thread-list-status">Loading thread…</p>;
   }
@@ -173,8 +162,6 @@ export function LinearIssueThreadChat({
                       sentAt={message.createdAt}
                       animate={shouldAnimateAssistant(message)}
                       canSpeak={ttsSupported && message.text.trim().length > 0}
-                      onOpenLinearDashboard={openLinearDashboard}
-                      onOpenWhoopDashboard={openWhoopDashboard}
                       onAgentReplyComplete={() => {
                         maybeRefreshIssueFromAgentReply(message);
                       }}
@@ -195,8 +182,6 @@ export function LinearIssueThreadChat({
                     onRunPresentationComplete={noop}
                     onDeleteFileConfirm={noop}
                     onDeleteFileReturn={noop}
-                    onOpenLinearDashboard={openLinearDashboard}
-                    onOpenWhoopDashboard={openWhoopDashboard}
                     onFlowPresentationComplete={noop}
                   />
                 ),

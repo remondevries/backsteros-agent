@@ -8,8 +8,8 @@ import {
   type WorkoutSetWire,
 } from "../lib/api";
 import { setExerciseCatalogEntries } from "../lib/workouts/exerciseCatalogRuntime";
-import { computePersonalRecordFromSets } from "../lib/workouts/personalRecords";
-import type { PersonalRecord, WorkoutSet } from "../lib/workouts/types";
+import { computeAllPersonalRecordsFromSets } from "../lib/workouts/personalRecords";
+import type { WorkoutSet } from "../lib/workouts/types";
 
 function toWorkoutSet(row: WorkoutSetWire): WorkoutSet {
   return {
@@ -67,15 +67,7 @@ export function useWorkoutSets() {
     void refresh();
   }, [refresh]);
 
-  const personalRecords = useMemo(() => {
-    const exercises = [...new Set(sets.map((set) => set.exercise))];
-    const map = new Map<string, PersonalRecord>();
-    for (const exercise of exercises) {
-      const record = computePersonalRecordFromSets(exercise, sets);
-      if (record) map.set(exercise, record);
-    }
-    return map;
-  }, [sets]);
+  const personalRecords = useMemo(() => computeAllPersonalRecordsFromSets(sets), [sets]);
 
   const appendSets = useCallback(
     async (incoming: Omit<WorkoutSetWire, "setNumber">[]) => {

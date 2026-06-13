@@ -4,16 +4,14 @@ import { ContentPanel } from "./ContentPanel";
 import { ContentPanelNavigationProvider, useContentPanelNavigation } from "./contentPanelNavigation";
 import { LeftSidePanel } from "./LeftSidePanel";
 import { RightSidePanel } from "./RightSidePanel";
-import type { AppView } from "./appViews";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import { ResizablePanel } from "./ResizablePanel";
-import { useSidePanelToggleShortcuts } from "../hooks/useSidePanelToggleShortcuts";
-import { useCommandPaletteShortcut } from "../hooks/useCommandPaletteShortcut";
 import { useSidePanelToggles } from "../hooks/useSidePanelToggles";
 import { CommandPalette } from "../command-palette/CommandPalette";
-import { CommandPaletteProvider } from "../command-palette/CommandPaletteContext";
+import { CommandPaletteProvider, useCommandPalette } from "../command-palette/CommandPaletteContext";
+import { AppShellShortcuts } from "../shortcuts/AppShellShortcuts";
 import { showTrafficLights } from "../lib/traffic-lights";
 import { isTauriRuntime } from "../lib/tauriRuntime";
 
@@ -28,8 +26,6 @@ type RightPanelSession = {
 };
 
 function AppMainShell({
-  activeView,
-  onViewChange,
   settingsOpen,
   activeSettingsTab,
   onSettingsTabChange,
@@ -43,7 +39,6 @@ function AppMainShell({
   activeVaultNavItem,
   onVaultNavItemChange,
   vaultExplorerEnabled,
-  activeSessionTitle,
   children,
   leftSidePanelOpen,
   rightSidePanelOpen,
@@ -54,8 +49,6 @@ function AppMainShell({
   toggleRightSidePanel,
   toggleContentPanelSidebar,
 }: {
-  activeView: AppView;
-  onViewChange: (view: AppView) => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
   onSettingsTabChange: (tab: SettingsTabId) => void;
@@ -73,7 +66,6 @@ function AppMainShell({
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   vaultExplorerEnabled: boolean;
-  activeSessionTitle?: string | null;
   children: ReactNode;
   leftSidePanelOpen: boolean;
   rightSidePanelOpen: boolean;
@@ -86,6 +78,7 @@ function AppMainShell({
 }) {
   const { activeLinearDocument, clearActiveVaultDocument, resetProjectsOverview } =
     useContentPanelNavigation();
+  const { open: commandPaletteOpen } = useCommandPalette();
   const [leftNavigationOverlayOpen, setLeftNavigationOverlayOpen] = useState(false);
   const [narrowNavigation, setNarrowNavigation] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(NARROW_NAVIGATION_QUERY).matches,
@@ -131,29 +124,11 @@ function AppMainShell({
     ],
   );
 
-  const handleViewChange = useCallback(
-    (view: AppView) => {
-      onViewChange(view);
-      setLeftNavigationOverlayOpen(false);
-      if (narrowNavigation) closeLeftSidePanel();
-    },
-    [closeLeftSidePanel, narrowNavigation, onViewChange],
-  );
-
   const handleOpenSettings = useCallback(() => {
     onOpenSettings();
     setLeftNavigationOverlayOpen(false);
     if (narrowNavigation) closeLeftSidePanel();
   }, [closeLeftSidePanel, narrowNavigation, onOpenSettings]);
-
-  useSidePanelToggleShortcuts({
-    enabled: !settingsOpen,
-    onToggleLeftSidePanel: toggleLeftSidePanel,
-    onToggleRightSidePanel: toggleRightSidePanel,
-    onToggleContentPanelSidebar: toggleContentPanelSidebar,
-  });
-
-  useCommandPaletteShortcut({ enabled: !settingsOpen });
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -243,8 +218,6 @@ function AppMainShell({
           collapsed={!leftSidePanelOpen}
         >
           <LeftSidePanel
-            activeView={activeView}
-            onChange={handleViewChange}
             settingsOpen={settingsOpen}
             activeSettingsTab={activeSettingsTab}
             onSettingsTabChange={onSettingsTabChange}
@@ -265,8 +238,6 @@ function AppMainShell({
           aria-label="Main navigation"
         >
           <LeftSidePanel
-            activeView={activeView}
-            onChange={handleViewChange}
             settingsOpen={settingsOpen}
             activeSettingsTab={activeSettingsTab}
             onSettingsTabChange={onSettingsTabChange}
@@ -296,8 +267,6 @@ function AppMainShell({
           }}
           settingsOpen={settingsOpen}
           activeSettingsTab={activeSettingsTab}
-          activeView={activeView}
-          activeSessionTitle={activeSessionTitle}
         >
           {children}
         </ContentPanel>
@@ -318,7 +287,6 @@ function AppMainShell({
             chatEnabled={rightPanelChatEnabled}
             session={rightPanelSession}
             sessionLoading={rightPanelSessionLoading}
-            onNavigateToView={onViewChange}
             onSaveSessionState={onSaveRightPanelSessionState}
           />
         </ResizablePanel>
@@ -335,7 +303,6 @@ function AppMainShell({
             chatEnabled={rightPanelChatEnabled}
             session={rightPanelSession}
             sessionLoading={rightPanelSessionLoading}
-            onNavigateToView={onViewChange}
             onSaveSessionState={onSaveRightPanelSessionState}
           />
         </div>
@@ -346,13 +313,22 @@ function AppMainShell({
         onOpenSettings={handleOpenSettings}
         onSettingsTabChange={onSettingsTabChange}
       />
+      <AppShellShortcuts
+        settingsOpen={settingsOpen}
+        commandPaletteOpen={commandPaletteOpen}
+        activeVaultNavItem={activeVaultNavItem}
+        onVaultNavItemChange={handleVaultNavItemChange}
+        onOpenSettings={handleOpenSettings}
+        onSettingsTabChange={onSettingsTabChange}
+        onToggleLeftSidePanel={toggleLeftSidePanel}
+        onToggleRightSidePanel={toggleRightSidePanel}
+        onToggleContentPanelSidebar={toggleContentPanelSidebar}
+      />
     </div>
   );
 }
 
 export function AppShellLayout({
-  activeView,
-  onViewChange,
   settingsOpen,
   activeSettingsTab,
   onSettingsTabChange,
@@ -366,11 +342,8 @@ export function AppShellLayout({
   activeVaultNavItem,
   onVaultNavItemChange,
   vaultExplorerEnabled,
-  activeSessionTitle,
   children,
 }: {
-  activeView: AppView;
-  onViewChange: (view: AppView) => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
   onSettingsTabChange: (tab: SettingsTabId) => void;
@@ -388,7 +361,6 @@ export function AppShellLayout({
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   vaultExplorerEnabled: boolean;
-  activeSessionTitle?: string | null;
   children: ReactNode;
 }) {
   const {
@@ -406,8 +378,6 @@ export function AppShellLayout({
     <ContentPanelNavigationProvider>
       <CommandPaletteProvider>
         <AppMainShell
-        activeView={activeView}
-        onViewChange={onViewChange}
         settingsOpen={settingsOpen}
         activeSettingsTab={activeSettingsTab}
         onSettingsTabChange={onSettingsTabChange}
@@ -421,7 +391,6 @@ export function AppShellLayout({
         activeVaultNavItem={activeVaultNavItem}
         onVaultNavItemChange={onVaultNavItemChange}
         vaultExplorerEnabled={vaultExplorerEnabled}
-        activeSessionTitle={activeSessionTitle}
         leftSidePanelOpen={leftSidePanelOpen}
         rightSidePanelOpen={rightSidePanelOpen}
         contentPanelSidebarOpen={contentPanelSidebarOpen}

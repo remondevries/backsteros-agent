@@ -3,6 +3,11 @@ import { LinearProjectIcon } from "../../chat/LinearProjectIcon";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearProjectSummary } from "../../lib/api";
+import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
+import {
+  isContentListKeyboardFocused,
+  useContentListKeyboardFocusedId,
+} from "../../lib/contentListNavigationReact";
 import {
   formatLinearProjectDate,
   formatLinearProjectProgress,
@@ -24,14 +29,18 @@ export function LinearProjectTableRow({
   const progressLabel = formatLinearProjectProgress(project.progress);
   const statusName = project.status?.name;
   const statusType = project.status?.type;
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardFocused = isContentListKeyboardFocused(keyboardFocusedId, project.id);
 
   return (
     <li className="workspace-status-list__item">
       <button
         type="button"
+        {...contentListItemDataAttributes(project.id)}
         className={[
           "linear-project-table-row",
           selected ? "linear-project-table-row--selected" : null,
+          keyboardFocused ? "linear-project-table-row--keyboard-focused" : null,
         ]
           .filter(Boolean)
           .join(" ")}

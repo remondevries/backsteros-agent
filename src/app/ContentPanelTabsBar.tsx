@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useContentPanelNavigation } from "./contentPanelNavigation";
+import { useContentPanelChrome } from "./contentPanelChromeContext";
 import { RefreshIcon } from "./RefreshIcon";
 
 type ContentPanelTab = {
@@ -39,7 +39,7 @@ export function ContentPanelTabsBar({
   navigationCollapsed?: boolean;
   onOpenNavigation?: () => void;
 }) {
-  const { contentPanelBarState } = useContentPanelNavigation();
+  const { contentPanelBarState } = useContentPanelChrome();
   const refreshing = contentPanelBarState?.refreshing ?? false;
   const onRefresh = contentPanelBarState?.onRefresh ?? null;
   const message = contentPanelBarState?.message ?? null;

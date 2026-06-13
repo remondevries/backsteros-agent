@@ -16,16 +16,27 @@ import type { LetterFilingOptions } from "../chat/letterFiling";
 import type { ProjectDocumentEntity } from "./documentStatusGroups";
 import {
   cachedRequest,
+  cacheKeyLinearIssues,
+  cacheKeyLinearOverview,
+  cacheKeyVaultDirectory,
+  cacheKeyVaultDocument,
   DASHBOARD_CACHE_TTL_MS,
   HEALTH_CACHE_TTL_MS,
   invalidateRequestCache,
+  invalidateVaultContentCaches,
+  LINEAR_ISSUES_CACHE_TTL_MS,
+  LINEAR_PROJECT_CACHE_TTL_MS,
+  peekCached,
   REQUEST_CACHE_KEYS,
+  SETTINGS_CACHE_TTL_MS,
+  VAULT_LIST_CACHE_TTL_MS,
 } from "./requestCache";
 
 export {
   DASHBOARD_CACHE_TTL_MS,
   invalidateDashboardRequestCache,
   invalidateRequestCache,
+  invalidateVaultContentCaches,
   peekCached,
   REQUEST_CACHE_KEYS,
 } from "./requestCache";
@@ -501,8 +512,17 @@ export async function getHealth(
   });
 }
 
-export async function getSettings() {
-  return request<AppSettings>("/settings", undefined, SETTINGS_REQUEST_TIMEOUT_MS);
+export async function getSettings(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.settings,
+    () => request<AppSettings>("/settings", undefined, SETTINGS_REQUEST_TIMEOUT_MS),
+    { ttlMs: SETTINGS_CACHE_TTL_MS, force: options?.force },
+  );
+}
+
+/** Synchronous read of cached settings when still within TTL (avoids redundant fetches). */
+export function peekCachedSettings(): AppSettings | null {
+  return peekCached<AppSettings>(REQUEST_CACHE_KEYS.settings, SETTINGS_CACHE_TTL_MS);
 }
 
 export async function ensureLinearIssueTerminalDirectory(options: {
@@ -544,17 +564,32 @@ export type VaultDocumentContent = {
   } | null;
 };
 
-export async function listVaultDirectory(path: string) {
+export async function listVaultDirectory(
+  path: string,
+  options?: { force?: boolean; flatten?: boolean; enrich?: "none" | "whoop" },
+) {
   const query = new URLSearchParams({ path });
-  return request<{ path: string; entries: VaultDirectoryEntry[] }>(
-    `/vault/entries?${query.toString()}`,
+  if (options?.flatten) query.set("flatten", "true");
+  if (options?.enrich) query.set("enrich", options.enrich);
+  return cachedRequest(
+    `${cacheKeyVaultDirectory(path)}${options?.flatten ? ":flat" : ""}${options?.enrich ? `:${options.enrich}` : ""}`,
+    () =>
+      request<{ path: string; entries: VaultDirectoryEntry[] }>(
+        `/vault/entries?${query.toString()}`,
+      ),
+    { ttlMs: VAULT_LIST_CACHE_TTL_MS, force: options?.force },
   );
 }
 
-export async function fetchVaultDocument(path: string) {
+export async function fetchVaultDocument(path: string, options?: { force?: boolean }) {
   const query = new URLSearchParams({ path });
-  return request<{ document: VaultDocumentContent; error?: string }>(
-    `/vault/documents?${query.toString()}`,
+  return cachedRequest(
+    cacheKeyVaultDocument(path),
+    () =>
+      request<{ document: VaultDocumentContent; error?: string }>(
+        `/vault/documents?${query.toString()}`,
+      ),
+    { ttlMs: VAULT_LIST_CACHE_TTL_MS, force: options?.force },
   );
 }
 
@@ -562,17 +597,28 @@ export async function updateVaultDocument(
   path: string,
   updates: { title?: string; body?: string },
 ) {
-  return request<{ document: VaultDocumentContent; error?: string }>("/vault/documents", {
-    method: "PATCH",
-    body: JSON.stringify({ path, ...updates }),
-  });
+  const result = await request<{ document: VaultDocumentContent; error?: string }>(
+    "/vault/documents",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ path, ...updates }),
+    },
+  );
+  invalidateVaultContentCaches();
+  invalidateRequestCache(cacheKeyVaultDocument(path));
+  return result;
 }
 
 export async function createVaultDocument(folder: string, title?: string) {
-  return request<{ document: VaultDocumentContent; error?: string }>("/vault/documents", {
-    method: "POST",
-    body: JSON.stringify({ folder, ...(title ? { title } : {}) }),
-  });
+  const result = await request<{ document: VaultDocumentContent; error?: string }>(
+    "/vault/documents",
+    {
+      method: "POST",
+      body: JSON.stringify({ folder, ...(title ? { title } : {}) }),
+    },
+  );
+  invalidateVaultContentCaches();
+  return result;
 }
 
 export type WorkoutSetWire = {
@@ -728,8 +774,12 @@ export type LinearTeamSummary = {
   name: string;
 };
 
-export async function fetchLinearTeams() {
-  return request<{ teams: LinearTeamSummary[]; error?: string }>("/linear/teams");
+export async function fetchLinearTeams(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.linearTeams,
+    () => request<{ teams: LinearTeamSummary[]; error?: string }>("/linear/teams"),
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
 }
 
 export async function fetchLinearProjectsPage(options: {
@@ -749,6 +799,44 @@ export async function fetchLinearProjectsPage(options: {
   }>(`/linear/projects${query ? `?${query}` : ""}`);
 }
 
+function mergeLinearProjectPages(
+  current: LinearProjectSummary[],
+  incoming: LinearProjectSummary[],
+): LinearProjectSummary[] {
+  const seen = new Set(current.map((project) => project.id));
+  const next = [...current];
+  for (const project of incoming) {
+    if (seen.has(project.id)) continue;
+    seen.add(project.id);
+    next.push(project);
+  }
+  return next;
+}
+
+/** Paginates through all Linear projects with client cache + inflight dedup. */
+export async function fetchAllLinearProjects(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.linearProjectsAll,
+    async () => {
+      let after: string | null = null;
+      let loaded: LinearProjectSummary[] = [];
+
+      for (;;) {
+        const page = await fetchLinearProjectsPage({
+          after: after ?? undefined,
+          first: 50,
+        });
+        loaded = mergeLinearProjectPages(loaded, page.projects);
+        if (!page.pageInfo.hasNextPage || !page.pageInfo.endCursor) break;
+        after = page.pageInfo.endCursor;
+      }
+
+      return { projects: loaded };
+    },
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
+}
+
 export async function searchLinearIssues(term: string, options: { limit?: number } = {}) {
   const params = new URLSearchParams();
   params.set("q", term.trim());
@@ -765,8 +853,12 @@ export type VaultSearchIndexEntry = {
   folder: string;
 };
 
-export async function fetchVaultSearchIndex() {
-  return request<{ entries: VaultSearchIndexEntry[]; error?: string }>("/vault/search-index");
+export async function fetchVaultSearchIndex(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.vaultSearchIndex,
+    () => request<{ entries: VaultSearchIndexEntry[]; error?: string }>("/vault/search-index"),
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
 }
 
 export async function fetchLinearProjectById(projectId: string) {
@@ -791,29 +883,39 @@ export type LinearProjectOverview = {
   initiativeNames: string[];
 };
 
-export async function fetchLinearProjectOverview(projectId: string) {
-  return request<{ overview: LinearProjectOverview | null; error?: string }>(
-    `/linear/projects/${encodeURIComponent(projectId)}/overview`,
+export async function fetchLinearProjectOverview(projectId: string, options?: { force?: boolean }) {
+  return cachedRequest(
+    cacheKeyLinearOverview(projectId),
+    () =>
+      request<{ overview: LinearProjectOverview | null; error?: string }>(
+        `/linear/projects/${encodeURIComponent(projectId)}/overview`,
+      ),
+    { ttlMs: LINEAR_PROJECT_CACHE_TTL_MS, force: options?.force },
   );
 }
 
 export async function updateLinearProjectOverviewDescription(projectId: string, content: string) {
-  return request<{ overview: LinearProjectOverview | null; error?: string }>(
+  const result = await request<{ overview: LinearProjectOverview | null; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/overview/description`,
     {
       method: "PATCH",
       body: JSON.stringify({ content }),
     },
   );
+  invalidateRequestCache(cacheKeyLinearOverview(projectId));
+  return result;
 }
 
-export async function fetchLinearProjectIssues(projectId: string) {
-  return request<{
-    issues: LinearIssueEntity[];
-    workflowStates: { id: string; name: string; type: string; color?: string }[];
-    error?: string;
-  }>(
-    `/linear/projects/${encodeURIComponent(projectId)}/issues`,
+export async function fetchLinearProjectIssues(projectId: string, options?: { force?: boolean }) {
+  return cachedRequest(
+    cacheKeyLinearIssues(projectId),
+    () =>
+      request<{
+        issues: LinearIssueEntity[];
+        workflowStates: { id: string; name: string; type: string; color?: string }[];
+        error?: string;
+      }>(`/linear/projects/${encodeURIComponent(projectId)}/issues`),
+    { ttlMs: LINEAR_ISSUES_CACHE_TTL_MS, force: options?.force },
   );
 }
 
@@ -1031,7 +1133,7 @@ export async function updateSettings(updates: {
   issueLinkMode?: LinearIssueLinkMode;
   groceryLinearProjectId?: string | null;
 }) {
-  return request<{
+  const result = await request<{
     notesPath: string | null;
     vaultName: string | null;
     projectsPath: string | null;
@@ -1048,6 +1150,8 @@ export async function updateSettings(updates: {
     method: "PUT",
     body: JSON.stringify(updates),
   });
+  invalidateRequestCache(REQUEST_CACHE_KEYS.settings);
+  return result;
 }
 
 export interface SessionSummaryResponse {

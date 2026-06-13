@@ -4,7 +4,7 @@ import {
   updateLinearProjectWatcherConfig,
   type LinearProjectWatcherConfig,
 } from "../../lib/api";
-import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
+import { useLinearProjectWorkflowStates } from "../../hooks/useLinearProjectWorkflowStates";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import {
   getLinearWatcherActivityLogEntries,
@@ -536,7 +536,7 @@ export function LinearIssueWatchersConfigPanel({
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [logVersion, setLogVersion] = useState(0);
   const [visibleRows, setVisibleRows] = useState(WATCHER_LOG_INITIAL_ROWS);
-  const { workflowStates } = useLinearProjectIssues(projectId, true);
+  const { workflowStates } = useLinearProjectWorkflowStates(projectId, true);
 
   useEffect(() => {
     return subscribeToLinearWatcherActivityLog((entry) => {

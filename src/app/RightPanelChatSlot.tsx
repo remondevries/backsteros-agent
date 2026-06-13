@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { ChatView } from "../chat/ChatView";
 import type { ChatMessage, RunViewModel } from "../chat/types";
-import type { AppView } from "./appViews";
 import type { IntegrationsStatus } from "../lib/api";
 import {
   buildChatFocusContext,
@@ -9,7 +8,7 @@ import {
   composerPlaceholderForFocus,
   isChatFocusContextLoading,
 } from "../lib/chatFocusContext";
-import { useContentPanelNavigation } from "./contentPanelNavigation";
+import { useContentPanelNavigation, useFocusContent } from "./contentPanelNavigation";
 import { LinearIssueAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
 import { RightPanelChatHeader } from "./RightPanelChatHeader";
 import {
@@ -27,12 +26,10 @@ type RightPanelSession = {
 export function RightPanelChatSlot({
   integrationsStatus,
   session,
-  onNavigateToView,
   onSaveState,
 }: {
   integrationsStatus: IntegrationsStatus | null;
   session: RightPanelSession;
-  onNavigateToView: (view: AppView) => void;
   onSaveState: (
     sessionId: string,
     messages: ChatMessage[],
@@ -43,10 +40,10 @@ export function RightPanelChatSlot({
     activeLinearIssue,
     activeLinearDocument,
     activeVaultDocument,
-    focusContentSnapshot,
     linearSelection,
     linearWorkspaceView,
   } = useContentPanelNavigation();
+  const { focusContentSnapshot } = useFocusContent();
 
   const focusContext = useMemo(
     () =>
@@ -101,10 +98,7 @@ export function RightPanelChatSlot({
 
   if (isLinearIssueThreadMode) {
     return (
-      <LinearIssueAgentPanel
-        issueId={focusContext.issueId}
-        onNavigateToView={onNavigateToView}
-      />
+      <LinearIssueAgentPanel issueId={focusContext.issueId} />
     );
   }
 
@@ -138,7 +132,6 @@ export function RightPanelChatSlot({
             )}
             panelComposerVariant={panelChatComposerVariant(resolvedAgent.active)}
             onStateChange={(messages, runs) => onSaveState(session.sessionId, messages, runs)}
-            onNavigateToView={onNavigateToView}
           />
         </div>
       </div>

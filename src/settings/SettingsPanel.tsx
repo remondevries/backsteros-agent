@@ -5,7 +5,7 @@ import {
   type ComposerMode,
 } from "../chat/composerMode";
 import type { LinearIssueLinkMode } from "../chat/types";
-import { getProfileContent, getSettings, updateProfileContent, updateSettings, type ProfileKind } from "../lib/api";
+import { getProfileContent, getSettings, peekCachedSettings, updateProfileContent, updateSettings, type ProfileKind } from "../lib/api";
 import { setLinearIssueLinkMode } from "../lib/linear/linearLink";
 import { resolveProfilePaths } from "../lib/profilePaths";
 import { CursorIntegrationSection } from "./CursorIntegrationSection";
@@ -145,7 +145,7 @@ export function SettingsPanel({
 
   useEffect(() => {
     void (async () => {
-      const settings = await getSettings().catch(() => null);
+      const settings = peekCachedSettings() ?? (await getSettings().catch(() => null));
       if (settings) {
         setComposerMode(
           composerModeFromSettings(settings.executionMode, settings.modelMode),

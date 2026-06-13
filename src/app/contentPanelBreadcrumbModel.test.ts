@@ -8,7 +8,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: true,
         activeSettingsTab: "linear",
         activeVaultNavItem: "inbox",
-        activeView: "chat",
         sidebarSegments: [],
       }),
     ).toEqual([
@@ -17,21 +16,17 @@ describe("contentPanelBreadcrumbModel", () => {
     ]);
   });
 
-  test("combines vault nav, sidebar path, and active session", () => {
+  test("combines vault nav and sidebar path", () => {
     const segments = buildContentPanelBreadcrumbSegments({
       settingsOpen: false,
       activeSettingsTab: "general",
       activeVaultNavItem: "inbox",
-      activeView: "chat",
-      activeSessionTitle: "Morning review",
       sidebarSegments: [{ id: "vault-Inbox/Reports", label: "Reports" }],
     });
 
     expect(segments).toEqual([
       { id: "nav-inbox", label: "Inbox", navItemId: "inbox" },
       { id: "vault-Inbox/Reports", label: "Reports" },
-      { id: "view-chat", label: "Backster" },
-      { id: "session-chat-Morning review", label: "Morning review" },
     ]);
   });
 
@@ -41,7 +36,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "projects",
-        activeView: "chat",
         sidebarSegments: [{ id: "linear-view-teams", label: "Teams" }],
       }),
     ).toEqual([
@@ -57,7 +51,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "projects",
-        activeView: "chat",
         sidebarSegments: [],
         onActivateNavItem,
       }),
@@ -77,7 +70,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "projects",
-        activeView: "chat",
         sidebarSegments: [{ id: "linear-view-teams", label: "Teams" }],
         linearSelection: { kind: "team", id: "team-1", name: "Engineering" },
       }),
@@ -95,7 +87,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "projects",
-        activeView: "chat",
         sidebarSegments: [{ id: "linear-view-projects", label: "Projects" }],
         linearSelection: { kind: "project", id: "proj-1", name: "Backster OS" },
         linearWorkspaceView: "documents",
@@ -117,7 +108,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "projects",
-        activeView: "chat",
         sidebarSegments: [{ id: "linear-view-projects", label: "Projects" }],
         linearSelection: { kind: "project", id: "proj-1", name: "Backster OS" },
         linearWorkspaceView: "issues",
@@ -136,7 +126,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "projects",
-        activeView: "chat",
         sidebarSegments: [{ id: "linear-view-projects", label: "Projects" }],
         linearSelection: { kind: "project", id: "proj-1", name: "Backster OS" },
         linearWorkspaceView: "overview",
@@ -154,8 +143,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "inbox",
-        activeView: "chat",
-        activeSessionTitle: "Morning review",
         sidebarSegments: [{ id: "vault-Inbox/Reports", label: "Reports" }],
         linearSelection: { kind: "team", id: "team-1", name: "Engineering" },
       }),
@@ -172,7 +159,6 @@ describe("contentPanelBreadcrumbModel", () => {
         settingsOpen: false,
         activeSettingsTab: "general",
         activeVaultNavItem: "daily",
-        activeView: "chat",
         sidebarSegments: [],
         activeLinearIssue: {
           id: "issue-1",
@@ -184,7 +170,6 @@ describe("contentPanelBreadcrumbModel", () => {
       }),
     ).toEqual([
       { id: "nav-daily", label: "Daily", navItemId: "daily" },
-      { id: "view-chat", label: "Backster" },
       { id: "vault-doc-Daily/2026-06-13.md", label: "2026-06-13" },
       { id: "linear-issue-issue-1", label: "BOS-70 Define Linear rules for agent issue operations" },
     ]);

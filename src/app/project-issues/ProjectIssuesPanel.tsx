@@ -5,6 +5,8 @@ import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearIssueStatusDragDrop } from "../../hooks/useLinearIssueStatusDragDrop";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
 import { groupVariantFromStatusKey } from "../../lib/groupVariantFromStatusKey";
+import { buildStatusGroupedNavItems } from "../../lib/buildStatusGroupedNavItems";
+import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
 import {
   buildWorkflowStateByCanonical,
   toStatusMoveTargetGroup,
@@ -23,7 +25,7 @@ export function ProjectIssuesPanel({
   projectId: string;
   enabled: boolean;
 }) {
-  const { setActiveLinearIssue } = useContentPanelNavigation();
+  const { setActiveLinearIssue, activeLinearIssue } = useContentPanelNavigation();
   const { issues, workflowStates, loading, refreshing, error, refresh } = useLinearProjectIssues(
     projectId,
     enabled,
@@ -99,6 +101,23 @@ export function ProjectIssuesPanel({
       }),
     }));
   }, [effectiveIssues, workflowStateByCanonical]);
+
+  const listNavItems = useMemo(
+    () =>
+      buildStatusGroupedNavItems({
+        groups,
+        collapsedGroups,
+        onSelect: (issue) => openLinearIssue(issue),
+      }),
+    [collapsedGroups, groups, openLinearIssue],
+  );
+
+  useContentListNavigationRegistration({
+    region: "main",
+    enabled: enabled && listNavItems.length > 0,
+    items: listNavItems,
+    selectedId: activeLinearIssue?.id ?? null,
+  });
 
   if (loading && issues.length === 0) {
     return (

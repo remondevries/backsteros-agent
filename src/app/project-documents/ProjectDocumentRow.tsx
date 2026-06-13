@@ -1,4 +1,9 @@
 import type { ProjectDocumentEntity } from "../../lib/documentStatusGroups";
+import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
+import {
+  isContentListKeyboardFocused,
+  useContentListKeyboardFocusedId,
+} from "../../lib/contentListNavigationReact";
 import { formatIssueDueMetaLabel } from "../../lib/linearIssueDisplay";
 import { DocumentNoteIcon } from "./DocumentNoteIcon";
 
@@ -31,16 +36,27 @@ export function ProjectDocumentRow({
   const dateLabel = formatIssueDueMetaLabel(document.date);
   const showCategory =
     Boolean(document.category) && document.category.trim().toLowerCase() !== "document";
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardFocused = isContentListKeyboardFocused(
+    keyboardFocusedId,
+    document.linearDocumentId,
+  );
   const rowClass = [
     "project-document-row",
     grouped ? "project-document-row--grouped" : null,
+    keyboardFocused ? "project-document-row--keyboard-focused" : null,
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <li className="workspace-status-list__item">
-      <button type="button" className={rowClass} onClick={onClick}>
+      <button
+        type="button"
+        {...contentListItemDataAttributes(document.linearDocumentId)}
+        className={rowClass}
+        onClick={onClick}
+      >
         <span className="project-document-row__leading">
           <DocumentNoteIcon className="project-document-row__icon" />
         </span>

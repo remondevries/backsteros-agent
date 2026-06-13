@@ -4,14 +4,16 @@ import { ContentPanelBreadcrumbBar } from "./ContentPanelBreadcrumbBar";
 import { ContentPanelTabsBar } from "./ContentPanelTabsBar";
 import { ContentPanelSidebar } from "./ContentPanelSidebar";
 import { ResizablePanel } from "./ResizablePanel";
-import type { AppView } from "./appViews";
 import { linearWorkspaceViewLabel } from "./linearProjectViews";
 import { buildContentPanelBreadcrumbSegments } from "./contentPanelBreadcrumbModel";
 import {
   type ContentPanelTabSnapshot,
+  getFocusContentController,
   useContentPanelNavigation,
+  useFocusContent,
 } from "./contentPanelNavigation";
 import { ContentPanelMainSlot } from "./ContentPanelMainSlot";
+import { ContentListNavigationProvider, ContentListNavigationLayoutSync } from "../lib/contentListNavigationReact";
 import { LinearStatusIcon } from "../chat/LinearStatusIcon";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
@@ -132,12 +134,12 @@ function ContentPanelFrame({
     activeVaultDocument,
     activeLinearDocument,
     activeLinearIssue,
-    focusContentSnapshot,
     linearWorkspaceView,
     issuesPanelMode,
     watchersPanelMode,
     restoreContentPanelTabSnapshot,
   } = useContentPanelNavigation();
+  const { flushFocusContentSnapshot } = useFocusContent();
 
   const sidebarFolderKey = sidebarSegments.map((segment) => segment.id).join("/");
 
@@ -183,13 +185,15 @@ function ContentPanelFrame({
   }, []);
 
   const captureSnapshot = useCallback((): ContentPanelTabSnapshot => {
+    flushFocusContentSnapshot();
+    const snapshot = getFocusContentController()?.getSnapshot() ?? null;
     return {
       sidebarSegments: sidebarSegments.map((segment) => ({ ...segment })),
       linearSelection: linearSelection ? { ...linearSelection } : null,
       activeVaultDocument: activeVaultDocument ? { ...activeVaultDocument } : null,
       activeLinearDocument: activeLinearDocument ? { ...activeLinearDocument } : null,
       activeLinearIssue: activeLinearIssue ? { ...activeLinearIssue } : null,
-      focusContentSnapshot: focusContentSnapshot ? { ...focusContentSnapshot } : null,
+      focusContentSnapshot: snapshot ? { ...snapshot } : null,
       linearWorkspaceView,
       issuesPanelMode,
       watchersPanelMode,
@@ -198,7 +202,7 @@ function ContentPanelFrame({
     activeLinearDocument,
     activeLinearIssue,
     activeVaultDocument,
-    focusContentSnapshot,
+    flushFocusContentSnapshot,
     issuesPanelMode,
     linearSelection,
     linearWorkspaceView,
@@ -477,8 +481,6 @@ function ContentPanelWithBreadcrumbs({
   onOpenNavigation,
   settingsOpen,
   activeSettingsTab,
-  activeView,
-  activeSessionTitle,
   children,
 }: {
   sidebarOpen: boolean;
@@ -490,8 +492,6 @@ function ContentPanelWithBreadcrumbs({
   onOpenNavigation?: () => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
-  activeView: AppView;
-  activeSessionTitle?: string | null;
   children: ReactNode;
 }) {
   const {
@@ -522,8 +522,6 @@ function ContentPanelWithBreadcrumbs({
         settingsOpen,
         activeSettingsTab,
         activeVaultNavItem,
-        activeView,
-        activeSessionTitle,
         sidebarSegments,
         linearSelection,
         activeVaultDocument,
@@ -538,11 +536,9 @@ function ContentPanelWithBreadcrumbs({
     [
       activeLinearIssue,
       activeLinearDocument,
-      activeSessionTitle,
       activeSettingsTab,
       activeVaultDocument,
       activeVaultNavItem,
-      activeView,
       clearActiveLinearDocument,
       clearActiveLinearIssue,
       clearActiveVaultDocument,
@@ -580,8 +576,6 @@ export function ContentPanel({
   onOpenNavigation,
   settingsOpen,
   activeSettingsTab,
-  activeView,
-  activeSessionTitle,
   children,
 }: {
   sidebarOpen: boolean;
@@ -593,31 +587,34 @@ export function ContentPanel({
   onOpenNavigation?: () => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
-  activeView: AppView;
-  activeSessionTitle?: string | null;
   children: ReactNode;
 }) {
   return (
-    <ContentPanelWithBreadcrumbs
-      sidebarOpen={sidebarOpen}
-      hideSidebar={hideSidebar}
-      activeVaultNavItem={activeVaultNavItem}
-      onVaultNavItemChange={onVaultNavItemChange}
-      vaultExplorerEnabled={vaultExplorerEnabled}
-      navigationCollapsed={navigationCollapsed}
-      onOpenNavigation={onOpenNavigation}
-      settingsOpen={settingsOpen}
-      activeSettingsTab={activeSettingsTab}
-      activeView={activeView}
-      activeSessionTitle={activeSessionTitle}
-    >
-      <ContentPanelMainSlot
-        settingsOpen={settingsOpen}
-        vaultStructureEnabled={vaultExplorerEnabled}
+    <ContentListNavigationProvider>
+      <ContentListNavigationLayoutSync
         activeVaultNavItem={activeVaultNavItem}
+        hideSidebar={hideSidebar}
+        settingsOpen={settingsOpen}
+      />
+      <ContentPanelWithBreadcrumbs
+        sidebarOpen={sidebarOpen}
+        hideSidebar={hideSidebar}
+        activeVaultNavItem={activeVaultNavItem}
+        onVaultNavItemChange={onVaultNavItemChange}
+        vaultExplorerEnabled={vaultExplorerEnabled}
+        navigationCollapsed={navigationCollapsed}
+        onOpenNavigation={onOpenNavigation}
+        settingsOpen={settingsOpen}
+        activeSettingsTab={activeSettingsTab}
       >
-        {children}
-      </ContentPanelMainSlot>
-    </ContentPanelWithBreadcrumbs>
+        <ContentPanelMainSlot
+          settingsOpen={settingsOpen}
+          vaultStructureEnabled={vaultExplorerEnabled}
+          activeVaultNavItem={activeVaultNavItem}
+        >
+          {children}
+        </ContentPanelMainSlot>
+      </ContentPanelWithBreadcrumbs>
+    </ContentListNavigationProvider>
   );
 }

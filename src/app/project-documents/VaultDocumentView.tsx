@@ -7,8 +7,9 @@ import { useVaultDocument } from "../../hooks/useVaultDocument";
 import { useVaultDocumentWhoopSnapshot } from "../../hooks/useVaultDocumentWhoopSnapshot";
 import { fetchLinearIssuesByDueDates } from "../../lib/api";
 import { isDailyVaultNotePath } from "../../lib/vaultNotePaths";
+import { dailyDateFromPath } from "../../lib/vaultDates";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
-import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
 import { ProjectIssueRow } from "../project-issues/ProjectIssueRow";
 import { requestLinearIssueViewMode } from "../project-issues/issueViewModeIntent";
 import { LinearIcon } from "../../chat/LinearIcon";
@@ -16,13 +17,6 @@ import { DocumentNoteIcon } from "./DocumentNoteIcon";
 import { VaultDocumentWhoopHeader } from "./VaultDocumentWhoopHeader";
 
 const SAVE_DEBOUNCE_MS = 800;
-const DAILY_NOTE_PATH_PATTERN = /^Daily\/(\d{4}-\d{2}-\d{2})\.md$/i;
-
-function dailyDateFromPath(path: string): string | null {
-  const normalized = path.replace(/\\/g, "/");
-  const match = DAILY_NOTE_PATH_PATTERN.exec(normalized);
-  return match?.[1] ?? null;
-}
 
 export function VaultDocumentView({ path }: { path: string }) {
   const isDailyNote = isDailyVaultNotePath(path);
@@ -30,7 +24,6 @@ export function VaultDocumentView({ path }: { path: string }) {
   const {
     activeVaultDocument,
     updateActiveVaultDocument,
-    setFocusContentSnapshot,
     setActiveLinearIssue,
   } = useContentPanelNavigation();
   const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
@@ -98,14 +91,16 @@ export function VaultDocumentView({ path }: { path: string }) {
     updateActiveVaultDocument({ focusTitle: false });
   }, [document, focusTitleRequested, path, updateActiveVaultDocument]);
 
-  useEffect(() => {
-    if (!document || document.path !== path) return;
-    setFocusContentSnapshot({
-      kind: "vault_document",
+  const focusSnapshot = useMemo(() => {
+    if (!document || document.path !== path) return null;
+    return {
+      kind: "vault_document" as const,
       title: titleDraft,
       body: bodyDraft,
-    });
-  }, [bodyDraft, document, path, setFocusContentSnapshot, titleDraft]);
+    };
+  }, [bodyDraft, document, path, titleDraft]);
+
+  useDebouncedFocusContentSnapshot(focusSnapshot, Boolean(document && document.path === path));
 
   useEffect(() => {
     if (!isDailyNote || !dueDate) {

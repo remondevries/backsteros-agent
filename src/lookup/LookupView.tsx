@@ -21,6 +21,7 @@ import {
 import { validateLookupAttachment } from "./lookupAttachments";
 import { MessageActions } from "../chat/MessageActions";
 import { RunBlock } from "../chat/RunBlock";
+import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import type {
   AgentEvent,
   AttachmentPreviewTarget,
@@ -53,7 +54,7 @@ function isShortcutBlockedTarget(target: EventTarget | null): boolean {
     target instanceof HTMLElement &&
     Boolean(
       target.closest(
-        ".session-tab-rename-input, .attachment-modal-backdrop, .command-panel-root",
+        ".session-tab-rename-input, .attachment-modal-backdrop",
       ),
     )
   );
@@ -619,6 +620,69 @@ export const LookupView = forwardRef<
 
   handleSendRef.current = handleSend;
 
+  const virtualizeLookupTranscript = useVirtualListEnabled(messages.length);
+
+  const renderLookupMessage = useCallback(
+    (message: (typeof messages)[number]) => {
+      const run = message.runId ? runs[message.runId] : undefined;
+
+      return (
+        <div key={message.id} className="chat-turn">
+          <div className={`chat-message ${message.role}`}>
+            {message.role === "user" ? (
+              <>
+                {message.text ? (
+                  <>
+                    <div className="bubble">{message.text}</div>
+                    <MessageActions text={message.text} />
+                  </>
+                ) : null}
+              </>
+            ) : null}
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="message-attachments">
+                {message.attachments.map((attachment) => (
+                  <AttachmentChip
+                    key={`${message.id}-${attachment.name}-${attachment.vaultPath ?? "local"}`}
+                    attachment={attachment}
+                    onOpen={() => setPreviewTarget(toAttachmentPreviewTarget(attachment))}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {run ? (
+            <RunBlock
+              run={run}
+              sourceBrand="gemini"
+              animate={run.status === "running"}
+              onToggle={() =>
+                setRuns((current) => ({
+                  ...current,
+                  [run.runId]: {
+                    ...current[run.runId],
+                    expanded: !current[run.runId]?.expanded,
+                  },
+                }))
+              }
+              onApprove={() => undefined}
+              onReject={() => undefined}
+              canSpeak={
+                ttsSupported &&
+                run.status !== "running" &&
+                run.text.trim().length > 0 &&
+                !voiceModeEnabled
+              }
+              voiceModeEnabled={voiceModeEnabled}
+            />
+          ) : null}
+        </div>
+      );
+    },
+    [runs, ttsSupported, voiceModeEnabled],
+  );
+
   return (
     <div className="chat-view lookup-view">
       <AttachmentPreviewModal
@@ -655,65 +719,18 @@ export const LookupView = forwardRef<
                 </div>
               )}
 
-              {messages.map((message) => {
-                const run = message.runId ? runs[message.runId] : undefined;
-
-                return (
-                  <div key={message.id} className="chat-turn">
-                    <div className={`chat-message ${message.role}`}>
-                      {message.role === "user" ? (
-                        <>
-                          {message.text ? (
-                            <>
-                              <div className="bubble">{message.text}</div>
-                              <MessageActions text={message.text} />
-                            </>
-                          ) : null}
-                        </>
-                      ) : null}
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="message-attachments">
-                          {message.attachments.map((attachment) => (
-                            <AttachmentChip
-                              key={`${message.id}-${attachment.name}-${attachment.vaultPath ?? "local"}`}
-                              attachment={attachment}
-                              onOpen={() =>
-                                setPreviewTarget(toAttachmentPreviewTarget(attachment))
-                              }
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {run && (
-                      <RunBlock
-                        run={run}
-                        sourceBrand="gemini"
-                        animate={run.status === "running"}
-                        onToggle={() =>
-                          setRuns((current) => ({
-                            ...current,
-                            [run.runId]: {
-                              ...current[run.runId],
-                              expanded: !current[run.runId]?.expanded,
-                            },
-                          }))
-                        }
-                        onApprove={() => undefined}
-                        onReject={() => undefined}
-                        canSpeak={
-                          ttsSupported &&
-                          run.status !== "running" &&
-                          run.text.trim().length > 0 &&
-                          !voiceModeEnabled
-                        }
-                        voiceModeEnabled={voiceModeEnabled}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+              {virtualizeLookupTranscript ? (
+                <VirtualList
+                  items={messages}
+                  scrollElementRef={transcriptRef}
+                  estimateSize={100}
+                  overscan={6}
+                  getItemKey={(message) => message.id}
+                  renderItem={(message) => renderLookupMessage(message)}
+                />
+              ) : (
+                messages.map((message) => renderLookupMessage(message))
+              )}
 
               {voiceTurnPhase && <VoiceTurnBubble phase={voiceTurnPhase} />}
 

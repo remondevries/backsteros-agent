@@ -11,6 +11,12 @@ import {
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { isLinearWorkspaceViewIdForKind, type LinearWorkspaceViewId } from "./linearProjectViews";
+import { ContentPanelChromeProvider, useContentPanelChrome } from "./contentPanelChromeContext";
+import {
+  FocusContentProvider,
+  getFocusContentController,
+  type FocusContentSnapshot,
+} from "./focusContentContext";
 
 export type LinearProjectCollectionMode = "list" | "board";
 type PersistedContentPanelState = {
@@ -155,7 +161,6 @@ export type ContentPanelBreadcrumbSegment = {
 export type ActiveVaultDocument = {
   path: string;
   title: string;
-  /** When true, the document view focuses the title input on open (e.g. a freshly created note). */
   focusTitle?: boolean;
 };
 
@@ -175,26 +180,7 @@ export type ActiveLinearDocument = {
   projectId?: string;
 };
 
-export type FocusContentSnapshot =
-  | {
-      kind: "linear_issue";
-      description: string | null;
-    }
-  | {
-      kind: "linear_document";
-      title: string;
-      content: string;
-    }
-  | {
-      kind: "vault_document";
-      title: string;
-      body: string;
-    }
-  | {
-      kind: "linear_workspace";
-      summary: string | null;
-      description: string | null;
-    };
+export type { FocusContentSnapshot } from "./focusContentContext";
 
 export type ContentPanelBarState = {
   message: string | null;
@@ -249,36 +235,25 @@ type ContentPanelNavigationContextValue = {
   setActiveLinearIssue: (issue: ActiveLinearIssue | null) => void;
   updateActiveLinearIssue: (patch: Partial<ActiveLinearIssue>) => void;
   clearActiveLinearIssue: () => void;
-  focusContentSnapshot: FocusContentSnapshot | null;
-  setFocusContentSnapshot: (
-    snapshot:
-      | FocusContentSnapshot
-      | null
-      | ((current: FocusContentSnapshot | null) => FocusContentSnapshot | null),
-  ) => void;
   linearWorkspaceView: LinearWorkspaceViewId | null;
   setLinearWorkspaceView: (view: LinearWorkspaceViewId | null) => void;
   issuesPanelMode: LinearProjectCollectionMode;
   setIssuesPanelMode: (mode: LinearProjectCollectionMode) => void;
   watchersPanelMode: LinearProjectCollectionMode;
   setWatchersPanelMode: (mode: LinearProjectCollectionMode) => void;
-  contentPanelBarState: ContentPanelBarState | null;
-  setContentPanelBarState: (state: ContentPanelBarState | null) => void;
-  issuesWatcherAction: IssuesWatcherBreadcrumbAction | null;
-  setIssuesWatcherAction: (action: IssuesWatcherBreadcrumbAction | null) => void;
-  issueViewModeAction: IssueViewModeBreadcrumbAction | null;
-  setIssueViewModeAction: (action: IssueViewModeBreadcrumbAction | null) => void;
   restoreContentPanelTabSnapshot: (snapshot: ContentPanelTabSnapshot) => void;
   linearIssueRefreshNonce: number;
   requestLinearIssueRefresh: () => void;
   resetProjectsOverview: () => void;
+  focusResetNonce: number;
 };
 
 const ContentPanelNavigationContext = createContext<ContentPanelNavigationContextValue | null>(
   null,
 );
 
-export function ContentPanelNavigationProvider({ children }: { children: ReactNode }) {
+function ContentPanelNavigationProviderInner({ children }: { children: ReactNode }) {
+  const { clearChrome } = useContentPanelChrome();
   const persistedStateRef = useRef<PersistedContentPanelState | null>(null);
   if (persistedStateRef.current === null) {
     persistedStateRef.current = readPersistedContentPanelState();
@@ -299,9 +274,6 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   const [activeLinearDocument, setActiveLinearDocumentState] = useState<ActiveLinearDocument | null>(
     () => persistedState.activeLinearDocument ?? null,
   );
-  const [focusContentSnapshot, setFocusContentSnapshotState] = useState<FocusContentSnapshot | null>(
-    null,
-  );
   const [linearWorkspaceView, setLinearWorkspaceViewState] = useState<LinearWorkspaceViewId | null>(
     () => persistedState.linearWorkspaceView ?? null,
   );
@@ -311,14 +283,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   const [watchersPanelMode, setWatchersPanelModeState] = useState<LinearProjectCollectionMode>(
     () => persistedState.watchersPanelMode ?? "board",
   );
-  const [contentPanelBarState, setContentPanelBarStateState] = useState<ContentPanelBarState | null>(
-    null,
-  );
-  const [issuesWatcherAction, setIssuesWatcherActionState] =
-    useState<IssuesWatcherBreadcrumbAction | null>(null);
-  const [issueViewModeAction, setIssueViewModeActionState] =
-    useState<IssueViewModeBreadcrumbAction | null>(null);
   const [linearIssueRefreshNonce, setLinearIssueRefreshNonce] = useState(0);
+  const [focusResetNonce, setFocusResetNonce] = useState(0);
   const skipSelectionResetRef = useRef(false);
 
   const linearSelectionKey = linearSelection
@@ -338,14 +304,12 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setActiveVaultDocumentState(null);
     setActiveLinearDocumentState(null);
     setActiveLinearIssueState(null);
-    setFocusContentSnapshotState(null);
     setLinearWorkspaceViewState(null);
     setIssuesPanelModeState("list");
     setWatchersPanelModeState("board");
-    setContentPanelBarStateState(null);
-    setIssuesWatcherActionState(null);
-    setIssueViewModeActionState(null);
-  }, [linearSelectionKey]);
+    clearChrome();
+    setFocusResetNonce((current) => current + 1);
+  }, [clearChrome, linearSelectionKey]);
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
     setSidebarSegmentsState((current) =>
@@ -371,9 +335,7 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   const clearActiveVaultDocument = useCallback(() => {
     setActiveVaultDocumentState(null);
-    setFocusContentSnapshotState((current) =>
-      current?.kind === "vault_document" ? null : current,
-    );
+    getFocusContentController()?.clearKind("vault_document");
   }, []);
 
   const setActiveLinearDocument = useCallback((document: ActiveLinearDocument | null) => {
@@ -390,9 +352,7 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   const clearActiveLinearDocument = useCallback(() => {
     setActiveLinearDocumentState(null);
-    setFocusContentSnapshotState((current) =>
-      current?.kind === "linear_document" ? null : current,
-    );
+    getFocusContentController()?.clearKind("linear_document");
   }, []);
 
   const setActiveLinearIssue = useCallback((issue: ActiveLinearIssue | null) => {
@@ -409,20 +369,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   const clearActiveLinearIssue = useCallback(() => {
     setActiveLinearIssueState(null);
-    setFocusContentSnapshotState((current) => (current?.kind === "linear_issue" ? null : current));
+    getFocusContentController()?.clearKind("linear_issue");
   }, []);
-
-  const setFocusContentSnapshot = useCallback(
-    (
-      snapshot:
-        | FocusContentSnapshot
-        | null
-        | ((current: FocusContentSnapshot | null) => FocusContentSnapshot | null),
-    ) => {
-      setFocusContentSnapshotState(snapshot);
-    },
-    [],
-  );
 
   const setLinearWorkspaceView = useCallback((view: LinearWorkspaceViewId | null) => {
     setLinearWorkspaceViewState(view);
@@ -434,18 +382,6 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
 
   const setWatchersPanelMode = useCallback((mode: LinearProjectCollectionMode) => {
     setWatchersPanelModeState(mode);
-  }, []);
-
-  const setContentPanelBarState = useCallback((state: ContentPanelBarState | null) => {
-    setContentPanelBarStateState(state);
-  }, []);
-
-  const setIssuesWatcherAction = useCallback((action: IssuesWatcherBreadcrumbAction | null) => {
-    setIssuesWatcherActionState(action);
-  }, []);
-
-  const setIssueViewModeAction = useCallback((action: IssueViewModeBreadcrumbAction | null) => {
-    setIssueViewModeActionState(action);
   }, []);
 
   const restoreContentPanelTabSnapshot = useCallback((snapshot: ContentPanelTabSnapshot) => {
@@ -461,14 +397,12 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setActiveVaultDocumentState(snapshot.activeVaultDocument);
     setActiveLinearDocumentState(snapshot.activeLinearDocument);
     setActiveLinearIssueState(snapshot.activeLinearIssue);
-    setFocusContentSnapshotState(snapshot.focusContentSnapshot);
     setLinearWorkspaceViewState(snapshot.linearWorkspaceView);
     setIssuesPanelModeState(snapshot.issuesPanelMode);
     setWatchersPanelModeState(snapshot.watchersPanelMode);
-    setContentPanelBarStateState(null);
-    setIssuesWatcherActionState(null);
-    setIssueViewModeActionState(null);
-  }, [linearSelection]);
+    clearChrome();
+    getFocusContentController()?.setSnapshot(snapshot.focusContentSnapshot);
+  }, [clearChrome, linearSelection]);
 
   const requestLinearIssueRefresh = useCallback(() => {
     setLinearIssueRefreshNonce((current) => current + 1);
@@ -478,20 +412,14 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setLinearSelectionState(null);
     setActiveLinearDocumentState(null);
     setActiveLinearIssueState(null);
-    setFocusContentSnapshotState((current) =>
-      current?.kind === "linear_issue" ||
-      current?.kind === "linear_document" ||
-      current?.kind === "linear_workspace"
-        ? null
-        : current,
-    );
+    getFocusContentController()?.clearKind("linear_issue");
+    getFocusContentController()?.clearKind("linear_document");
+    getFocusContentController()?.clearKind("linear_workspace");
     setLinearWorkspaceViewState(null);
     setIssuesPanelModeState("list");
     setWatchersPanelModeState("board");
-    setContentPanelBarStateState(null);
-    setIssuesWatcherActionState(null);
-    setIssueViewModeActionState(null);
-  }, []);
+    clearChrome();
+  }, [clearChrome]);
 
   useEffect(() => {
     writePersistedContentPanelState({
@@ -529,24 +457,17 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setActiveLinearIssue,
       updateActiveLinearIssue,
       clearActiveLinearIssue,
-      focusContentSnapshot,
-      setFocusContentSnapshot,
       linearWorkspaceView,
       setLinearWorkspaceView,
       issuesPanelMode,
       setIssuesPanelMode,
       watchersPanelMode,
       setWatchersPanelMode,
-      contentPanelBarState,
-      setContentPanelBarState,
-      issuesWatcherAction,
-      setIssuesWatcherAction,
-      issueViewModeAction,
-      setIssueViewModeAction,
       restoreContentPanelTabSnapshot,
       linearIssueRefreshNonce,
       requestLinearIssueRefresh,
       resetProjectsOverview,
+      focusResetNonce,
     }),
     [
       activeLinearDocument,
@@ -555,12 +476,7 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       clearActiveLinearDocument,
       clearActiveLinearIssue,
       clearActiveVaultDocument,
-      contentPanelBarState,
-      issuesWatcherAction,
-      setIssuesWatcherAction,
-      issueViewModeAction,
-      setIssueViewModeAction,
-      focusContentSnapshot,
+      focusResetNonce,
       linearIssueRefreshNonce,
       linearSelection,
       linearWorkspaceView,
@@ -572,8 +488,6 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setActiveLinearDocument,
       setActiveLinearIssue,
       setActiveVaultDocument,
-      setContentPanelBarState,
-      setFocusContentSnapshot,
       setLinearSelection,
       setLinearWorkspaceView,
       setIssuesPanelMode,
@@ -593,6 +507,23 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   );
 }
 
+function FocusContentBridge({ children }: { children: ReactNode }) {
+  const { focusResetNonce } = useContentPanelNavigation();
+  return (
+    <FocusContentProvider resetNonce={focusResetNonce}>{children}</FocusContentProvider>
+  );
+}
+
+export function ContentPanelNavigationProvider({ children }: { children: ReactNode }) {
+  return (
+    <ContentPanelChromeProvider>
+      <ContentPanelNavigationProviderInner>
+        <FocusContentBridge>{children}</FocusContentBridge>
+      </ContentPanelNavigationProviderInner>
+    </ContentPanelChromeProvider>
+  );
+}
+
 export function useContentPanelNavigation() {
   const context = useContext(ContentPanelNavigationContext);
   if (!context) {
@@ -600,6 +531,13 @@ export function useContentPanelNavigation() {
   }
   return context;
 }
+
+export {
+  getFocusContentController,
+  useFocusContent,
+  useDebouncedFocusContentSnapshot,
+} from "./focusContentContext";
+export { useContentPanelChrome } from "./contentPanelChromeContext";
 
 export function useContentPanelSidebarBreadcrumbs(
   segments: ContentPanelBreadcrumbSegment[],

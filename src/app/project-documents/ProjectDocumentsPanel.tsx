@@ -7,6 +7,8 @@ import {
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../../hooks/useLinearProjectDocuments";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { buildStatusGroupedNavItems } from "../../lib/buildStatusGroupedNavItems";
+import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
 import { DocumentStatusIcon } from "../workspace-list/DocumentStatusIcon";
 import { GroupHeaderAddButton } from "../workspace-list/GroupHeaderAddButton";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
@@ -24,7 +26,7 @@ export function ProjectDocumentsPanel({
   teamId?: string | null;
   enabled: boolean;
 }) {
-  const { setActiveLinearDocument } = useContentPanelNavigation();
+  const { setActiveLinearDocument, activeLinearDocument } = useContentPanelNavigation();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const { documents, loading, refreshing, error, refresh } = useLinearProjectDocuments({
@@ -90,6 +92,29 @@ export function ProjectDocumentsPanel({
       },
     ];
   }, [creating, documents, handleCreateDocument, projectId]);
+
+  const listNavItems = useMemo(
+    () =>
+      buildStatusGroupedNavItems({
+        groups,
+        collapsedGroups,
+        getItemId: (document) => document.linearDocumentId,
+        onSelect: (document) =>
+          setActiveLinearDocument({
+            id: document.linearDocumentId,
+            title: document.title,
+            projectId: document.projectId,
+          }),
+      }),
+    [collapsedGroups, groups, setActiveLinearDocument],
+  );
+
+  useContentListNavigationRegistration({
+    region: "main",
+    enabled: enabled && listNavItems.length > 0,
+    items: listNavItems,
+    selectedId: activeLinearDocument?.id ?? null,
+  });
 
   if (loading && documents.length === 0) {
     return (

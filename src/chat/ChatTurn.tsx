@@ -90,8 +90,8 @@ export const ChatTurn = memo(function ChatTurn({
   onRunPresentationComplete: (runId: string, quickActionId?: string) => void;
   onDeleteFileConfirm: (runId: string) => void;
   onDeleteFileReturn: (runId: string) => void;
-  onOpenLinearDashboard: () => void;
-  onOpenWhoopDashboard: () => void;
+  onOpenLinearDashboard?: () => void;
+  onOpenWhoopDashboard?: () => void;
   onFlowPresentationComplete: () => void;
 }) {
   const isGoodMorningFlow =

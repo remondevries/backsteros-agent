@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useContentPanelNavigation } from "../app/contentPanelNavigation";
+import { useContentPanelChrome } from "../app/contentPanelChromeContext";
 
 export function useIssuesWatcherBreadcrumbAction(
   action:
@@ -13,7 +13,7 @@ export function useIssuesWatcherBreadcrumbAction(
       }
     | null,
 ) {
-  const { setIssuesWatcherAction } = useContentPanelNavigation();
+  const { setIssuesWatcherAction } = useContentPanelChrome();
   const onToggleRef = useRef(action?.onToggle);
   onToggleRef.current = action?.onToggle;
 

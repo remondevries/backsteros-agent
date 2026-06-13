@@ -171,7 +171,9 @@ import {
   listVaultDirectoryEntries,
   VAULT_NAV_FOLDER_NAMES,
 } from "./vault-nav-structure.ts";
-import { buildVaultSearchIndex } from "./vault/search-index.ts";
+import { buildVaultSearchIndex, invalidateVaultSearchIndexCache } from "./vault/search-index.ts";
+import { listVaultFiles } from "./vault-files.ts";
+import { peekWhoopSnapshotCache, setWhoopSnapshotCache } from "./whoop/snapshot-cache.ts";
 import {
   appendWorkoutSets,
   assertWorkoutDateKey,
@@ -1290,6 +1292,7 @@ app.get("/whoop/today", async (c) => {
 
   try {
     const snapshot = await fetchWhoopTodaySnapshot({ includeStrainDeepDive: true });
+    setWhoopSnapshotCache(resolveMorningReviewDueDate(), snapshot);
     return c.json({ authenticated: true, snapshot });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load Whoop data";
@@ -1308,10 +1311,15 @@ app.get("/whoop/day", async (c) => {
   }
 
   try {
+    const cached = peekWhoopSnapshotCache(date);
+    if (cached) {
+      return c.json({ authenticated: true, snapshot: cached });
+    }
     const snapshot = await fetchWhoopTodaySnapshot({
       includeStrainDeepDive: true,
       date,
     });
+    setWhoopSnapshotCache(date, snapshot);
     return c.json({ authenticated: true, snapshot });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load Whoop data";
@@ -1795,8 +1803,15 @@ app.post("/vault/linear-workspace-structure", async (c) => {
 
 app.get("/vault/search-index", (c) => {
   const notesPath = resolveNotesPath();
+  const devTiming = process.env.SIDECAR_DEV_TIMING === "1";
+  const startedAt = devTiming ? performance.now() : 0;
   try {
     const entries = buildVaultSearchIndex(notesPath);
+    if (devTiming) {
+      console.log(
+        `[sidecar timing] GET /vault/search-index ${(performance.now() - startedAt).toFixed(1)}ms (${entries.length} entries)`,
+      );
+    }
     return c.json({ entries });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to build vault search index";
@@ -1807,12 +1822,30 @@ app.get("/vault/search-index", (c) => {
 app.get("/vault/entries", (c) => {
   const notesPath = resolveNotesPath();
   const path = c.req.query("path")?.trim();
+  const flatten = c.req.query("flatten") === "true";
+  const enrichRaw = c.req.query("enrich")?.trim();
+  const enrich =
+    enrichRaw === "whoop" || enrichRaw === "dates" || enrichRaw === "none" ? enrichRaw : "none";
   if (!path) {
     return c.json({ error: "path is required" }, 400);
   }
 
   try {
-    const entries = listVaultDirectoryEntries(notesPath, path);
+    if (flatten) {
+      const files = listVaultFiles(notesPath)
+        .filter((filePath) => filePath.startsWith(`${path}/`) || filePath === path)
+        .filter((filePath) => filePath.toLowerCase().endsWith(".md"))
+        .map((filePath) => ({
+          name: filePath.split("/").pop() ?? filePath,
+          kind: "file" as const,
+          path: filePath,
+        }));
+      return c.json({ path, entries: files });
+    }
+
+    const entries = listVaultDirectoryEntries(notesPath, path, {
+      enrich: enrich === "none" ? "none" : "whoop",
+    });
     return c.json({ path, entries });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to list vault directory";
@@ -1868,6 +1901,7 @@ app.patch("/vault/documents", async (c) => {
 
   try {
     const document = await updateVaultDocument(notesPath, path, { title, body: content });
+    invalidateVaultSearchIndexCache();
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update document";

@@ -86,7 +86,9 @@ export function ensureVaultNavFolders(notesPath: string): string[] {
 export function listVaultDirectoryEntries(
   notesPath: string,
   relativePath: string,
+  options?: { enrich?: "none" | "dates" | "whoop" },
 ): VaultDirectoryEntry[] {
+  const enrich = options?.enrich ?? "none";
   const normalized = assertVaultNavRelativePath(relativePath);
   const abs = resolveWorkspacePath(notesPath, normalized);
 
@@ -104,13 +106,17 @@ export function listVaultDirectoryEntries(
       if (entry.isDirectory() && shouldSkipVaultDirectory(entry.name)) return false;
       return entry.isFile() || entry.isDirectory();
     })
-    .map((entry) =>
-      enrichMarkdownFileEntry(notesPath, {
+    .map((entry) => {
+      const base = {
         name: entry.name,
         kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
         path: join(normalized, entry.name).replace(/\\/g, "/"),
-      }),
-    );
+      };
+      if (enrich === "whoop") {
+        return enrichMarkdownFileEntry(notesPath, base);
+      }
+      return base;
+    });
 
   entries.sort((left, right) => {
     if (left.kind !== right.kind) {

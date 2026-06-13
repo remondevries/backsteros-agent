@@ -88,18 +88,12 @@ export function ContentPanelMainSlot({
     hasFocusedContent,
   });
   const showProjectsBrowse = !settingsOpen && hideDefaultMainContent;
-  const showDefault =
-    !settingsOpen &&
-    !hasFocusedContent &&
-    !showVaultEmptyState &&
-    activeVaultNavItem !== "daily" &&
-    !hideDefaultMainContent;
-  const showMainChildren = settingsOpen || showDefault;
+  const showMainChildren = settingsOpen;
 
   return (
     <div className="content-panel-slot-stack">
       <div className="content-panel-main-slot" hidden={!showProjectsBrowse}>
-        <LinearProjectsTableView enabled={vaultStructureEnabled} />
+        <LinearProjectsTableView enabled={vaultStructureEnabled && showProjectsBrowse} />
       </div>
       <div className="content-panel-main-slot" hidden={!showMainChildren}>
         {children}

@@ -25,6 +25,7 @@ import {
   useLeafSessionActive,
 } from "../../modules/terminal/lib/useTerminalSession";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
+import { VirtualList } from "../../ui/VirtualList";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { requestLinearIssueViewMode } from "./issueViewModeIntent";
 import { LinearIssueEstimateIcon } from "./LinearIssueDetailsPropertyDropdown";
@@ -797,7 +798,28 @@ export function ProjectWatchersKanbanPanel({
             ) : null}
             {group.issues.length > 0 ? (
               <ol className="project-watchers-kanban-column-list">
-                {group.issues.map((issue) => (
+                {!draggingIssueId && group.issues.length >= 40 ? (
+                  <VirtualList
+                    items={group.issues}
+                    estimateSize={120}
+                    overscan={4}
+                    getItemKey={(issue) => issue.id}
+                    renderItem={(issue) => (
+                      <ProjectWatchersIssueCard
+                        issue={issue}
+                        onOpen={(selectedIssue) => {
+                          openLinearIssue(selectedIssue);
+                        }}
+                        onOpenTerminal={(selectedIssue) => {
+                          openLinearIssue(selectedIssue, "terminal");
+                        }}
+                        onPointerDragStart={handlePointerDragStart}
+                        dragging={draggingIssueId === issue.id}
+                      />
+                    )}
+                  />
+                ) : (
+                  group.issues.map((issue) => (
                   <Fragment key={issue.id}>
                     {dropIndicator?.stateId === group.stateId &&
                     dropIndicator.beforeIssueId === issue.id ? (
@@ -815,7 +837,8 @@ export function ProjectWatchersKanbanPanel({
                       dragging={draggingIssueId === issue.id}
                     />
                   </Fragment>
-                ))}
+                  ))
+                )}
                 {dropIndicator?.stateId === group.stateId && dropIndicator.beforeIssueId === null ? (
                   <li className="project-watchers-kanban-drop-divider" aria-hidden="true" />
                 ) : null}

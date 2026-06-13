@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createLinearIssueComment } from "../../lib/api";
 import { useLinearIssueCommentThreads } from "../../hooks/useLinearIssueCommentThreads";
 import { composerContextItems as buildComposerContextItems } from "../../lib/chatFocusContext";
-import type { AppView } from "../appViews";
-import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { useContentPanelNavigation, useFocusContent } from "../contentPanelNavigation";
 import { LinearIssueThreadChat } from "./LinearIssueThreadChat";
 import { LinearIssueThreadList } from "./LinearIssueThreadList";
 import { RightPanelChatHeader } from "../RightPanelChatHeader";
@@ -36,13 +35,12 @@ function writeStoredThreadId(issueId: string, threadId: string | null) {
 
 export function LinearIssueAgentPanel({
   issueId,
-  onNavigateToView,
 }: {
   issueId: string;
-  onNavigateToView?: (view: AppView) => void;
 }) {
   const { threads, loading, error, refresh } = useLinearIssueCommentThreads(issueId);
-  const { activeLinearIssue, focusContentSnapshot } = useContentPanelNavigation();
+  const { activeLinearIssue } = useContentPanelNavigation();
+  const { focusContentSnapshot } = useFocusContent();
   const [panelMode, setPanelMode] = useState<PanelMode>("chat");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() =>
     readStoredThreadId(issueId),
@@ -198,7 +196,6 @@ export function LinearIssueAgentPanel({
             issueId={issueId}
             threadId={activeThreadId}
             composerContextItems={composerContextItems}
-            onNavigateToView={onNavigateToView}
           />
         ) : loading ? (
           <div className="linear-thread-empty-chat">
@@ -209,7 +206,6 @@ export function LinearIssueAgentPanel({
             issueId={issueId}
             threadId={null}
             composerContextItems={composerContextItems}
-            onNavigateToView={onNavigateToView}
             onStartThread={handleStartThreadWithMessage}
             starting={creatingThread}
           />

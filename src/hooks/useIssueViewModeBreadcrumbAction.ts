@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useContentPanelNavigation } from "../app/contentPanelNavigation";
+import { useContentPanelChrome } from "../app/contentPanelChromeContext";
 import type { LinearIssueViewMode } from "../app/project-issues/LinearIssueViewModeToggle";
 
 export function useIssueViewModeBreadcrumbAction(
@@ -13,7 +13,7 @@ export function useIssueViewModeBreadcrumbAction(
       }
     | null,
 ) {
-  const { setIssueViewModeAction } = useContentPanelNavigation();
+  const { setIssueViewModeAction } = useContentPanelChrome();
   const onChangeRef = useRef(action?.onChange);
   onChangeRef.current = action?.onChange;
 

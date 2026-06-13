@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import { LinearAssigneeAvatar } from "../../chat/LinearAssigneeAvatar";
 import { LinearIcon } from "../../chat/LinearIcon";
 import type { LinearCommentThreadSummary } from "../../lib/api";
@@ -28,7 +28,7 @@ function LinearThreadDirectionArrow() {
   );
 }
 
-function LinearThreadCardPreview({ text }: { text: string }) {
+const LinearThreadCardPreview = memo(function LinearThreadCardPreview({ text }: { text: string }) {
   const previewRef = useRef<HTMLParagraphElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const [scrollDistance, setScrollDistance] = useState(0);
@@ -74,7 +74,7 @@ function LinearThreadCardPreview({ text }: { text: string }) {
       </span>
     </p>
   );
-}
+});
 
 export function LinearIssueThreadList({
   threads,

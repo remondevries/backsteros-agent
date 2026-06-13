@@ -23,6 +23,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@ricky0123/vad-web": "^0.0.22",
+    "@tanstack/react-virtual": "^3.14.2",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-global-shortcut": "^2.3.2",
@@ -42,6 +43,7 @@
     "fuse.js": "^7.4.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-hotkeys-hook": "^5.3.2",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7"

@@ -72,9 +72,8 @@ export function useRightPanelSession(enabled: boolean) {
 
         const created = await createSession();
         writeStoredSessionId(created.sessionId);
-        const state = await getSessionState(created.sessionId).catch(() => null);
         if (!cancelled) {
-          setSession(toSession(created.sessionId, state));
+          setSession(toSession(created.sessionId, created));
         }
       } catch {
         if (!cancelled) {

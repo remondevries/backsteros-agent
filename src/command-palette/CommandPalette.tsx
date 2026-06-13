@@ -51,6 +51,8 @@ export function CommandPalette({
       onOpenChange={setOpen}
       label="Command palette"
       className="command-palette"
+      overlayClassName="command-palette-overlay"
+      contentClassName="command-palette-dialog"
       shouldFilter={false}
     >
       <div className="command-palette-chrome">

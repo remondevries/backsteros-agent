@@ -1,18 +1,26 @@
 import { useEffect } from "react";
-import { useContentPanelNavigation } from "../app/contentPanelNavigation";
+import { useContentPanelNavigation, useFocusContent } from "../app/contentPanelNavigation";
 import { fetchLinearProjectOverview } from "../lib/api";
 
 export function useLinearWorkspaceFocusSnapshot() {
   const {
     linearSelection,
+    linearWorkspaceView,
     activeLinearIssue,
     activeLinearDocument,
     activeVaultDocument,
-    setFocusContentSnapshot,
   } = useContentPanelNavigation();
+  const { setFocusContentSnapshot } = useFocusContent();
 
   useEffect(() => {
     if (activeLinearIssue || activeLinearDocument || activeVaultDocument || !linearSelection) {
+      return;
+    }
+
+    if (
+      linearSelection.kind === "project" &&
+      linearWorkspaceView === "overview"
+    ) {
       return;
     }
 
@@ -61,6 +69,7 @@ export function useLinearWorkspaceFocusSnapshot() {
     activeLinearDocument,
     activeVaultDocument,
     linearSelection,
+    linearWorkspaceView,
     setFocusContentSnapshot,
   ]);
 }

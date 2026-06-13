@@ -1,5 +1,5 @@
 import type { ContentPanelBreadcrumbSegment } from "./contentPanelNavigation";
-import { useContentPanelNavigation } from "./contentPanelNavigation";
+import { useContentPanelChrome } from "./contentPanelChromeContext";
 import { ContentPanelBreadcrumb } from "./ContentPanelBreadcrumb";
 import { WatcherPollProgressRing } from "./project-issues/WatcherPollProgressRing";
 import { LinearIssueViewModeToggle } from "./project-issues/LinearIssueViewModeToggle";
@@ -9,7 +9,7 @@ export function ContentPanelBreadcrumbBar({
 }: {
   segments: ContentPanelBreadcrumbSegment[];
 }) {
-  const { issuesWatcherAction, issueViewModeAction } = useContentPanelNavigation();
+  const { issuesWatcherAction, issueViewModeAction } = useContentPanelChrome();
 
   return (
     <header className="content-panel-breadcrumb-bar">

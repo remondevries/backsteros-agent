@@ -1,4 +1,3 @@
-import { APP_VIEWS, type AppView } from "./appViews";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
@@ -19,8 +18,6 @@ export function buildContentPanelBreadcrumbSegments(options: {
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
   activeVaultNavItem: SidebarNavItemId | null;
-  activeView: AppView;
-  activeSessionTitle?: string | null;
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   linearSelection?: LinearWorkspaceSelection | null;
   activeVaultDocument?: ActiveVaultDocument | null;
@@ -36,8 +33,6 @@ export function buildContentPanelBreadcrumbSegments(options: {
     settingsOpen,
     activeSettingsTab,
     activeVaultNavItem,
-    activeView,
-    activeSessionTitle,
     sidebarSegments,
     linearSelection,
     activeVaultDocument,
@@ -69,7 +64,6 @@ export function buildContentPanelBreadcrumbSegments(options: {
       ]
     : [{ id: "explorer", label: "Explorer" }];
 
-  const viewDefinition = APP_VIEWS.find((view) => view.id === activeView);
   const contentSegments: ContentPanelBreadcrumbSegment[] = [];
 
   if (linearSelection) {
@@ -94,21 +88,6 @@ export function buildContentPanelBreadcrumbSegments(options: {
         ...(clearFocus ? { onActivate: clearFocus } : {}),
       });
     }
-  } else if (
-    activeVaultNavItem !== "projects" &&
-    viewDefinition &&
-    (activeView === "chat" || activeView === "lookup")
-  ) {
-    contentSegments.push({ id: `view-${activeView}`, label: viewDefinition.label });
-    const trimmedTitle = activeSessionTitle?.trim();
-    if (trimmedTitle) {
-      contentSegments.push({
-        id: `session-${activeView}-${trimmedTitle}`,
-        label: trimmedTitle,
-      });
-    }
-  } else if (viewDefinition && !activeVaultNavItem) {
-    contentSegments.push({ id: `view-${activeView}`, label: viewDefinition.label });
   }
 
   if (activeLinearDocument) {

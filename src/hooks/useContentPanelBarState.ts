@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useContentPanelNavigation } from "../app/contentPanelNavigation";
+import { useContentPanelChrome } from "../app/contentPanelChromeContext";
 
 export function useContentPanelBarState(options: {
   saving?: boolean;
@@ -11,7 +11,7 @@ export function useContentPanelBarState(options: {
   refreshing?: boolean;
   onRefresh?: () => void | Promise<void>;
 }) {
-  const { setContentPanelBarState } = useContentPanelNavigation();
+  const { setContentPanelBarState } = useContentPanelChrome();
   const onRefreshRef = useRef(options.onRefresh);
   onRefreshRef.current = options.onRefresh;
 

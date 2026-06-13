@@ -4,6 +4,11 @@ import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearIssueEntity } from "../../chat/types";
+import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
+import {
+  isContentListKeyboardFocused,
+  useContentListKeyboardFocusedId,
+} from "../../lib/contentListNavigationReact";
 import {
   formatIssueDueMetaLabel,
   linearIssueTitleForCardDisplay,
@@ -69,11 +74,14 @@ export function ProjectIssueRow({
   const priorityLabel =
     issue.priorityLabel || getPriorityLabel(issue.priority);
   const leadingTitle = leadingIcon === "status" ? (issue.status?.trim() || "Unknown") : priorityLabel;
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardFocused = isContentListKeyboardFocused(keyboardFocusedId, issue.id);
 
   const rowClass = [
     "project-issue-row",
     grouped ? "project-issue-row--grouped" : null,
     dragging ? "project-issue-row--dragging" : null,
+    keyboardFocused ? "project-issue-row--keyboard-focused" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -91,6 +99,7 @@ export function ProjectIssueRow({
     <li className="workspace-status-list__item">
       <button
         type="button"
+        {...contentListItemDataAttributes(issue.id)}
         className={rowClass}
         draggable={false}
         onMouseDown={(event) => {

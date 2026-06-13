@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { APP_VIEWS, type AppView } from "./appViews";
 import {
   SIDEBAR_PRIMARY_ITEMS,
   SIDEBAR_SECTIONS,
@@ -68,8 +67,6 @@ function LeftSidePanelNavSection({
 }
 
 export function LeftSidePanel({
-  activeView,
-  onChange,
   settingsOpen,
   activeSettingsTab,
   onSettingsTabChange,
@@ -79,8 +76,6 @@ export function LeftSidePanel({
   activeVaultNavItem,
   onVaultNavItemChange,
 }: {
-  activeView: AppView;
-  onChange: (view: AppView) => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
   onSettingsTabChange: (tab: SettingsTabId) => void;
@@ -195,23 +190,6 @@ export function LeftSidePanel({
                     onOpenSettings();
                   }}
                 />
-                <div className="left-side-panel-profile-menu-divider" />
-                <div className="left-side-panel-profile-menu-section">
-                  {APP_VIEWS.map((view) => (
-                    <LeftSidePanelNavItem
-                      key={view.id}
-                      label={view.label}
-                      icon={view.icon}
-                      active={activeView === view.id}
-                      className="left-side-panel-profile-menu-item"
-                      onClick={() => {
-                        onVaultNavItemChange(null);
-                        onChange(view.id);
-                        setSystemsMenuOpen(false);
-                      }}
-                    />
-                  ))}
-                </div>
               </div>
             ) : null}
           </header>

@@ -15,7 +15,7 @@ import {
   ensureTerminalAgentActivityLogBridge,
   registerTerminalAgentLogContext,
 } from "../../lib/terminalAgentActivityLog";
-import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
 import { useIssueViewModeBreadcrumbAction } from "../../hooks/useIssueViewModeBreadcrumbAction";
 import { ResizablePanel } from "../ResizablePanel";
 import { LinearIssueActionBar } from "./LinearIssueActionBar";
@@ -30,8 +30,7 @@ const LINEAR_ISSUE_DETAILS_WIDTH_KEY = "backsteros.layout.linearIssueDetailsWidt
 const SAVE_DEBOUNCE_MS = 800;
 
 export function LinearIssueView({ issueId }: { issueId: string }) {
-  const { updateActiveLinearIssue, setFocusContentSnapshot, linearIssueRefreshNonce } =
-    useContentPanelNavigation();
+  const { updateActiveLinearIssue, linearIssueRefreshNonce } = useContentPanelNavigation();
   const { issue, loading, refreshing, updating, error, refresh, updateIssue } = useLinearIssueDetail(
     issueId,
   );
@@ -140,13 +139,15 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     });
   }, [issue, updateActiveLinearIssue]);
 
-  useEffect(() => {
-    if (!issue) return;
-    setFocusContentSnapshot({
-      kind: "linear_issue",
+  const focusSnapshot = useMemo(() => {
+    if (!issue) return null;
+    return {
+      kind: "linear_issue" as const,
       description: descriptionDraft || null,
-    });
-  }, [descriptionDraft, issue, setFocusContentSnapshot]);
+    };
+  }, [descriptionDraft, issue]);
+
+  useDebouncedFocusContentSnapshot(focusSnapshot, Boolean(issue));
 
   const handleStatusChange = useCallback(
     (stateId: string) => {

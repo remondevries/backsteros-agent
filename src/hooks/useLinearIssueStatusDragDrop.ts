@@ -38,14 +38,17 @@ export function useLinearIssueStatusDragDrop({
     draggingIssueIdRef.current = draggingIssueId;
   }, [draggingIssueId]);
 
-  useEffect(() => {
-    if (!Object.keys(issueOverrides).length) return;
-    setIssueOverrides((current) => reconcileIssueStatusOverrides(issues, current));
-  }, [issueOverrides, issues]);
+  const reconciledOverrides = useMemo(
+    () =>
+      Object.keys(issueOverrides).length
+        ? reconcileIssueStatusOverrides(issues, issueOverrides)
+        : issueOverrides,
+    [issueOverrides, issues],
+  );
 
   const effectiveIssues = useMemo(
-    () => applyIssueStatusOverrides(issues, issueOverrides),
-    [issueOverrides, issues],
+    () => applyIssueStatusOverrides(issues, reconciledOverrides),
+    [issues, reconciledOverrides],
   );
 
   const handlePointerDragStart = useCallback(

@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { createVaultDocument, fetchLinearIssuesByDueDates } from "../lib/api";
+import {
+  parseEntryDate,
+  resolveEntryDueDateKey,
+  resolveIsoWeekLabel,
+} from "../lib/vaultDates";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
+import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import {
   useContentPanelNavigation,
   useContentPanelSidebarBreadcrumbs,
@@ -12,6 +18,16 @@ import { ProjectIssueRow } from "./project-issues/ProjectIssueRow";
 import { requestLinearIssueViewMode } from "./project-issues/issueViewModeIntent";
 import { formatWorkoutDayLabel } from "../lib/workouts/workoutsBreadcrumb";
 import { workoutDateKeyFromPath } from "../lib/workouts/workoutDays";
+import {
+  buildVaultFolderNavItems,
+  resolveVaultFolderSelectedListId,
+  WORKOUTS_DASHBOARD_LIST_ID,
+} from "../lib/buildVaultFolderNavItems";
+import { contentListItemDataAttributes } from "../lib/contentListNavigation";
+import {
+  useContentListKeyboardFocusedId,
+  useContentListNavigationRegistration,
+} from "../lib/contentListNavigationReact";
 
 const RESERVED_WORKOUT_FILES = new Set([
   "dashboard.md",
@@ -45,50 +61,6 @@ function splitRelativePath(path: string): string[] {
   return path.split("/").filter(Boolean);
 }
 
-function parseEntryDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  if (dateOnlyMatch) {
-    const [, year, month, day] = dateOnlyMatch;
-    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-  }
-
-  const parsed = Date.parse(trimmed);
-  if (!Number.isFinite(parsed)) return null;
-  return new Date(parsed);
-}
-
-function resolveIsoWeekLabel(date: Date): string {
-  const weekDate = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-  const dayOfWeek = weekDate.getUTCDay() || 7;
-  weekDate.setUTCDate(weekDate.getUTCDate() + 4 - dayOfWeek);
-  const yearStart = new Date(Date.UTC(weekDate.getUTCFullYear(), 0, 1));
-  const weekNumber = Math.ceil(
-    ((weekDate.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
-  );
-  return `${weekNumber} week`;
-}
-
-function formatDateKey(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getUTCDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function resolveEntryDueDateKey(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const normalized = value.trim();
-  const matchedIsoDate = normalized.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (matchedIsoDate?.[1]) return matchedIsoDate[1];
-  const parsed = parseEntryDate(normalized);
-  if (!parsed) return null;
-  return formatDateKey(parsed);
-}
-
 export function VaultFolderExplorer({
   activeNavItem,
   enabled,
@@ -96,11 +68,12 @@ export function VaultFolderExplorer({
   activeNavItem: VaultNavItemId;
   enabled: boolean;
 }) {
-  const { activeVaultDocument, setActiveVaultDocument, setActiveLinearIssue, clearActiveVaultDocument } =
+  const { activeVaultDocument, activeLinearIssue, setActiveVaultDocument, setActiveLinearIssue, clearActiveVaultDocument } =
     useContentPanelNavigation();
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [collapsedWeekGroups, setCollapsedWeekGroups] = useState<Set<string>>(() => new Set());
   const [dailyIssuesByDueDate, setDailyIssuesByDueDate] = useState<
     Record<string, LinearIssueEntity[]>
@@ -113,6 +86,7 @@ export function VaultFolderExplorer({
     activeNavItem === "organizations";
   const { entries, loading, error, refresh } = useVaultDirectory(relativePath, enabled, {
     flattenFiles: flattenFolders,
+    enrich: activeNavItem === "daily" ? "whoop" : "none",
   });
   const navLabel = vaultNavItemLabel(activeNavItem);
   const searchPlaceholder = `Search ${navLabel.toLocaleLowerCase()}…`;
@@ -142,7 +116,15 @@ export function VaultFolderExplorer({
   useEffect(() => {
     setRelativePath(vaultNavItemLabel(activeNavItem));
     setSearchQuery("");
+    setDebouncedSearchQuery("");
   }, [activeNavItem]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 200);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const openVaultNote = (path: string, title: string) => {
     setActiveVaultDocument({ path, title });
@@ -186,7 +168,7 @@ export function VaultFolderExplorer({
   }, [activeNavItem, entries]);
 
   const filteredEntries = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
+    const query = debouncedSearchQuery.toLocaleLowerCase();
     if (query.length === 0) {
       return orderedEntries;
     }
@@ -195,7 +177,7 @@ export function VaultFolderExplorer({
         entry.kind === "file" ? formatVaultNoteDisplayName(entry.name) : entry.name;
       return entryLabel.toLocaleLowerCase().includes(query);
     });
-  }, [orderedEntries, searchQuery]);
+  }, [debouncedSearchQuery, orderedEntries]);
 
   const showDailyWeekGroups = activeNavItem === "daily";
   const dailyDueDates = useMemo(() => {
@@ -271,6 +253,8 @@ export function VaultFolderExplorer({
     () => filteredEntries.filter((entry) => entry.kind !== "file"),
     [filteredEntries],
   );
+  const virtualizeFlatList = useVirtualListEnabled(filteredEntries.length);
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
 
   const openLinearIssue = (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
     if (mode === "terminal") {
@@ -298,6 +282,35 @@ export function VaultFolderExplorer({
   };
 
   useContentPanelSidebarBreadcrumbs(sidebarBreadcrumbs, enabled);
+
+  const listNavItems = buildVaultFolderNavItems({
+    activeNavItem,
+    showDailyWeekGroups,
+    nonFileEntries,
+    groupedDailyEntries,
+    collapsedWeekGroups,
+    filteredEntries,
+    dailyIssuesByDueDate,
+    handlers: {
+      clearDashboard: () => clearActiveVaultDocument(),
+      openDirectory: (path) => setRelativePath(path),
+      openFile: openVaultNote,
+      openLinearIssue: (issue) => openLinearIssue(issue),
+    },
+  });
+
+  const selectedListId = resolveVaultFolderSelectedListId({
+    activeNavItem,
+    activeVaultDocumentPath: activeVaultDocument?.path,
+    activeLinearIssueId: activeLinearIssue?.id,
+  });
+
+  useContentListNavigationRegistration({
+    region: "sidebar",
+    enabled: enabled && listNavItems.length > 0,
+    items: listNavItems,
+    selectedId: selectedListId,
+  });
 
   return (
     <div className="vault-folder-explorer">
@@ -335,11 +348,15 @@ export function VaultFolderExplorer({
               <li className="vault-folder-explorer-item">
                 <button
                   type="button"
+                  {...contentListItemDataAttributes(WORKOUTS_DASHBOARD_LIST_ID)}
                   className={[
                     "vault-folder-explorer-entry",
                     "vault-folder-explorer-entry-file",
                     "vault-folder-explorer-entry-selectable",
                     activeVaultDocument == null ? "vault-folder-explorer-entry-selected" : null,
+                    keyboardFocusedId === WORKOUTS_DASHBOARD_LIST_ID
+                      ? "vault-folder-explorer-entry-keyboard-focused"
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -355,7 +372,16 @@ export function VaultFolderExplorer({
                   <li key={entry.path} className="vault-folder-explorer-item">
                     <button
                       type="button"
-                      className="vault-folder-explorer-entry vault-folder-explorer-entry-directory"
+                      {...contentListItemDataAttributes(entry.path)}
+                      className={[
+                        "vault-folder-explorer-entry",
+                        "vault-folder-explorer-entry-directory",
+                        keyboardFocusedId === entry.path
+                          ? "vault-folder-explorer-entry-keyboard-focused"
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       onClick={() => setRelativePath(entry.path)}
                     >
                       <span className="vault-folder-explorer-entry-name">{entry.name}</span>
@@ -389,56 +415,188 @@ export function VaultFolderExplorer({
                       </button>
                       {!collapsed ? (
                         <ul className="vault-folder-explorer-week-group-list">
-                          {group.entries.map((entry) => {
-                        const displayName = formatVaultNoteDisplayName(entry.name);
-                        const selected = activeVaultDocument?.path === entry.path;
-                        const dueDateKey = resolveEntryDueDateKey(entry.date);
-                        const dueDateIssues = dueDateKey
-                          ? (dailyIssuesByDueDate[dueDateKey] ?? [])
-                          : [];
-                        return (
-                          <li key={entry.path} className="vault-folder-explorer-item">
-                            <button
-                              type="button"
-                              className={[
-                                "vault-folder-explorer-entry",
-                                "vault-folder-explorer-entry-file",
-                                "vault-folder-explorer-entry-selectable",
-                                selected ? "vault-folder-explorer-entry-selected" : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                              aria-current={selected ? "page" : undefined}
-                              onClick={() => openVaultNote(entry.path, displayName)}
-                            >
-                              <span className="vault-folder-explorer-entry-name">{displayName}</span>
-                            </button>
-                            {dueDateIssues.length > 0 ? (
-                              <ul className="vault-folder-explorer-linked-issues">
-                                {dueDateIssues.map((issue) => (
-                                  <ProjectIssueRow
-                                    key={`${entry.path}-${issue.id}`}
-                                    issue={issue}
-                                    grouped={false}
-                                    onClick={() => {
-                                      openLinearIssue(issue);
-                                    }}
-                                    onTerminalIndicatorClick={() => {
-                                      openLinearIssue(issue, "terminal");
-                                    }}
-                                  />
-                                ))}
-                              </ul>
-                            ) : null}
-                          </li>
-                        );
-                          })}
+                          {group.entries.length >= 40 ? (
+                            <VirtualList
+                              items={group.entries}
+                              estimateSize={56}
+                              overscan={6}
+                              getItemKey={(entry) => entry.path}
+                              renderItem={(entry) => {
+                                const displayName = formatVaultNoteDisplayName(entry.name);
+                                const selected = activeVaultDocument?.path === entry.path;
+                                const dueDateKey = resolveEntryDueDateKey(entry.date);
+                                const dueDateIssues = dueDateKey
+                                  ? (dailyIssuesByDueDate[dueDateKey] ?? [])
+                                  : [];
+                                return (
+                                  <li className="vault-folder-explorer-item">
+                                    <button
+                                      type="button"
+                                      {...contentListItemDataAttributes(entry.path)}
+                                      className={[
+                                        "vault-folder-explorer-entry",
+                                        "vault-folder-explorer-entry-file",
+                                        "vault-folder-explorer-entry-selectable",
+                                        selected ? "vault-folder-explorer-entry-selected" : null,
+                            keyboardFocusedId === entry.path
+                              ? "vault-folder-explorer-entry-keyboard-focused"
+                              : null,
+                                      keyboardFocusedId === entry.path
+                                        ? "vault-folder-explorer-entry-keyboard-focused"
+                                        : null,
+                                        keyboardFocusedId === entry.path
+                                          ? "vault-folder-explorer-entry-keyboard-focused"
+                                          : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" ")}
+                                      aria-current={selected ? "page" : undefined}
+                                      onClick={() => openVaultNote(entry.path, displayName)}
+                                    >
+                                      <span className="vault-folder-explorer-entry-name">
+                                        {displayName}
+                                      </span>
+                                    </button>
+                                    {dueDateIssues.length > 0 ? (
+                                      <ul className="vault-folder-explorer-linked-issues">
+                                        {dueDateIssues.map((issue) => (
+                                          <ProjectIssueRow
+                                            key={`${entry.path}-${issue.id}`}
+                                            issue={issue}
+                                            grouped={false}
+                                            onClick={() => {
+                                              openLinearIssue(issue);
+                                            }}
+                                            onTerminalIndicatorClick={() => {
+                                              openLinearIssue(issue, "terminal");
+                                            }}
+                                          />
+                                        ))}
+                                      </ul>
+                                    ) : null}
+                                  </li>
+                                );
+                              }}
+                            />
+                          ) : (
+                            group.entries.map((entry) => {
+                              const displayName = formatVaultNoteDisplayName(entry.name);
+                              const selected = activeVaultDocument?.path === entry.path;
+                              const dueDateKey = resolveEntryDueDateKey(entry.date);
+                              const dueDateIssues = dueDateKey
+                                ? (dailyIssuesByDueDate[dueDateKey] ?? [])
+                                : [];
+                              return (
+                                <li key={entry.path} className="vault-folder-explorer-item">
+                                  <button
+                                    type="button"
+                                    {...contentListItemDataAttributes(entry.path)}
+                                    className={[
+                                      "vault-folder-explorer-entry",
+                                      "vault-folder-explorer-entry-file",
+                                      "vault-folder-explorer-entry-selectable",
+                                      selected ? "vault-folder-explorer-entry-selected" : null,
+                            keyboardFocusedId === entry.path
+                              ? "vault-folder-explorer-entry-keyboard-focused"
+                              : null,
+                                      keyboardFocusedId === entry.path
+                                        ? "vault-folder-explorer-entry-keyboard-focused"
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ")}
+                                    aria-current={selected ? "page" : undefined}
+                                    onClick={() => openVaultNote(entry.path, displayName)}
+                                  >
+                                    <span className="vault-folder-explorer-entry-name">
+                                      {displayName}
+                                    </span>
+                                  </button>
+                                  {dueDateIssues.length > 0 ? (
+                                    <ul className="vault-folder-explorer-linked-issues">
+                                      {dueDateIssues.map((issue) => (
+                                        <ProjectIssueRow
+                                          key={`${entry.path}-${issue.id}`}
+                                          issue={issue}
+                                          grouped={false}
+                                          onClick={() => {
+                                            openLinearIssue(issue);
+                                          }}
+                                          onTerminalIndicatorClick={() => {
+                                            openLinearIssue(issue, "terminal");
+                                          }}
+                                        />
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                </li>
+                              );
+                            })
+                          )}
                         </ul>
                       ) : null}
                     </li>
                   );
                 })}
               </>
+            ) : virtualizeFlatList ? (
+              <VirtualList
+                items={filteredEntries}
+                estimateSize={44}
+                overscan={8}
+                getItemKey={(entry) => entry.path}
+                renderItem={(entry) => {
+                  const displayName =
+                    activeNavItem === "workouts"
+                      ? formatWorkoutDayLabel(workoutDateKeyFromPath(entry.path) ?? entry.name)
+                      : formatVaultNoteDisplayName(entry.name);
+                  const selected =
+                    entry.kind === "file" && activeVaultDocument?.path === entry.path;
+
+                  return (
+                    <li className="vault-folder-explorer-item">
+                      {entry.kind === "directory" ? (
+                        <button
+                          type="button"
+                          {...contentListItemDataAttributes(entry.path)}
+                          className={[
+                        "vault-folder-explorer-entry",
+                        "vault-folder-explorer-entry-directory",
+                        keyboardFocusedId === entry.path
+                          ? "vault-folder-explorer-entry-keyboard-focused"
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                          onClick={() => setRelativePath(entry.path)}
+                        >
+                          <span className="vault-folder-explorer-entry-name">{entry.name}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          {...contentListItemDataAttributes(entry.path)}
+                          className={[
+                            "vault-folder-explorer-entry",
+                            "vault-folder-explorer-entry-file",
+                            "vault-folder-explorer-entry-selectable",
+                            selected ? "vault-folder-explorer-entry-selected" : null,
+                            keyboardFocusedId === entry.path
+                              ? "vault-folder-explorer-entry-keyboard-focused"
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          aria-current={selected ? "page" : undefined}
+                          onClick={() => openVaultNote(entry.path, displayName)}
+                        >
+                          <span className="vault-folder-explorer-entry-name">{displayName}</span>
+                        </button>
+                      )}
+                    </li>
+                  );
+                }}
+              />
             ) : (
               filteredEntries.map((entry) => {
                 const displayName =
@@ -453,7 +611,16 @@ export function VaultFolderExplorer({
                     {entry.kind === "directory" ? (
                       <button
                         type="button"
-                        className="vault-folder-explorer-entry vault-folder-explorer-entry-directory"
+                        {...contentListItemDataAttributes(entry.path)}
+                        className={[
+                        "vault-folder-explorer-entry",
+                        "vault-folder-explorer-entry-directory",
+                        keyboardFocusedId === entry.path
+                          ? "vault-folder-explorer-entry-keyboard-focused"
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                         onClick={() => setRelativePath(entry.path)}
                       >
                         <span className="vault-folder-explorer-entry-name">{entry.name}</span>
@@ -461,6 +628,7 @@ export function VaultFolderExplorer({
                     ) : (
                       <button
                         type="button"
+                        {...contentListItemDataAttributes(entry.path)}
                         className={[
                           "vault-folder-explorer-entry",
                           "vault-folder-explorer-entry-file",

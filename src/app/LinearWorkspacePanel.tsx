@@ -2,6 +2,11 @@ import { useMemo, useState } from "react";
 import { useLinearProjects } from "../hooks/useLinearProjects";
 import { useLinearTeams } from "../hooks/useLinearTeams";
 import { groupLinearProjectsByStatus } from "../lib/linearProjectGroups";
+import { contentListItemDataAttributes } from "../lib/contentListNavigation";
+import {
+  useContentListKeyboardFocusedId,
+  useContentListNavigationRegistration,
+} from "../lib/contentListNavigationReact";
 import { useContentPanelNavigation, useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
 import {
   LinearWorkspaceViewToggle,
@@ -20,6 +25,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
   const teamsQuery = useLinearTeams(enabled && view === "teams");
   const projectsQuery = useLinearProjects(enabled && view === "projects");
   const normalizedSearch = search.trim().toLowerCase();
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
 
   useContentPanelSidebarBreadcrumbs(
     useMemo(
@@ -69,6 +75,55 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
     });
   };
 
+  const listNavItems = useMemo(() => {
+    if (!enabled) return [];
+    if (view === "teams") {
+      return filteredTeams.map((team) => ({
+        id: team.id,
+        select: () => setLinearSelection({ kind: "team", id: team.id, name: team.name }),
+      }));
+    }
+
+    const items: Array<{ id: string; select: () => void }> = [];
+    for (const group of groupedProjects) {
+      const groupKey = group.status?.id ?? "no-status";
+      if (collapsedProjectGroups.has(groupKey)) continue;
+      for (const project of group.projects) {
+        items.push({
+          id: project.id,
+          select: () =>
+            setLinearSelection({
+              kind: "project",
+              id: project.id,
+              name: project.name,
+            }),
+        });
+      }
+    }
+    return items;
+  }, [
+    collapsedProjectGroups,
+    enabled,
+    filteredTeams,
+    groupedProjects,
+    setLinearSelection,
+    view,
+  ]);
+
+  const selectedListId =
+    view === "teams" && linearSelection?.kind === "team"
+      ? linearSelection.id
+      : view === "projects" && linearSelection?.kind === "project"
+        ? linearSelection.id
+        : null;
+
+  useContentListNavigationRegistration({
+    region: "sidebar",
+    enabled: enabled && listNavItems.length > 0,
+    items: listNavItems,
+    selectedId: selectedListId,
+  });
+
   return (
     <div className="vault-folder-explorer linear-workspace-panel">
       <div className="linear-workspace-toolbar">
@@ -113,10 +168,14 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                       <li key={team.id} className="vault-folder-explorer-item">
                         <button
                           type="button"
+                          {...contentListItemDataAttributes(team.id)}
                           className={[
                             "vault-folder-explorer-entry",
                             "vault-folder-explorer-entry-selectable",
                             selected ? "vault-folder-explorer-entry-selected" : null,
+                            keyboardFocusedId === team.id
+                              ? "vault-folder-explorer-entry-keyboard-focused"
+                              : null,
                           ]
                             .filter(Boolean)
                             .join(" ")}
@@ -193,10 +252,14 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                             <li key={project.id} className="vault-folder-explorer-item">
                               <button
                                 type="button"
+                                {...contentListItemDataAttributes(project.id)}
                                 className={[
                                   "vault-folder-explorer-entry",
                                   "vault-folder-explorer-entry-selectable",
                                   selected ? "vault-folder-explorer-entry-selected" : null,
+                                  keyboardFocusedId === project.id
+                                    ? "vault-folder-explorer-entry-keyboard-focused"
+                                    : null,
                                 ]
                                   .filter(Boolean)
                                   .join(" ")}
