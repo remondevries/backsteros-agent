@@ -9,7 +9,103 @@ import {
   type ReactNode,
 } from "react";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
-import type { LinearWorkspaceViewId } from "./linearProjectViews";
+import { isLinearWorkspaceViewIdForKind, type LinearWorkspaceViewId } from "./linearProjectViews";
+
+export type LinearProjectCollectionMode = "list" | "board";
+type PersistedContentPanelState = {
+  linearSelection?: LinearWorkspaceSelection;
+  activeLinearIssue?: ActiveLinearIssue;
+  activeLinearDocument?: ActiveLinearDocument;
+  linearWorkspaceView?: LinearWorkspaceViewId;
+  issuesPanelMode?: LinearProjectCollectionMode;
+  watchersPanelMode?: LinearProjectCollectionMode;
+};
+
+const CONTENT_PANEL_STATE_STORAGE_KEY = "backsteros.content-panel.state";
+
+function parsePersistedLinearSelection(value: unknown): LinearWorkspaceSelection | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<LinearWorkspaceSelection>;
+  const kind = candidate.kind;
+  const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+  const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+  if ((kind !== "team" && kind !== "project") || !id || !name) return undefined;
+  return { kind, id, name };
+}
+
+function parsePersistedLinearIssue(value: unknown): ActiveLinearIssue | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<ActiveLinearIssue>;
+  const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+  const identifier = typeof candidate.identifier === "string" ? candidate.identifier.trim() : "";
+  const title = typeof candidate.title === "string" ? candidate.title.trim() : "";
+  if (!id || !identifier || !title) return undefined;
+  return {
+    id,
+    identifier,
+    title,
+    status: typeof candidate.status === "string" ? candidate.status : undefined,
+    stateType: typeof candidate.stateType === "string" ? candidate.stateType : undefined,
+  };
+}
+
+function parsePersistedLinearDocument(value: unknown): ActiveLinearDocument | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<ActiveLinearDocument>;
+  const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+  const title = typeof candidate.title === "string" ? candidate.title.trim() : "";
+  if (!id || !title) return undefined;
+  return {
+    id,
+    title,
+    projectId: typeof candidate.projectId === "string" ? candidate.projectId : undefined,
+  };
+}
+
+function readPersistedContentPanelState(): PersistedContentPanelState {
+  try {
+    const raw = localStorage.getItem(CONTENT_PANEL_STATE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") return {};
+
+    const linearSelection = parsePersistedLinearSelection(parsed.linearSelection);
+    const linearWorkspaceViewRaw =
+      typeof parsed.linearWorkspaceView === "string" ? parsed.linearWorkspaceView : null;
+    const linearWorkspaceView =
+      linearSelection && linearWorkspaceViewRaw
+        ? isLinearWorkspaceViewIdForKind(linearSelection.kind, linearWorkspaceViewRaw)
+          ? linearWorkspaceViewRaw
+          : undefined
+        : undefined;
+
+    const state: PersistedContentPanelState = {
+      linearSelection,
+      activeLinearIssue: parsePersistedLinearIssue(parsed.activeLinearIssue),
+      activeLinearDocument: parsePersistedLinearDocument(parsed.activeLinearDocument),
+      linearWorkspaceView,
+      issuesPanelMode:
+        parsed.issuesPanelMode === "list" || parsed.issuesPanelMode === "board"
+          ? parsed.issuesPanelMode
+          : undefined,
+      watchersPanelMode:
+        parsed.watchersPanelMode === "list" || parsed.watchersPanelMode === "board"
+          ? parsed.watchersPanelMode
+          : undefined,
+    };
+    return state;
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedContentPanelState(state: PersistedContentPanelState) {
+  try {
+    localStorage.setItem(CONTENT_PANEL_STATE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore private mode / quota errors.
+  }
+}
 
 export type ContentPanelBreadcrumbSegment = {
   id: string;
@@ -73,6 +169,8 @@ export type ContentPanelTabSnapshot = {
   activeLinearIssue: ActiveLinearIssue | null;
   focusContentSnapshot: FocusContentSnapshot | null;
   linearWorkspaceView: LinearWorkspaceViewId | null;
+  issuesPanelMode: LinearProjectCollectionMode;
+  watchersPanelMode: LinearProjectCollectionMode;
 };
 
 type ContentPanelNavigationContextValue = {
@@ -101,6 +199,10 @@ type ContentPanelNavigationContextValue = {
   ) => void;
   linearWorkspaceView: LinearWorkspaceViewId | null;
   setLinearWorkspaceView: (view: LinearWorkspaceViewId | null) => void;
+  issuesPanelMode: LinearProjectCollectionMode;
+  setIssuesPanelMode: (mode: LinearProjectCollectionMode) => void;
+  watchersPanelMode: LinearProjectCollectionMode;
+  setWatchersPanelMode: (mode: LinearProjectCollectionMode) => void;
   contentPanelBarState: ContentPanelBarState | null;
   setContentPanelBarState: (state: ContentPanelBarState | null) => void;
   restoreContentPanelTabSnapshot: (snapshot: ContentPanelTabSnapshot) => void;
@@ -114,24 +216,37 @@ const ContentPanelNavigationContext = createContext<ContentPanelNavigationContex
 );
 
 export function ContentPanelNavigationProvider({ children }: { children: ReactNode }) {
+  const persistedStateRef = useRef<PersistedContentPanelState | null>(null);
+  if (persistedStateRef.current === null) {
+    persistedStateRef.current = readPersistedContentPanelState();
+  }
+  const persistedState = persistedStateRef.current;
   const [sidebarSegments, setSidebarSegmentsState] = useState<ContentPanelBreadcrumbSegment[]>(
     [],
   );
-  const [linearSelection, setLinearSelectionState] = useState<LinearWorkspaceSelection | null>(
-    null,
+  const [linearSelection, setLinearSelectionState] = useState<LinearWorkspaceSelection | null>(() =>
+    persistedState.linearSelection ?? null,
   );
   const [activeVaultDocument, setActiveVaultDocumentState] = useState<ActiveVaultDocument | null>(
     null,
   );
-  const [activeLinearIssue, setActiveLinearIssueState] = useState<ActiveLinearIssue | null>(null);
+  const [activeLinearIssue, setActiveLinearIssueState] = useState<ActiveLinearIssue | null>(() =>
+    persistedState.activeLinearIssue ?? null,
+  );
   const [activeLinearDocument, setActiveLinearDocumentState] = useState<ActiveLinearDocument | null>(
-    null,
+    () => persistedState.activeLinearDocument ?? null,
   );
   const [focusContentSnapshot, setFocusContentSnapshotState] = useState<FocusContentSnapshot | null>(
     null,
   );
   const [linearWorkspaceView, setLinearWorkspaceViewState] = useState<LinearWorkspaceViewId | null>(
-    null,
+    () => persistedState.linearWorkspaceView ?? null,
+  );
+  const [issuesPanelMode, setIssuesPanelModeState] = useState<LinearProjectCollectionMode>(
+    () => persistedState.issuesPanelMode ?? "list",
+  );
+  const [watchersPanelMode, setWatchersPanelModeState] = useState<LinearProjectCollectionMode>(
+    () => persistedState.watchersPanelMode ?? "board",
   );
   const [contentPanelBarState, setContentPanelBarStateState] = useState<ContentPanelBarState | null>(
     null,
@@ -142,8 +257,13 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   const linearSelectionKey = linearSelection
     ? `${linearSelection.kind}:${linearSelection.id}`
     : null;
+  const previousLinearSelectionKeyRef = useRef<string | null>(linearSelectionKey);
 
   useEffect(() => {
+    if (previousLinearSelectionKeyRef.current === linearSelectionKey) {
+      return;
+    }
+    previousLinearSelectionKeyRef.current = linearSelectionKey;
     if (skipSelectionResetRef.current) {
       skipSelectionResetRef.current = false;
       return;
@@ -153,6 +273,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setActiveLinearIssueState(null);
     setFocusContentSnapshotState(null);
     setLinearWorkspaceViewState(null);
+    setIssuesPanelModeState("list");
+    setWatchersPanelModeState("board");
     setContentPanelBarStateState(null);
   }, [linearSelectionKey]);
 
@@ -235,6 +357,14 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setLinearWorkspaceViewState(view);
   }, []);
 
+  const setIssuesPanelMode = useCallback((mode: LinearProjectCollectionMode) => {
+    setIssuesPanelModeState(mode);
+  }, []);
+
+  const setWatchersPanelMode = useCallback((mode: LinearProjectCollectionMode) => {
+    setWatchersPanelModeState(mode);
+  }, []);
+
   const setContentPanelBarState = useCallback((state: ContentPanelBarState | null) => {
     setContentPanelBarStateState(state);
   }, []);
@@ -254,6 +384,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setActiveLinearIssueState(snapshot.activeLinearIssue);
     setFocusContentSnapshotState(snapshot.focusContentSnapshot);
     setLinearWorkspaceViewState(snapshot.linearWorkspaceView);
+    setIssuesPanelModeState(snapshot.issuesPanelMode);
+    setWatchersPanelModeState(snapshot.watchersPanelMode);
     setContentPanelBarStateState(null);
   }, [linearSelection]);
 
@@ -273,8 +405,28 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
         : current,
     );
     setLinearWorkspaceViewState(null);
+    setIssuesPanelModeState("list");
+    setWatchersPanelModeState("board");
     setContentPanelBarStateState(null);
   }, []);
+
+  useEffect(() => {
+    writePersistedContentPanelState({
+      linearSelection: linearSelection ?? undefined,
+      activeLinearIssue: activeLinearIssue ?? undefined,
+      activeLinearDocument: activeLinearDocument ?? undefined,
+      linearWorkspaceView: linearWorkspaceView ?? undefined,
+      issuesPanelMode,
+      watchersPanelMode,
+    });
+  }, [
+    activeLinearDocument,
+    activeLinearIssue,
+    issuesPanelMode,
+    linearSelection,
+    linearWorkspaceView,
+    watchersPanelMode,
+  ]);
 
   const value = useMemo(
     () => ({
@@ -298,6 +450,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setFocusContentSnapshot,
       linearWorkspaceView,
       setLinearWorkspaceView,
+      issuesPanelMode,
+      setIssuesPanelMode,
+      watchersPanelMode,
+      setWatchersPanelMode,
       contentPanelBarState,
       setContentPanelBarState,
       restoreContentPanelTabSnapshot,
@@ -317,6 +473,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       linearIssueRefreshNonce,
       linearSelection,
       linearWorkspaceView,
+      issuesPanelMode,
+      watchersPanelMode,
       requestLinearIssueRefresh,
       resetProjectsOverview,
       restoreContentPanelTabSnapshot,
@@ -327,6 +485,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setFocusContentSnapshot,
       setLinearSelection,
       setLinearWorkspaceView,
+      setIssuesPanelMode,
+      setWatchersPanelMode,
       sidebarSegments,
       setSidebarSegments,
       updateActiveLinearDocument,

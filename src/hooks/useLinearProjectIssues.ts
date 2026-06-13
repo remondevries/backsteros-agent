@@ -2,8 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { fetchLinearProjectIssues } from "../lib/api";
 
+export type LinearWorkflowState = {
+  id: string;
+  name: string;
+  type: string;
+  color?: string;
+};
+
 export function useLinearProjectIssues(projectId: string | null, enabled: boolean) {
   const [issues, setIssues] = useState<LinearIssueEntity[]>([]);
+  const [workflowStates, setWorkflowStates] = useState<LinearWorkflowState[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,6 +20,7 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
     async (options?: { background?: boolean }) => {
       if (!enabled || !projectId) {
         setIssues([]);
+        setWorkflowStates([]);
         setError(null);
         setLoading(false);
         setRefreshing(false);
@@ -30,11 +39,14 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
         if (result.error) {
           setError(result.error);
           setIssues([]);
+          setWorkflowStates([]);
         } else {
           setIssues(result.issues);
+          setWorkflowStates(result.workflowStates ?? []);
         }
       } catch (err) {
         setIssues([]);
+        setWorkflowStates([]);
         setError(err instanceof Error ? err.message : "Failed to load issues");
       } finally {
         setLoading(false);
@@ -50,5 +62,5 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
 
   const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);
 
-  return { issues, loading, refreshing, error, refresh: refreshInBackground };
+  return { issues, workflowStates, loading, refreshing, error, refresh: refreshInBackground };
 }

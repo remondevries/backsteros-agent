@@ -29,6 +29,8 @@ export function ProjectDocumentRow({
   onClick: () => void;
 }) {
   const dateLabel = formatIssueDueMetaLabel(document.date);
+  const showCategory =
+    Boolean(document.category) && document.category.trim().toLowerCase() !== "document";
   const rowClass = [
     "project-document-row",
     grouped ? "project-document-row--grouped" : null,
@@ -42,13 +44,10 @@ export function ProjectDocumentRow({
         <span className="project-document-row__leading">
           <DocumentNoteIcon className="project-document-row__icon" />
         </span>
-        <span className="project-document-row__organization" title={document.organization}>
-          {document.organization || "—"}
-        </span>
         <span className="project-document-row__title" title={document.title}>
           {document.title}
         </span>
-        {document.category ? (
+        {showCategory ? (
           <span className="project-document-row__pill" title={document.category}>
             <span className="project-document-row__pill-label">{document.category}</span>
           </span>

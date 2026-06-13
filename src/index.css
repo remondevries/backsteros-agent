@@ -397,6 +397,13 @@ textarea {
   color: var(--text-primary);
 }
 
+.content-panel-tabs-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .content-panel-tab-add {
   flex-shrink: 0;
   width: 18px;
@@ -770,15 +777,41 @@ textarea {
 .linear-project-view-tabs {
   display: flex;
   flex-shrink: 0;
+  align-items: center;
   gap: 8px;
   padding: 6px;
   background: transparent;
+}
+
+.linear-project-view-tabs-list {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-.linear-project-view-tabs::-webkit-scrollbar {
+.linear-project-view-tabs-list::-webkit-scrollbar {
   display: none;
+}
+
+.linear-project-list-board-toggle {
+  flex-shrink: 0;
+  min-width: 126px;
+}
+
+.linear-project-list-board-toggle .model-mode-indicator {
+  background: var(--surface-1);
+}
+
+.linear-project-list-board-toggle[data-active-index="1"] .model-mode-indicator {
+  transform: translateX(100%);
+}
+
+.linear-project-list-board-toggle .model-mode-option {
+  min-width: 0;
+  padding: 3px 10px;
 }
 
 .linear-project-view-tab {
@@ -892,6 +925,282 @@ textarea {
   width: 100%;
   min-width: 0;
   padding: 8px 12px 16px;
+}
+
+.project-watchers-kanban-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px;
+}
+
+.project-watchers-kanban {
+  box-sizing: border-box;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+}
+
+.project-watchers-kanban-column {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  height: 100%;
+  min-height: 0;
+  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    var(--project-watchers-kanban-column-bg, #0e0e0f) 0%,
+    transparent 100%
+  );
+}
+
+.project-watchers-kanban-column--drop-target {
+  box-shadow: inset 0 0 0 1px #3b82f6;
+}
+
+.project-watchers-kanban-column--collapsed {
+  width: 46px;
+}
+
+.project-watchers-kanban-column-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.project-watchers-kanban-column--collapsed .project-watchers-kanban-column-header {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 6px;
+}
+
+.project-watchers-kanban-column-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--text-primary);
+}
+
+.project-watchers-kanban-column--collapsed .project-watchers-kanban-column-title {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-watchers-kanban-column-title span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-watchers-kanban-column--collapsed .project-watchers-kanban-column-title span:last-child {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: normal;
+  line-height: 1;
+}
+
+.project-watchers-kanban-column-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 14px;
+  color: var(--text-faint);
+}
+
+.project-watchers-kanban-column--collapsed .project-watchers-kanban-column-count {
+  display: none;
+}
+
+.project-watchers-kanban-column-list {
+  list-style: none;
+  margin: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.project-watchers-kanban-column-empty-drop {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+}
+
+.project-watchers-kanban-drop-divider {
+  box-sizing: border-box;
+  height: 0;
+  margin: 2px 0;
+  border-top: 2px solid color-mix(in srgb, var(--text-primary) 45%, transparent);
+  border-radius: 999px;
+  list-style: none;
+}
+
+.project-watchers-kanban-card-item {
+  margin: 0;
+}
+
+.project-watchers-kanban-card {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  border: 0.5px solid #262629;
+  border-radius: 8px;
+  background: #171718;
+  font: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.project-watchers-kanban-card[draggable="true"] {
+  cursor: grab;
+}
+
+.project-watchers-kanban-card--dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.project-watchers-kanban-card:hover,
+.project-watchers-kanban-card:focus-visible {
+  border-color: var(--border-hover);
+  background: #1c1c1e;
+  outline: none;
+}
+
+.project-watchers-kanban-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.project-watchers-kanban-card-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family:
+    var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace);
+  font-size: 12px;
+  line-height: 14px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-watchers-kanban-card-owner {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.project-watchers-kanban-card-owner .linear-assignee-avatar {
+  width: 18px;
+  height: 18px;
+}
+
+.project-watchers-kanban-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-watchers-kanban-card-status {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: var(--text-faint);
+}
+
+.project-watchers-kanban-card-title {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 17px;
+  color: var(--text-primary);
+}
+
+.project-watchers-kanban-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-watchers-kanban-card-meta-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 0.5px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-faint);
+}
+
+.project-watchers-kanban-card-meta-pill--tag {
+  min-width: 0;
+}
+
+.project-watchers-kanban-card-meta-pill-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.project-watchers-kanban-card-meta-pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-watchers-kanban-card-created {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-subtle);
 }
 
 .workspace-status-list__list {
@@ -1264,14 +1573,14 @@ button.project-document-row {
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 12px 8px;
+  padding: 10px 8px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 18px;
   text-align: left;
   cursor: pointer;
   outline: none;
@@ -1297,26 +1606,15 @@ button.project-document-row:focus-visible {
   color: var(--text-faint);
 }
 
-.project-document-row__organization {
-  flex-shrink: 0;
-  width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 12px;
-  color: var(--text-faint);
-}
-
 .project-document-row__title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 12px;
+  line-height: 18px;
 }
 
 .project-document-row__pill {
@@ -1338,8 +1636,8 @@ button.project-document-row:focus-visible {
 
 .project-document-row__pill-label {
   white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 16px;
   color: var(--text-faint);
 }
 

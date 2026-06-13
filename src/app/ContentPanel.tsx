@@ -90,6 +90,8 @@ function ContentPanelFrame({
     activeLinearIssue,
     focusContentSnapshot,
     linearWorkspaceView,
+    issuesPanelMode,
+    watchersPanelMode,
     restoreContentPanelTabSnapshot,
   } = useContentPanelNavigation();
 
@@ -102,14 +104,18 @@ function ContentPanelFrame({
       activeLinearIssue: activeLinearIssue ? { ...activeLinearIssue } : null,
       focusContentSnapshot: focusContentSnapshot ? { ...focusContentSnapshot } : null,
       linearWorkspaceView,
+      issuesPanelMode,
+      watchersPanelMode,
     };
   }, [
     activeLinearDocument,
     activeLinearIssue,
     activeVaultDocument,
     focusContentSnapshot,
+    issuesPanelMode,
     linearSelection,
     linearWorkspaceView,
+    watchersPanelMode,
     sidebarSegments,
   ]);
 
@@ -122,6 +128,8 @@ function ContentPanelFrame({
       activeLinearIssue: null,
       focusContentSnapshot: null,
       linearWorkspaceView: null,
+      issuesPanelMode: "list",
+      watchersPanelMode: "board",
     }),
     [],
   );

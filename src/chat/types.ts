@@ -10,6 +10,7 @@ export interface LinearIssueEntity {
   identifier?: string;
   title: string;
   status?: string;
+  stateId?: string | null;
   stateType?: string;
   statusColor?: string;
   url?: string;
@@ -22,6 +23,7 @@ export interface LinearIssueEntity {
   dueDate?: string;
   estimate?: number | null;
   labels?: LinearIssueLabel[];
+  createdAt?: string;
 }
 
 export interface MarkdownFileEntity {

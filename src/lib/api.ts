@@ -634,7 +634,11 @@ export async function updateLinearProjectOverviewDescription(projectId: string, 
 }
 
 export async function fetchLinearProjectIssues(projectId: string) {
-  return request<{ issues: LinearIssueEntity[]; error?: string }>(
+  return request<{
+    issues: LinearIssueEntity[];
+    workflowStates: { id: string; name: string; type: string; color?: string }[];
+    error?: string;
+  }>(
     `/linear/projects/${encodeURIComponent(projectId)}/issues`,
   );
 }

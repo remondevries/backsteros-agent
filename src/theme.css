@@ -123,6 +123,7 @@
   --linear-project-view-tab-active-bg: #202021;
   --linear-project-view-tab-active-border: #353536;
   --linear-project-view-tab-active-text: #ffffff;
+  --project-watchers-kanban-column-bg: #0c0c0d;
 
   --update-confirmation-check-color: #4ade80;
 
@@ -266,6 +267,7 @@
       var(--border-hover)
     );
     --linear-project-view-tab-active-text: var(--text-primary);
+    --project-watchers-kanban-column-bg: var(--bg-surface-2);
 
     --update-confirmation-check-color: #16a34a;
 

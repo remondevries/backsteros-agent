@@ -59,14 +59,16 @@ export function ContentPanelTabsBar({
         })}
       </div>
 
-      <button
-        type="button"
-        className="content-panel-tab-add"
-        aria-label="Add tab"
-        onClick={onAddTab}
-      >
-        +
-      </button>
+      <div className="content-panel-tabs-actions">
+        <button
+          type="button"
+          className="content-panel-tab-add"
+          aria-label="Add tab"
+          onClick={onAddTab}
+        >
+          +
+        </button>
+      </div>
     </header>
   );
 }

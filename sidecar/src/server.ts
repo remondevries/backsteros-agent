@@ -514,11 +514,11 @@ app.get("/linear/projects/:projectId/issues", async (c) => {
   }
 
   try {
-    const issues = await fetchLinearProjectIssues(projectId);
-    return c.json({ issues });
+    const result = await fetchLinearProjectIssues(projectId);
+    return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load project issues";
-    return c.json({ error: message, issues: [] }, 500);
+    return c.json({ error: message, issues: [], workflowStates: [] }, 500);
   }
 });
 
