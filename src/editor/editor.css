@@ -35,7 +35,7 @@
 }
 
 .xterm-view.linear-issue-terminal .xterm {
-  padding: 0 10px 0 0;
+  padding: 0 10px 0 6px;
 }
 
 .xterm-view .xterm-rows {

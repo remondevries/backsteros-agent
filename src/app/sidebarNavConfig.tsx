@@ -43,11 +43,18 @@ const VAULT_NAV_ICONS: Record<VaultNavItemId, ReactNode> = {
   contacts: <SidebarContactsIcon />,
 };
 
+export function sidebarNavItemIcon(id: SidebarNavItemId): ReactNode {
+  if (id === "projects") {
+    return <SidebarProjectsIcon />;
+  }
+  return VAULT_NAV_ICONS[id];
+}
+
 function navItem(id: VaultNavItemId): SidebarNavItemDefinition {
   return {
     id,
     label: vaultNavItemLabel(id),
-    icon: VAULT_NAV_ICONS[id],
+    icon: sidebarNavItemIcon(id),
   };
 }
 
@@ -55,7 +62,7 @@ function projectsNavItem(): SidebarNavItemDefinition {
   return {
     id: "projects",
     label: labelForSidebarNavItem("projects"),
-    icon: <SidebarProjectsIcon />,
+    icon: sidebarNavItemIcon("projects"),
   };
 }
 

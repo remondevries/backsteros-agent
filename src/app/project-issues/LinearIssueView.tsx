@@ -1,15 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { XTermView } from "../../editor/XTermView";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearIssueDetail } from "../../hooks/useLinearIssueDetail";
 import { useLinearProjectWatcherPollProgress } from "../../hooks/useLinearProjectWatcherPollProgress";
 import { ensureLinearIssueTerminalDirectory, getSettings } from "../../lib/api";
+import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
+import {
+  useLeafAgentWaiting,
+  useLeafAgentWorking,
+  useLeafSessionActive,
+} from "../../modules/terminal/lib/useTerminalSession";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { ResizablePanel } from "../ResizablePanel";
 import { LinearIssueActionBar } from "./LinearIssueActionBar";
 import { LinearIssueDetailsPanel } from "./LinearIssueDetailsPanel";
 import type { LinearIssueViewMode } from "./LinearIssueViewModeToggle";
+import {
+  consumeLinearIssueViewMode,
+  subscribeLinearIssueViewModeIntent,
+} from "./issueViewModeIntent";
 
 const LINEAR_ISSUE_DETAILS_WIDTH_KEY = "backsteros.layout.linearIssueDetailsWidth";
 const SAVE_DEBOUNCE_MS = 800;
@@ -25,12 +35,18 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   const [terminalWorkingDirectoryResolved, setTerminalWorkingDirectoryResolved] = useState(false);
   const projectId = issue?.projectId?.trim() || null;
   const { watcherActive } = useLinearProjectWatcherPollProgress(projectId);
+  const terminalLeafId = useMemo(() => resolveTerminalLeafId(issueId), [issueId]);
+  const terminalSessionActive = useLeafSessionActive(terminalLeafId);
+  const terminalAgentWorking = useLeafAgentWorking(terminalLeafId);
+  const terminalAgentWaiting = useLeafAgentWaiting(terminalLeafId);
+  const loadedIssueId = issue?.id ?? null;
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [descriptionDirty, setDescriptionDirty] = useState(false);
   const [descriptionSaving, setDescriptionSaving] = useState(false);
   const [descriptionSaveError, setDescriptionSaveError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descriptionRef = useRef(descriptionDraft);
+  const issueScrollRef = useRef<HTMLDivElement | null>(null);
   const userEditedDescriptionRef = useRef(false);
   descriptionRef.current = descriptionDraft;
 
@@ -54,8 +70,16 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     setDescriptionDirty(false);
     setDescriptionSaving(false);
     setDescriptionSaveError(null);
-    setContentMode("issue");
+    setContentMode(consumeLinearIssueViewMode(issueId) ?? "issue");
     userEditedDescriptionRef.current = false;
+  }, [issueId]);
+
+  useEffect(() => {
+    return subscribeLinearIssueViewModeIntent((targetIssueId, mode) => {
+      if (targetIssueId !== issueId) return;
+      consumeLinearIssueViewMode(targetIssueId);
+      setContentMode(mode);
+    });
   }, [issueId]);
 
   useEffect(() => {
@@ -197,6 +221,28 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   const showTerminal = watcherActive && contentMode === "terminal";
 
   useEffect(() => {
+    if (showTerminal) return;
+    const scrollNode = issueScrollRef.current;
+    if (!scrollNode) return;
+
+    const resetScroll = () => {
+      scrollNode.scrollTop = 0;
+      scrollNode.scrollLeft = 0;
+    };
+
+    resetScroll();
+    const frameA = window.requestAnimationFrame(resetScroll);
+    const frameB = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(resetScroll);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameA);
+      window.cancelAnimationFrame(frameB);
+    };
+  }, [issueId, loadedIssueId, showTerminal]);
+
+  useEffect(() => {
     if (!showTerminal) {
       setTerminalWorkingDirectoryResolved(false);
       return;
@@ -252,46 +298,44 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   return (
     <div className="linear-issue-layout">
       <div className="linear-issue-main">
-        {!issue ? (
-          <div className="linear-issue-scroll" />
-        ) : (
-          <div
-            className={[
-              "linear-issue-scroll",
-              showTerminal ? "linear-issue-scroll--terminal" : null,
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {showTerminal ? (
-              <div className="linear-issue-terminal-shell">
-                {terminalWorkingDirectoryResolved ? (
-                  <XTermView
-                    className="linear-issue-terminal"
-                    workingDirectory={terminalWorkingDirectory}
-                  />
-                ) : null}
-              </div>
-            ) : (
-              <article className="linear-issue">
-                <header className="linear-issue-header">
+        <div
+          ref={issueScrollRef}
+          className={[
+            "linear-issue-scroll",
+            showTerminal ? "linear-issue-scroll--terminal" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {showTerminal ? (
+            <div className="linear-issue-terminal-shell">
+              {terminalWorkingDirectoryResolved ? (
+                <XTermView
+                  className="linear-issue-terminal"
+                  workingDirectory={terminalWorkingDirectory}
+                  sessionKey={issueId}
+                />
+              ) : null}
+            </div>
+          ) : issue ? (
+            <article className="linear-issue">
+              <header className="linear-issue-header">
                   <h1 className="linear-issue-title">{issue.title}</h1>
-                </header>
-                <div className="linear-issue-body-editor">
-                  <TiptapEditor
-                    value={descriptionDraft}
-                    onChange={handleDescriptionChange}
-                    onFocus={handleDescriptionFocus}
-                    onBlur={handleDescriptionBlur}
-                    format="markdown"
-                    placeholder="Add a description…"
-                    className="linear-issue-tiptap"
-                  />
-                </div>
-              </article>
-            )}
-          </div>
-        )}
+              </header>
+              <div className="linear-issue-body-editor">
+                <TiptapEditor
+                  value={descriptionDraft}
+                  onChange={handleDescriptionChange}
+                  onFocus={handleDescriptionFocus}
+                  onBlur={handleDescriptionBlur}
+                  format="markdown"
+                  placeholder="Add a description…"
+                  className="linear-issue-tiptap"
+                />
+              </div>
+            </article>
+          ) : null}
+        </div>
       </div>
 
       {issue ? (
@@ -310,6 +354,10 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
               watcherActive={watcherActive}
               viewMode={contentMode}
               onViewModeChange={setContentMode}
+              terminalSessionActive={terminalSessionActive}
+              terminalAgentWorking={terminalAgentWorking}
+              terminalAgentWaiting={terminalAgentWaiting}
+              terminalDebugLabel={terminalDebugLabel}
             />
             <div className="linear-issue-details-scroll">
               <LinearIssueDetailsPanel

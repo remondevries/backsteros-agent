@@ -83,11 +83,19 @@ export function LinearIssueActionBar({
   watcherActive = false,
   viewMode = "issue",
   onViewModeChange,
+  terminalSessionActive = false,
+  terminalAgentWorking = false,
+  terminalAgentWaiting = false,
+  terminalDebugLabel = "",
 }: {
   issue: LinearIssueDetail;
   watcherActive?: boolean;
   viewMode?: LinearIssueViewMode;
   onViewModeChange?: (mode: LinearIssueViewMode) => void;
+  terminalSessionActive?: boolean;
+  terminalAgentWorking?: boolean;
+  terminalAgentWaiting?: boolean;
+  terminalDebugLabel?: string;
 }) {
   const [copiedField, setCopiedField] = useState<"id" | "branch" | null>(null);
 
@@ -128,7 +136,14 @@ export function LinearIssueActionBar({
       aria-label="Issue actions"
     >
       {watcherActive && onViewModeChange ? (
-        <LinearIssueViewModeToggle mode={viewMode} onChange={onViewModeChange} />
+        <LinearIssueViewModeToggle
+          mode={viewMode}
+          onChange={onViewModeChange}
+          terminalSessionActive={terminalSessionActive}
+          terminalAgentWorking={terminalAgentWorking}
+          terminalAgentWaiting={terminalAgentWaiting}
+          terminalDebugLabel={terminalDebugLabel}
+        />
       ) : null}
       <div className="linear-issue-action-bar__actions">
         <ActionButton label="Open in Linear" title="Open Linear URL" onClick={handleOpenUrl}>

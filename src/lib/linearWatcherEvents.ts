@@ -5,6 +5,7 @@ import {
   type LinearWatcherPollEvent,
   type LinearWatcherStreamEvent,
 } from "./notificationPayloads";
+import { appendLinearWatcherActivityLog } from "./linearWatcherActivityLog";
 import { pushNotification } from "./notifications";
 
 const streamListeners = new Set<(event: LinearWatcherStreamEvent) => void>();
@@ -39,6 +40,7 @@ export function handleLinearWatcherStreamEvent(event: LinearWatcherStreamEvent):
     return false;
   }
 
+  appendLinearWatcherActivityLog(event);
   const notification = linearWatcherChangeToNotification(event);
   pushNotification(notification);
   return true;

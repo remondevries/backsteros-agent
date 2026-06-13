@@ -5,7 +5,7 @@ const ST_FINAL: u8 = b'\\';
 
 const OSC_MAX: usize = 2048;
 
-const DEFAULT_AGENTS: &[&str] = &["claude", "codex"];
+const DEFAULT_AGENTS: &[&str] = &["claude", "codex", "cursor", "cursor-agent", "cursor-cli"];
 
 // OSC 777 marker our Claude Code hooks emit via `terminalSequence`.
 const BACKSTEROS_MARKER: &[u8] = b"notify;BacksterOS;";
@@ -234,10 +234,19 @@ impl AgentDetector {
             if token.starts_with('-') {
                 continue;
             }
+            if token.eq_ignore_ascii_case("@cursor/cli")
+                || token.eq_ignore_ascii_case("@cursor/agent")
+            {
+                return Some("cursor".into());
+            }
             let base = token.rsplit(['/', '\\']).next().unwrap_or(token);
             if let Some(agent) = self.agents.iter().find(|a| {
                 base.strip_prefix(a.as_str())
-                    .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
+                    .is_some_and(|rest| {
+                        rest.is_empty()
+                            || rest.starts_with('-')
+                            || rest.eq_ignore_ascii_case(".exe")
+                    })
             }) {
                 return Some(agent.clone());
             }
@@ -282,6 +291,30 @@ mod tests {
         );
         let mut d2 = AgentDetector::new();
         assert_eq!(run(&mut d2, &osc("133;C;npx claude")), vec![started("claude")]);
+    }
+
+    #[test]
+    fn arms_on_cursor_cli_variants() {
+        let mut d = AgentDetector::new();
+        assert_eq!(run(&mut d, &osc("133;C;cursor agent run")), vec![started("cursor")]);
+
+        let mut d2 = AgentDetector::new();
+        assert_eq!(
+            run(&mut d2, &osc("133;C;/opt/homebrew/bin/cursor-agent chat")),
+            vec![started("cursor")]
+        );
+
+        let mut d3 = AgentDetector::new();
+        assert_eq!(run(&mut d3, &osc("133;C;cursor-cli execute")), vec![started("cursor")]);
+
+        let mut d4 = AgentDetector::new();
+        assert_eq!(run(&mut d4, &osc("133;C;npx @cursor/cli run")), vec![started("cursor")]);
+
+        let mut d5 = AgentDetector::new();
+        assert_eq!(
+            run(&mut d5, &osc("133;C;C:\\tools\\cursor.exe agent")),
+            vec![started("cursor")]
+        );
     }
 
     #[test]

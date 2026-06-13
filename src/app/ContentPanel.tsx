@@ -12,8 +12,10 @@ import {
   useContentPanelNavigation,
 } from "./contentPanelNavigation";
 import { ContentPanelMainSlot } from "./ContentPanelMainSlot";
+import { LinearStatusIcon } from "../chat/LinearStatusIcon";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
+import { sidebarNavItemIcon } from "./sidebarNavConfig";
 
 const CONTENT_PANEL_SIDEBAR_WIDTH_KEY = "backsteros.layout.contentPanelWidth";
 const DEFAULT_CONTENT_TAB_LABEL = "Workspace";
@@ -63,6 +65,37 @@ function buildContentTabLabel({
   }
 
   return DEFAULT_CONTENT_TAB_LABEL;
+}
+
+function resolveContentTabIcon({
+  activeVaultNavItem,
+  linearSelection,
+  activeLinearDocument,
+  activeLinearIssue,
+}: {
+  activeVaultNavItem: SidebarNavItemId | null;
+  linearSelection: ReturnType<typeof useContentPanelNavigation>["linearSelection"];
+  activeLinearDocument: ReturnType<typeof useContentPanelNavigation>["activeLinearDocument"];
+  activeLinearIssue: ReturnType<typeof useContentPanelNavigation>["activeLinearIssue"];
+}): ReactNode | undefined {
+  if (activeLinearIssue) {
+    return (
+      <LinearStatusIcon
+        status={activeLinearIssue.status}
+        stateType={activeLinearIssue.stateType}
+      />
+    );
+  }
+
+  if (activeVaultNavItem) {
+    return sidebarNavItemIcon(activeVaultNavItem);
+  }
+
+  if (linearSelection || activeLinearDocument) {
+    return sidebarNavItemIcon("projects");
+  }
+
+  return undefined;
 }
 
 function ContentPanelFrame({
@@ -253,7 +286,16 @@ function ContentPanelFrame({
   return (
     <div className="content-panel-shell">
       <ContentPanelTabsBar
-        tabs={tabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+        tabs={tabs.map((tab) => {
+          const isActiveTab = tab.id === activeTabId;
+          const icon = resolveContentTabIcon({
+            activeVaultNavItem: isActiveTab ? activeVaultNavItem : tab.activeVaultNavItem,
+            linearSelection: isActiveTab ? linearSelection : tab.snapshot.linearSelection,
+            activeLinearDocument: isActiveTab ? activeLinearDocument : tab.snapshot.activeLinearDocument,
+            activeLinearIssue: isActiveTab ? activeLinearIssue : tab.snapshot.activeLinearIssue,
+          });
+          return { id: tab.id, label: tab.label, icon };
+        })}
         activeTabId={activeTabId}
         onSelectTab={handleSelectTab}
         onAddTab={handleAddTab}

@@ -2,7 +2,7 @@ import { ensureMonoFontsLoaded } from "../../../lib/fonts";
 import { useTerminalPreferences } from "../preferences";
 import { invoke } from "@tauri-apps/api/core";
 import type { SearchAddon } from "@xterm/addon-search";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { DormantRing } from "./dormantRing";
 import {
   createShellIntegrationState,
@@ -10,7 +10,12 @@ import {
   registerPromptTracker,
 } from "./osc-handlers";
 import { openPty, type PtySession } from "./pty-bridge";
-import { ensureAgentActivityListener, isAgentActivePty } from "./agentActivity";
+import {
+  ensureAgentActivityListener,
+  isAgentActivePty,
+  isAgentWaitingPty,
+  isAgentWorkingPty,
+} from "./agentActivity";
 import {
   acquireSlot,
   applyBackgroundActive,
@@ -66,6 +71,108 @@ type Session = {
 };
 
 const sessions = new Map<number, Session>();
+
+export function isLeafSessionActive(leafId: number): boolean {
+  const session = sessions.get(leafId);
+  if (!session || session.disposed) return false;
+  return session.pty !== null || session.ptyOpening;
+}
+
+const leafSessionActiveListeners = new Set<() => void>();
+let leafSessionActiveTick: ReturnType<typeof setInterval> | null = null;
+
+function startLeafSessionActiveTick(): void {
+  if (leafSessionActiveTick !== null) return;
+  leafSessionActiveTick = setInterval(() => {
+    for (const listener of leafSessionActiveListeners) {
+      listener();
+    }
+  }, 700);
+}
+
+function stopLeafSessionActiveTick(): void {
+  if (leafSessionActiveTick === null) return;
+  clearInterval(leafSessionActiveTick);
+  leafSessionActiveTick = null;
+}
+
+function subscribeLeafSessionActive(listener: () => void): () => void {
+  leafSessionActiveListeners.add(listener);
+  startLeafSessionActiveTick();
+  return () => {
+    leafSessionActiveListeners.delete(listener);
+    if (leafSessionActiveListeners.size === 0) {
+      stopLeafSessionActiveTick();
+    }
+  };
+}
+
+export function useLeafSessionActive(leafId: number): boolean {
+  return useSyncExternalStore(
+    (listener) => subscribeLeafSessionActive(listener),
+    () => isLeafSessionActive(leafId),
+    () => false,
+  );
+}
+
+export function isLeafAgentActive(leafId: number): boolean {
+  const session = sessions.get(leafId);
+  if (!session || session.disposed || !session.pty) return false;
+  return isAgentActivePty(session.pty.id);
+}
+
+export function useLeafAgentActive(leafId: number): boolean {
+  return useSyncExternalStore(
+    (listener) => subscribeLeafSessionActive(listener),
+    () => isLeafAgentActive(leafId),
+    () => false,
+  );
+}
+
+export function isLeafAgentWorking(leafId: number): boolean {
+  const session = sessions.get(leafId);
+  if (!session || session.disposed || !session.pty) return false;
+  const ptyId = session.pty.id;
+  // An explicit attention/finished marker means the agent is idle/awaiting
+  // input. It must win over the commandRunning proxy below, because an
+  // interactive agent CLI is one long-lived foreground command that keeps
+  // commandRunning=true for its entire lifetime.
+  if (isAgentWaitingPty(ptyId)) {
+    return false;
+  }
+  if (isAgentWorkingPty(ptyId)) {
+    return true;
+  }
+  // Fallback for marker-less agents: a running foreground command implies work.
+  return session.commandRunning && isAgentActivePty(ptyId);
+}
+
+export function useLeafAgentWorking(leafId: number): boolean {
+  return useSyncExternalStore(
+    (listener) => subscribeLeafSessionActive(listener),
+    () => isLeafAgentWorking(leafId),
+    () => false,
+  );
+}
+
+export function isLeafAgentWaiting(leafId: number): boolean {
+  const session = sessions.get(leafId);
+  if (!session || session.disposed || !session.pty) return false;
+  const ptyId = session.pty.id;
+  if (!isAgentActivePty(ptyId)) return false;
+  // Trust the explicit waiting marker even while a foreground command is
+  // running: the agent CLI itself keeps commandRunning=true the whole time it
+  // is open, so it cannot be used to disqualify the waiting state.
+  return isAgentWaitingPty(ptyId);
+}
+
+export function useLeafAgentWaiting(leafId: number): boolean {
+  return useSyncExternalStore(
+    (listener) => subscribeLeafSessionActive(listener),
+    () => isLeafAgentWaiting(leafId),
+    () => false,
+  );
+}
 
 const readyLeaves = new Set<number>();
 const readyWaiters = new Map<

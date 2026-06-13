@@ -139,7 +139,21 @@ export function LinearProjectContent({
       <LinearProjectViewTabs
         selectionKind={selection.kind}
         activeView={activeView}
-        onChange={setActiveView}
+        onChange={(nextView) => {
+          if (selection.kind === "project" && nextView === "issues" && activeView === "issues") {
+            if (issuesSettingsOpen) {
+              setIssuesSettingsOpen(false);
+              return;
+            }
+            const nextMode = issuesPanelMode === "list" ? "board" : "list";
+            setIssuesPanelMode(nextMode);
+            return;
+          }
+          setActiveView(nextView);
+          if (nextView === "issues" && issuesSettingsOpen) {
+            setIssuesSettingsOpen(false);
+          }
+        }}
         showCollectionModeToggle={showCollectionModeToggle}
         collectionMode={collectionMode}
         onCollectionModeChange={(mode) => {

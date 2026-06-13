@@ -10,8 +10,16 @@ function BreadcrumbSegmentContent({
 }) {
   if (segment.kind === "linear-logo") {
     return (
-      <span className="content-panel-breadcrumb-icon" aria-label={segment.label} title={segment.label}>
-        <LinearIcon size={14} />
+      <span className="content-panel-breadcrumb-logo" title={segment.label}>
+        <span className="content-panel-breadcrumb-icon">
+          <LinearIcon size={14} />
+        </span>
+        <span
+          className={isLast ? "content-panel-breadcrumb-current" : "content-panel-breadcrumb-logo-label"}
+          aria-current={isLast ? "page" : undefined}
+        >
+          {segment.label}
+        </span>
       </span>
     );
   }

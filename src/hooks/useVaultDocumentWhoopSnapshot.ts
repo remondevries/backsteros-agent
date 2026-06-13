@@ -5,30 +5,52 @@ import { whoopSnapshotFromStats } from "../lib/whoopSnapshotFromStats";
 
 export function useVaultDocumentWhoopSnapshot(
   document: VaultDocumentContent | null,
-  options?: { refreshKey?: number },
+  options?: { refreshKey?: number; expectedPath?: string },
 ) {
   const [liveSnapshot, setLiveSnapshot] = useState<WhoopSnapshotEntity | null>(null);
   const [loadingLive, setLoadingLive] = useState(false);
+  const expectedPath = options?.expectedPath ?? null;
+  const documentPath = document?.path ?? null;
+  const documentDate = document?.date ?? null;
+  const pathMatches = !expectedPath || expectedPath === documentPath;
 
   const frontmatterSnapshot = useMemo(() => {
-    if (!document?.date || !document.whoop) return null;
+    if (!pathMatches || !document?.date || !document.whoop) return null;
     return whoopSnapshotFromStats(document.date, document.whoop);
-  }, [document?.date, document?.whoop]);
+  }, [documentDate, document?.whoop, pathMatches]);
+  const datedFallbackSnapshot = useMemo<WhoopSnapshotEntity | null>(() => {
+    if (!pathMatches || !documentDate) return null;
+    return {
+      id: `whoop-${documentDate}`,
+      date: documentDate,
+      sleepPerformance: null,
+      recoveryScore: null,
+      strainScore: null,
+    };
+  }, [documentDate, pathMatches]);
 
   useEffect(() => {
-    if (frontmatterSnapshot || !document?.date) {
+    if (!pathMatches) {
+      setLiveSnapshot(null);
+      setLoadingLive(false);
+      return;
+    }
+
+    if (frontmatterSnapshot || !documentDate) {
       setLiveSnapshot(null);
       setLoadingLive(false);
       return;
     }
 
     let cancelled = false;
+    // Clear stale snapshot while resolving fresh Whoop state for this note/date.
+    setLiveSnapshot(null);
     setLoadingLive(true);
 
     void (async () => {
       try {
         const today = await fetchVaultDailyNoteToday();
-        if (cancelled || today.note.date !== document.date) {
+        if (cancelled || today.note.date !== documentDate) {
           return;
         }
 
@@ -48,10 +70,10 @@ export function useVaultDocumentWhoopSnapshot(
     return () => {
       cancelled = true;
     };
-  }, [document?.date, frontmatterSnapshot, options?.refreshKey]);
+  }, [documentDate, documentPath, frontmatterSnapshot, options?.refreshKey, pathMatches]);
 
   return {
-    snapshot: frontmatterSnapshot ?? liveSnapshot,
-    loading: loadingLive && !frontmatterSnapshot,
+    snapshot: pathMatches ? frontmatterSnapshot ?? liveSnapshot ?? datedFallbackSnapshot : null,
+    loading: pathMatches ? loadingLive && !frontmatterSnapshot : false,
   };
 }

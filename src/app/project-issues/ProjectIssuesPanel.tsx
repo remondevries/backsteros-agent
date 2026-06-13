@@ -14,6 +14,7 @@ import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
 import { useCollapsibleGroups } from "../workspace-list/useCollapsibleGroups";
 import { ProjectIssueRow } from "./ProjectIssueRow";
+import { requestLinearIssueViewMode } from "./issueViewModeIntent";
 
 export function ProjectIssuesPanel({
   projectId,
@@ -53,8 +54,11 @@ export function ProjectIssuesPanel({
   });
 
   const openLinearIssue = useCallback(
-    (issue: LinearIssueEntity) => {
+    (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
       if (draggingIssueId) return;
+      if (mode === "terminal") {
+        requestLinearIssueViewMode(issue.id, "terminal");
+      }
       setActiveLinearIssue({
         id: issue.id,
         identifier: issue.identifier ?? issue.id,
@@ -153,6 +157,9 @@ export function ProjectIssuesPanel({
             onPointerDragStart={handlePointerDragStart}
             onClick={() => {
               openLinearIssue(issue);
+            }}
+            onTerminalIndicatorClick={() => {
+              openLinearIssue(issue, "terminal");
             }}
           />
         )}

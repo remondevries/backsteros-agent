@@ -1,6 +1,11 @@
+import type { ReactNode } from "react";
+import { useContentPanelNavigation } from "./contentPanelNavigation";
+import { RefreshIcon } from "./RefreshIcon";
+
 type ContentPanelTab = {
   id: string;
   label: string;
+  icon?: ReactNode;
 };
 
 function ContentPanelTabIcon() {
@@ -28,6 +33,10 @@ export function ContentPanelTabsBar({
   onSelectTab: (tabId: string) => void;
   onAddTab: () => void;
 }) {
+  const { contentPanelBarState } = useContentPanelNavigation();
+  const refreshing = contentPanelBarState?.refreshing ?? false;
+  const onRefresh = contentPanelBarState?.onRefresh ?? null;
+
   return (
     <header className="content-panel-tabs-bar">
       <div className="content-panel-tabs-list" role="tablist" aria-label="Content tabs">
@@ -50,7 +59,7 @@ export function ContentPanelTabsBar({
             >
               <span className="content-panel-tab-content">
                 <span className="content-panel-tab-icon" aria-hidden="true">
-                  <ContentPanelTabIcon />
+                  {tab.icon ?? <ContentPanelTabIcon />}
                 </span>
                 <span className="content-panel-tab-label">{tab.label}</span>
               </span>
@@ -67,6 +76,16 @@ export function ContentPanelTabsBar({
           onClick={onAddTab}
         >
           +
+        </button>
+        <button
+          type="button"
+          className="content-panel-tab-refresh"
+          onClick={onRefresh ?? undefined}
+          disabled={!onRefresh || refreshing}
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          <RefreshIcon spinning={refreshing} />
         </button>
       </div>
     </header>

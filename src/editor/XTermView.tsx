@@ -1,25 +1,35 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { isTauriRuntime } from "../lib/tauriRuntime";
-import { disposeSession, useTerminalSession } from "../modules/terminal/lib/useTerminalSession";
-
-/** Single embedded terminal in LinearIssueView — one stable session across remounts. */
-const EMBEDDED_TERMINAL_LEAF_ID = 1;
+import {
+  disposeSession,
+  respawnSession,
+  useTerminalSession,
+} from "../modules/terminal/lib/useTerminalSession";
+import { resolveTerminalLeafId } from "../modules/terminal/leafId";
+const SESSION_DISPOSE_DELAY_MS = 60 * 60 * 1000;
+const pendingSessionDisposals = new Map<number, ReturnType<typeof setTimeout>>();
 
 export function XTermView({
   className,
   workingDirectory,
+  sessionKey,
 }: {
   className?: string;
   workingDirectory?: string | null;
+  sessionKey?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const leafId = useMemo(() => resolveTerminalLeafId(sessionKey), [sessionKey]);
 
   const { focus } = useTerminalSession({
-    leafId: EMBEDDED_TERMINAL_LEAF_ID,
+    leafId,
     container: containerRef,
     visible: true,
     focused: true,
     initialCwd: workingDirectory?.trim() || undefined,
+    onExit: () => {
+      void respawnSession(leafId);
+    },
   });
 
   useEffect(() => {
@@ -28,10 +38,20 @@ export function XTermView({
   }, [focus]);
 
   useEffect(() => {
+    const existingDisposeTimer = pendingSessionDisposals.get(leafId);
+    if (existingDisposeTimer) {
+      clearTimeout(existingDisposeTimer);
+      pendingSessionDisposals.delete(leafId);
+    }
+
     return () => {
-      disposeSession(EMBEDDED_TERMINAL_LEAF_ID);
+      const disposeTimer = setTimeout(() => {
+        pendingSessionDisposals.delete(leafId);
+        disposeSession(leafId);
+      }, SESSION_DISPOSE_DELAY_MS);
+      pendingSessionDisposals.set(leafId, disposeTimer);
     };
-  }, []);
+  }, [leafId]);
 
   if (!isTauriRuntime()) {
     return (

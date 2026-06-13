@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   fetchLinearProjectWatcherConfig,
   updateLinearProjectWatcherConfig,
   type LinearProjectWatcherConfig,
 } from "../../lib/api";
+import {
+  getLinearWatcherActivityLogEntries,
+  subscribeToLinearWatcherActivityLog,
+  type LinearWatcherActivityLogEntry,
+} from "../../lib/linearWatcherActivityLog";
 import { ResizablePanel } from "../ResizablePanel";
 
 const LINEAR_WATCHER_SETTINGS_WIDTH_KEY = "backsteros.layout.linearWatcherSettingsWidth";
+const WATCHER_LOG_INITIAL_ROWS = 120;
+const WATCHER_LOG_PAGE_ROWS = 120;
+const WATCHER_LOG_MAX_ENTRIES = 2000;
 
 const POLL_INTERVAL_OPTIONS = [
   { value: 15_000, label: "Every 15 seconds" },
@@ -20,6 +28,37 @@ function defaultWatcherConfig(): LinearProjectWatcherConfig {
     pollIntervalMs: 30_000,
     statusChangesOnly: true,
   };
+}
+
+function formatWatcherLogTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+}
+
+function WatcherLogList({ entries }: { entries: LinearWatcherActivityLogEntry[] }) {
+  return (
+    <ol className="linear-issue-watchers-log-list" aria-live="polite">
+      {entries.map((entry) => (
+        <li key={entry.id} className="linear-issue-watchers-log-item">
+          <div className="linear-issue-watchers-log-item-header">
+            <span className="linear-issue-watchers-log-item-identifier">{entry.identifier}</span>
+            <time
+              className="linear-issue-watchers-log-item-time"
+              dateTime={entry.detectedAt}
+              title={entry.detectedAt}
+            >
+              {formatWatcherLogTimestamp(entry.detectedAt)}
+            </time>
+          </div>
+          <p className="linear-issue-watchers-log-item-summary">{entry.summary}</p>
+          <p className="linear-issue-watchers-log-item-title">{entry.title}</p>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function WatcherConfigSection({
@@ -136,6 +175,35 @@ export function LinearIssueWatchersConfigPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [logVersion, setLogVersion] = useState(0);
+  const [visibleRows, setVisibleRows] = useState(WATCHER_LOG_INITIAL_ROWS);
+
+  useEffect(() => {
+    return subscribeToLinearWatcherActivityLog((entry) => {
+      if (entry.projectId !== projectId) return;
+      setLogVersion((current) => current + 1);
+      setVisibleRows((current) => current + 1);
+    });
+  }, [projectId]);
+
+  useEffect(() => {
+    setVisibleRows(WATCHER_LOG_INITIAL_ROWS);
+  }, [projectId]);
+
+  const logEntries = useMemo(
+    () =>
+      getLinearWatcherActivityLogEntries({
+        projectId,
+        limit: WATCHER_LOG_MAX_ENTRIES,
+      }),
+    [logVersion, projectId],
+  );
+  const visibleLogEntries = useMemo(
+    () => logEntries.slice(0, visibleRows),
+    [logEntries, visibleRows],
+  );
+  const canLoadMoreLogs = visibleLogEntries.length < logEntries.length;
+  const remainingLogRows = logEntries.length - visibleLogEntries.length;
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -205,9 +273,33 @@ export function LinearIssueWatchersConfigPanel({
       <div className="linear-issue-main">
         <div className="linear-issue-scroll linear-issue-watchers-log-scroll">
           <div className="linear-issue-watchers-log">
-            <div className="linear-issue-watchers-log-empty" aria-live="polite">
-              <p>Watcher activity will appear here.</p>
-            </div>
+            {logEntries.length > 0 ? (
+              <>
+                <p className="linear-issue-watchers-log-count">
+                  Showing {visibleLogEntries.length} of {logEntries.length} recent watcher events.
+                </p>
+                <WatcherLogList entries={visibleLogEntries} />
+                {canLoadMoreLogs ? (
+                  <div className="linear-issue-watchers-log-actions">
+                    <button
+                      type="button"
+                      className="linear-issue-watchers-log-load-more"
+                      onClick={() => {
+                        setVisibleRows((current) =>
+                          Math.min(logEntries.length, current + WATCHER_LOG_PAGE_ROWS),
+                        );
+                      }}
+                    >
+                      Load {Math.min(WATCHER_LOG_PAGE_ROWS, remainingLogRows)} more
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="linear-issue-watchers-log-empty" aria-live="polite">
+                <p>Watcher activity will appear here.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

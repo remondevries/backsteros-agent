@@ -76,18 +76,22 @@ function AppMainShell({
   toggleRightSidePanel: () => void;
   toggleContentPanelSidebar: () => void;
 }) {
-  const { activeLinearDocument, resetProjectsOverview } = useContentPanelNavigation();
+  const { activeLinearDocument, clearActiveVaultDocument, resetProjectsOverview } =
+    useContentPanelNavigation();
   const showContentPanelSidebar =
     contentPanelSidebarOpen && activeLinearDocument === null;
 
   const handleVaultNavItemChange = useCallback(
     (item: SidebarNavItemId | null) => {
-      if (item === "projects") {
+      const switchingNavItem = item !== activeVaultNavItem;
+      if (switchingNavItem) {
+        // Always reset focused content when moving between nav destinations.
+        clearActiveVaultDocument();
         resetProjectsOverview();
       }
       onVaultNavItemChange(item);
     },
-    [onVaultNavItemChange, resetProjectsOverview],
+    [activeVaultNavItem, clearActiveVaultDocument, onVaultNavItemChange, resetProjectsOverview],
   );
 
   useSidePanelToggleShortcuts({

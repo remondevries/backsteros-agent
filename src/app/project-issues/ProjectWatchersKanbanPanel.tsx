@@ -9,6 +9,7 @@ import {
   type MouseEvent,
 } from "react";
 import { LinearAssigneeAvatar } from "../../chat/LinearAssigneeAvatar";
+import { DotScrollLoader } from "../../chat/DotScrollLoader";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import type { LinearIssueEntity } from "../../chat/types";
@@ -16,8 +17,16 @@ import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
 import { fetchLinearIssueDetail, updateLinearIssueDetail } from "../../lib/api";
 import { formatIssueDueMetaLabel, linearIssueTitleForCardDisplay } from "../../lib/linearIssueDisplay";
+import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
+import {
+  useLeafAgentWaiting,
+  useLeafAgentWorking,
+  useLeafSessionActive,
+} from "../../modules/terminal/lib/useTerminalSession";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { requestLinearIssueViewMode } from "./issueViewModeIntent";
+import { LinearIssueEstimateIcon } from "./LinearIssueDetailsPropertyDropdown";
 
 const CREATED_AT_THIS_YEAR_FORMATTER = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -208,14 +217,20 @@ function computeDropIndicator(
 function ProjectWatchersIssueCard({
   issue,
   onOpen,
+  onOpenTerminal,
   onPointerDragStart,
   dragging,
 }: {
   issue: LinearIssueEntity;
   onOpen: (issue: LinearIssueEntity) => void;
+  onOpenTerminal: (issue: LinearIssueEntity) => void;
   onPointerDragStart: (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => void;
   dragging: boolean;
 }) {
+  const terminalLeafId = useMemo(() => resolveTerminalLeafId(issue.id), [issue.id]);
+  const terminalSessionActive = useLeafSessionActive(terminalLeafId);
+  const terminalAgentWorking = useLeafAgentWorking(terminalLeafId);
+  const terminalAgentWaiting = useLeafAgentWaiting(terminalLeafId);
   const issueId = issue.identifier?.trim() || issue.id;
   const dueLabel = formatIssueDueMetaLabel(issue.dueDate);
   const priorityLabel = (issue.priorityLabel?.trim() || getPriorityLabel(issue.priority)).trim();
@@ -227,6 +242,12 @@ function ProjectWatchersIssueCard({
   const createdAtLabel = formatIssueCreatedAtLabel(issue.createdAt);
   const assignee = issue.assigneeName?.trim() || null;
   const displayTitle = linearIssueTitleForCardDisplay(issue.title);
+  const hasTerminalIndicator = terminalSessionActive;
+
+  const isTerminalIndicatorTarget = (event: MouseEvent<HTMLButtonElement>): boolean => {
+    const target = event.target as HTMLElement | null;
+    return Boolean(target?.closest('[data-terminal-indicator="true"]'));
+  };
 
   return (
     <li className="project-watchers-kanban-card-item">
@@ -240,9 +261,16 @@ function ProjectWatchersIssueCard({
           .join(" ")}
         draggable={false}
         onMouseDown={(event) => {
+          if (hasTerminalIndicator && isTerminalIndicatorTarget(event)) {
+            return;
+          }
           onPointerDragStart(issue, event);
         }}
-        onClick={() => {
+        onClick={(event) => {
+          if (hasTerminalIndicator && isTerminalIndicatorTarget(event)) {
+            onOpenTerminal(issue);
+            return;
+          }
           onOpen(issue);
         }}
       >
@@ -257,13 +285,45 @@ function ProjectWatchersIssueCard({
         <span className="project-watchers-kanban-card-title-row">
           <span
             className="project-watchers-kanban-card-status"
-            title={issue.status?.trim() || "Unknown"}
+            title={
+              terminalSessionActive
+                ? terminalAgentWorking
+                  ? "Terminal agent working"
+                  : terminalAgentWaiting
+                    ? "Terminal agent waiting"
+                    : "Terminal session active"
+                : issue.status?.trim() || "Unknown"
+            }
           >
-            <LinearStatusIcon
-              status={issue.status}
-              stateType={issue.stateType}
-              title={issue.status?.trim() || "Unknown"}
-            />
+            {terminalSessionActive && terminalAgentWorking ? (
+              <DotScrollLoader
+                className="project-watchers-kanban-card-terminal-loader"
+                aria-label="Agent working in terminal"
+                data-terminal-indicator="true"
+              />
+            ) : null}
+            {terminalSessionActive && terminalAgentWaiting ? (
+              <DotScrollLoader
+                className="project-watchers-kanban-card-terminal-loader"
+                status="waiting"
+                aria-label="Agent waiting in terminal"
+                data-terminal-indicator="true"
+              />
+            ) : null}
+            {terminalSessionActive && !terminalAgentWorking && !terminalAgentWaiting ? (
+              <span
+                className="linear-issue-terminal-session-dot project-watchers-kanban-card-terminal-dot"
+                aria-hidden="true"
+                data-terminal-indicator="true"
+              />
+            ) : null}
+            {!terminalSessionActive ? (
+              <LinearStatusIcon
+                status={issue.status}
+                stateType={issue.stateType}
+                title={issue.status?.trim() || "Unknown"}
+              />
+            ) : null}
           </span>
           <span className="project-watchers-kanban-card-title" title={issue.title}>
             {displayTitle}
@@ -280,7 +340,10 @@ function ProjectWatchersIssueCard({
           ) : null}
           {estimateLabel ? (
             <span className="project-watchers-kanban-card-meta-pill" title={estimateLabel}>
-              {estimateLabel}
+              <span className="project-watchers-kanban-card-meta-pill-icon" aria-hidden="true">
+                <LinearIssueEstimateIcon />
+              </span>
+              <span>{estimateLabel}</span>
             </span>
           ) : null}
           {tags.map((label) => (
@@ -342,7 +405,10 @@ export function ProjectWatchersKanbanPanel({
   });
 
   const openLinearIssue = useCallback(
-    (issue: LinearIssueEntity) => {
+    (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
+      if (mode === "terminal") {
+        requestLinearIssueViewMode(issue.id, "terminal");
+      }
       setActiveLinearIssue({
         id: issue.id,
         identifier: issue.identifier ?? issue.id,
@@ -681,7 +747,12 @@ export function ProjectWatchersKanbanPanel({
                     ) : null}
                     <ProjectWatchersIssueCard
                       issue={issue}
-                      onOpen={openLinearIssue}
+                      onOpen={(selectedIssue) => {
+                        openLinearIssue(selectedIssue);
+                      }}
+                      onOpenTerminal={(selectedIssue) => {
+                        openLinearIssue(selectedIssue, "terminal");
+                      }}
                       onPointerDragStart={handlePointerDragStart}
                       dragging={draggingIssueId === issue.id}
                     />

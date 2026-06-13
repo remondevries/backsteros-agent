@@ -56,7 +56,7 @@ export function LinearProjectViewTabs({
     <div className="linear-project-view-tabs">
       <div className="linear-project-view-tabs-list" role="tablist" aria-label="Team and project views">
         {views.map((view) => {
-          const active = activeView === view.id;
+          const active = activeView === view.id && !(issuesSettingsActive && view.id === "issues");
           return (
             <button
               key={view.id}
@@ -79,6 +79,7 @@ export function LinearProjectViewTabs({
               onChange={(mode) => onCollectionModeChange?.(mode)}
               options={collectionToggleOptions}
               ariaLabel={collectionToggleAriaLabel}
+              neutral={issuesSettingsActive}
             />
           ) : null}
           {showIssuesSettingsButton ? (

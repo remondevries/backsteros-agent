@@ -24,11 +24,14 @@ export function VaultFolderExplorer({
   const { activeVaultDocument, setActiveVaultDocument } = useContentPanelNavigation();
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { entries, loading, error } = useVaultDirectory(relativePath, enabled);
+  const showDailySearch = activeNavItem === "daily";
 
   useEffect(() => {
     setRelativePath(vaultNavItemLabel(activeNavItem));
+    setSearchQuery("");
   }, [activeNavItem]);
 
   const openVaultNote = (path: string, title: string) => {
@@ -47,19 +50,53 @@ export function VaultFolderExplorer({
     });
   }, [relativePath]);
 
+  const orderedEntries = useMemo(() => {
+    if (entries.length <= 1) return entries;
+    const directories = entries.filter((entry) => entry.kind === "directory");
+    const filesNewestFirst = entries
+      .filter((entry) => entry.kind === "file")
+      .slice()
+      .reverse();
+    return [...directories, ...filesNewestFirst];
+  }, [entries]);
+
+  const filteredEntries = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!showDailySearch || query.length === 0) {
+      return orderedEntries;
+    }
+    return orderedEntries.filter((entry) => {
+      const entryLabel =
+        entry.kind === "file" ? formatVaultNoteDisplayName(entry.name) : entry.name;
+      return entryLabel.toLocaleLowerCase().includes(query);
+    });
+  }, [orderedEntries, searchQuery, showDailySearch]);
+
   useContentPanelSidebarBreadcrumbs(sidebarBreadcrumbs, enabled);
 
   return (
     <div className="vault-folder-explorer">
+      {showDailySearch ? (
+        <div className="vault-folder-explorer-search">
+          <input
+            type="search"
+            className="vault-folder-explorer-search-input"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search daily notes…"
+            aria-label="Search daily notes"
+          />
+        </div>
+      ) : null}
       {loading ? <p className="vault-folder-explorer-status">Loading…</p> : null}
       {error ? (
         <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{error}</p>
       ) : null}
 
       {!loading && !error ? (
-        entries.length > 0 ? (
+        filteredEntries.length > 0 ? (
           <ul className="vault-folder-explorer-list">
-            {entries.map((entry) => {
+            {filteredEntries.map((entry) => {
               const whoopSnapshot =
                 entry.kind === "file" && isDailyVaultNotePath(entry.path) && entry.date && entry.whoop
                   ? whoopSnapshotFromStats(entry.date, entry.whoop)
@@ -100,6 +137,8 @@ export function VaultFolderExplorer({
               );
             })}
           </ul>
+        ) : showDailySearch && searchQuery.trim().length > 0 ? (
+          <p className="vault-folder-explorer-status">No notes match that search.</p>
         ) : (
           <p className="vault-folder-explorer-status">This folder is empty.</p>
         )

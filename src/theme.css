@@ -24,9 +24,9 @@
   --link-hover: #a5c4ff;
   --accent: #4a78ff;
   --accent-soft: rgba(74, 120, 255, 0.08);
-  --tab-bg: transparent;
+  --tab-bg: #131416;
   --tab-border: var(--border-subtle);
-  --tab-bg-active: var(--bg-surface);
+  --tab-bg-active: #1c1d1f;
   --tab-border-active: var(--border-subtle);
   --model-mode-auto-bg: var(--bg-surface-3);
   --model-mode-test-bg: var(--accent);

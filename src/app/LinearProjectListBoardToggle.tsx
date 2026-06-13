@@ -14,17 +14,19 @@ export function LinearProjectListBoardToggle({
   onChange,
   options = DEFAULT_TOGGLE_OPTIONS,
   ariaLabel = "Issue view mode",
+  neutral = false,
 }: {
   mode: LinearProjectCollectionMode;
   onChange: (mode: LinearProjectCollectionMode) => void;
   options?: readonly LinearProjectCollectionToggleOption[];
   ariaLabel?: string;
+  neutral?: boolean;
 }) {
   const normalizedOptions =
     options.length === 2
       ? options
       : DEFAULT_TOGGLE_OPTIONS;
-  const activeIndex = normalizedOptions[0]?.mode === mode ? 0 : 1;
+  const activeIndex = neutral ? -1 : normalizedOptions[0]?.mode === mode ? 0 : 1;
 
   return (
     <div
@@ -35,7 +37,7 @@ export function LinearProjectListBoardToggle({
     >
       <span className="model-mode-indicator" aria-hidden="true" />
       {normalizedOptions.map((option) => {
-        const active = mode === option.mode;
+        const active = !neutral && mode === option.mode;
         return (
           <button
             key={option.mode}

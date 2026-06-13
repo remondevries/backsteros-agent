@@ -58,7 +58,7 @@ export function buildContentPanelBreadcrumbSegments(options: {
 
   const rootSegments: ContentPanelBreadcrumbSegment[] = activeVaultNavItem
     ? activeVaultNavItem === "projects"
-      ? [{ id: "nav-projects", label: "Linear", kind: "linear-logo" }]
+      ? [{ id: "nav-projects", label: "Projects", kind: "linear-logo" }]
       : [{ id: `nav-${activeVaultNavItem}`, label: sidebarNavItemLabel(activeVaultNavItem) }]
     : [{ id: "explorer", label: "Explorer" }];
 

@@ -1,4 +1,5 @@
-import type { MouseEvent } from "react";
+import { useMemo, type MouseEvent } from "react";
+import { DotScrollLoader } from "../../chat/DotScrollLoader";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearIssueEntity } from "../../chat/types";
@@ -6,6 +7,13 @@ import {
   formatIssueDueMetaLabel,
   linearIssueTitleForCardDisplay,
 } from "../../lib/linearIssueDisplay";
+import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
+import {
+  useLeafAgentWaiting,
+  useLeafAgentWorking,
+  useLeafSessionActive,
+} from "../../modules/terminal/lib/useTerminalSession";
+import { LinearIssueEstimateIcon } from "./LinearIssueDetailsPropertyDropdown";
 
 function CalendarIcon() {
   return (
@@ -24,36 +32,25 @@ function CalendarIcon() {
   );
 }
 
-function EstimateIcon() {
-  return (
-    <svg
-      className="project-issue-row__pill-icon"
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      aria-hidden="true"
-    >
-      <path
-        d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM7.25 4.5a.75.75 0 0 1 1.5 0v3.19l2.03 1.17a.75.75 0 1 1-.75 1.3L7.25 8.7V4.5Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 export function ProjectIssueRow({
   issue,
   grouped = true,
   dragging = false,
   onClick,
+  onTerminalIndicatorClick,
   onPointerDragStart,
 }: {
   issue: LinearIssueEntity;
   grouped?: boolean;
   dragging?: boolean;
   onClick: () => void;
+  onTerminalIndicatorClick?: () => void;
   onPointerDragStart?: (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
+  const terminalLeafId = useMemo(() => resolveTerminalLeafId(issue.id), [issue.id]);
+  const terminalSessionActive = useLeafSessionActive(terminalLeafId);
+  const terminalAgentWorking = useLeafAgentWorking(terminalLeafId);
+  const terminalAgentWaiting = useLeafAgentWaiting(terminalLeafId);
   const labels = issue.labels ?? [];
   const primaryLabel = labels[0];
   const dueLabel = formatIssueDueMetaLabel(issue.dueDate);
@@ -71,6 +68,12 @@ export function ProjectIssueRow({
 
   const labelTitle =
     labels.length > 1 ? labels.map((label) => label.name).join(" · ") : primaryLabel?.name;
+  const hasTerminalIndicator = terminalSessionActive;
+
+  const isTerminalIndicatorTarget = (event: MouseEvent<HTMLButtonElement>): boolean => {
+    const target = event.target as HTMLElement | null;
+    return Boolean(target?.closest('[data-terminal-indicator="true"]'));
+  };
 
   return (
     <li className="workspace-status-list__item">
@@ -79,9 +82,18 @@ export function ProjectIssueRow({
         className={rowClass}
         draggable={false}
         onMouseDown={(event) => {
+          if (hasTerminalIndicator && isTerminalIndicatorTarget(event)) {
+            return;
+          }
           onPointerDragStart?.(issue, event);
         }}
-        onClick={onClick}
+        onClick={(event) => {
+          if (hasTerminalIndicator && isTerminalIndicatorTarget(event)) {
+            onTerminalIndicatorClick?.();
+            return;
+          }
+          onClick();
+        }}
       >
         <span className="project-issue-row__priority" title={priorityLabel}>
           <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
@@ -90,7 +102,31 @@ export function ProjectIssueRow({
           {issue.identifier}
         </span>
         <span className="project-issue-row__title" title={issue.title}>
-          {linearIssueTitleForCardDisplay(issue.title)}
+          <span className="project-issue-row__title-text">
+            {linearIssueTitleForCardDisplay(issue.title)}
+          </span>
+          {terminalSessionActive && terminalAgentWorking ? (
+            <DotScrollLoader
+              className="project-issue-row__agent-loader project-issue-row__terminal-indicator"
+              aria-label="Agent working in terminal"
+              data-terminal-indicator="true"
+            />
+          ) : null}
+          {terminalSessionActive && terminalAgentWaiting ? (
+            <DotScrollLoader
+              className="project-issue-row__agent-loader project-issue-row__terminal-indicator"
+              status="waiting"
+              aria-label="Agent waiting in terminal"
+              data-terminal-indicator="true"
+            />
+          ) : null}
+          {terminalSessionActive && !terminalAgentWorking && !terminalAgentWaiting ? (
+            <span
+              className="linear-issue-terminal-session-dot project-issue-row__terminal-dot project-issue-row__terminal-indicator"
+              aria-hidden="true"
+              data-terminal-indicator="true"
+            />
+          ) : null}
         </span>
         {primaryLabel ? (
           <span className="project-issue-row__pill" title={labelTitle}>
@@ -110,7 +146,9 @@ export function ProjectIssueRow({
         ) : null}
         {!dueLabel && hasEstimate ? (
           <span className="project-issue-row__pill project-issue-row__pill--estimate">
-            <EstimateIcon />
+            <span className="project-issue-row__pill-icon" aria-hidden="true">
+              <LinearIssueEstimateIcon />
+            </span>
             <span className="project-issue-row__pill-label">{issue.estimate}</span>
           </span>
         ) : null}

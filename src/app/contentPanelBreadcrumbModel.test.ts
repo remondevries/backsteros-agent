@@ -45,7 +45,7 @@ describe("contentPanelBreadcrumbModel", () => {
         sidebarSegments: [{ id: "linear-view-teams", label: "Teams" }],
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Linear", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
       { id: "linear-view-teams", label: "Teams" },
     ]);
   });
@@ -61,7 +61,7 @@ describe("contentPanelBreadcrumbModel", () => {
         linearSelection: { kind: "team", id: "team-1", name: "Engineering" },
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Linear", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
       { id: "linear-view-teams", label: "Teams" },
       { id: "team-team-1", label: "Engineering" },
     ]);
@@ -82,7 +82,7 @@ describe("contentPanelBreadcrumbModel", () => {
         onClearActiveLinearDocument: onClear,
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Linear", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS", onActivate: onClear },
       { id: "linear-tab-project-documents", label: "Documents", onActivate: onClear },
@@ -102,7 +102,7 @@ describe("contentPanelBreadcrumbModel", () => {
         linearWorkspaceView: "issues",
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Linear", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS" },
       { id: "linear-tab-project-issues", label: "Issues" },
@@ -121,7 +121,7 @@ describe("contentPanelBreadcrumbModel", () => {
         linearWorkspaceView: "overview",
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Linear", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS" },
     ]);

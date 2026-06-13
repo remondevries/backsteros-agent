@@ -17,7 +17,7 @@ export function VaultDocumentView({ path }: { path: string }) {
   const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
   const { snapshot: whoopSnapshot, loading: whoopLoading } = useVaultDocumentWhoopSnapshot(
     isDailyNote ? document : null,
-    { refreshKey: whoopRefreshKey },
+    { refreshKey: whoopRefreshKey, expectedPath: path },
   );
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");

@@ -19,25 +19,38 @@ function shiftRowsUp(grid: boolean[][]): boolean[][] {
 export function DotScrollLoader({
   className,
   intervalMs = 140,
+  status = "working",
   "aria-label": ariaLabel = "Voice activity",
 }: {
   className?: string;
   intervalMs?: number;
+  status?: "working" | "waiting";
   "aria-label"?: string;
 }) {
   const [grid, setGrid] = useState(INITIAL_GRID);
 
   useEffect(() => {
+    if (status !== "working") {
+      setGrid(INITIAL_GRID);
+      return;
+    }
+
     const timer = window.setInterval(() => {
       setGrid((current) => shiftRowsUp(current));
     }, intervalMs);
 
     return () => window.clearInterval(timer);
-  }, [intervalMs]);
+  }, [intervalMs, status]);
 
   return (
     <svg
-      className={["dot-scroll-loader", className].filter(Boolean).join(" ")}
+      className={[
+        "dot-scroll-loader",
+        status === "waiting" ? "dot-scroll-loader--waiting" : null,
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       width="16"
       height="16"
       viewBox="0 0 16 16"
