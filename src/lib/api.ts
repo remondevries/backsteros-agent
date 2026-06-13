@@ -691,6 +691,8 @@ export type LinearProjectWatcherConfig = {
   enabled: boolean;
   pollIntervalMs: number;
   statusChangesOnly: boolean;
+  autoDispatchAgents?: boolean;
+  dispatchStatuses?: string[];
   projectName?: string;
 };
 

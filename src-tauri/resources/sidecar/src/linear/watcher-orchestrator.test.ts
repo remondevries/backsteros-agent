@@ -26,8 +26,18 @@ describe("normalizeLinearProjectWatcherConfig", () => {
       enabled: false,
       pollIntervalMs: 30_000,
       statusChangesOnly: true,
+      autoDispatchAgents: false,
+      dispatchStatuses: [],
       projectName: undefined,
     });
+  });
+
+  test("normalizes dispatch status names", () => {
+    expect(
+      normalizeLinearProjectWatcherConfig({
+        dispatchStatuses: ["In Progress", " in progress ", "In Review"],
+      }).dispatchStatuses,
+    ).toEqual(["In Progress", "In Review"]);
   });
 
   test("clamps poll interval to supported range", () => {

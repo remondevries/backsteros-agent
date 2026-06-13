@@ -217,6 +217,47 @@ export function whenSessionReady(
   });
 }
 
+export async function ensureBackgroundTerminalSession(
+  leafId: number,
+  cwd: string | undefined,
+): Promise<boolean> {
+  const s = ensureSession(leafId, cwd);
+  if (s.disposed) return false;
+  if (s.pty) return true;
+
+  if (s.ptyOpening) {
+    const deadline = Date.now() + 10_000;
+    while (s.ptyOpening && !s.disposed && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return !!s.pty;
+  }
+
+  if (s.shellExited) {
+    await respawnSession(leafId, cwd);
+    return !!sessions.get(leafId)?.pty;
+  }
+
+  if (s.cols <= 0) s.cols = 80;
+  if (s.rows <= 0) s.rows = 24;
+
+  s.ptyOpening = true;
+  try {
+    const pty = await openPtyWithRetry(leafId, s, cwd);
+    s.ptyOpening = false;
+    if (s.disposed) {
+      pty.close();
+      return false;
+    }
+    s.pty = pty;
+    return true;
+  } catch (error) {
+    s.ptyOpening = false;
+    if (!s.disposed) surfaceSpawnFailure(leafId, s, error);
+    return false;
+  }
+}
+
 export function writeToSession(leafId: number, data: string): boolean {
   const s = sessions.get(leafId);
   if (!s?.pty) return false;

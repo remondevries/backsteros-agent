@@ -585,6 +585,8 @@ app.put("/linear/watchers/config/:projectId", async (c) => {
     enabled?: unknown;
     pollIntervalMs?: unknown;
     statusChangesOnly?: unknown;
+    autoDispatchAgents?: unknown;
+    dispatchStatuses?: unknown;
     projectName?: unknown;
   };
 
@@ -610,6 +612,21 @@ app.put("/linear/watchers/config/:projectId", async (c) => {
   }
 
   if (
+    body.autoDispatchAgents !== undefined &&
+    typeof body.autoDispatchAgents !== "boolean"
+  ) {
+    return c.json({ error: "autoDispatchAgents must be a boolean", config: null }, 400);
+  }
+
+  if (
+    body.dispatchStatuses !== undefined &&
+    (!Array.isArray(body.dispatchStatuses) ||
+      body.dispatchStatuses.some((value) => typeof value !== "string"))
+  ) {
+    return c.json({ error: "dispatchStatuses must be an array of strings", config: null }, 400);
+  }
+
+  if (
     body.projectName !== undefined &&
     body.projectName !== null &&
     typeof body.projectName !== "string"
@@ -623,6 +640,10 @@ app.put("/linear/watchers/config/:projectId", async (c) => {
       pollIntervalMs:
         typeof body.pollIntervalMs === "number" ? body.pollIntervalMs : undefined,
       statusChangesOnly: body.statusChangesOnly,
+      autoDispatchAgents: body.autoDispatchAgents,
+      dispatchStatuses: Array.isArray(body.dispatchStatuses)
+        ? body.dispatchStatuses
+        : undefined,
       projectName: typeof body.projectName === "string" ? body.projectName : undefined,
     });
     linearWatcherOrchestrator.notifyConfigChanged();

@@ -83,6 +83,22 @@ function normalizePollIntervalMs(value: number | undefined): number {
   );
 }
 
+function normalizeDispatchStatuses(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
 export function normalizeLinearProjectWatcherConfig(
   config: Partial<LinearProjectWatcherConfig> | undefined,
 ): LinearProjectWatcherConfig {
@@ -90,6 +106,8 @@ export function normalizeLinearProjectWatcherConfig(
     enabled: config?.enabled ?? false,
     pollIntervalMs: normalizePollIntervalMs(config?.pollIntervalMs),
     statusChangesOnly: config?.statusChangesOnly ?? true,
+    autoDispatchAgents: config?.autoDispatchAgents ?? false,
+    dispatchStatuses: normalizeDispatchStatuses(config?.dispatchStatuses),
     projectName: config?.projectName?.trim() || undefined,
   };
 }

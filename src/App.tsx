@@ -6,6 +6,8 @@ import { ChatView, type ChatViewHandle } from "./chat/ChatView";
 import { UiPreviewProvider } from "./chat/dev/UiPreviewContext";
 import { NotificationProvider } from "./app/notifications/NotificationProvider";
 import { subscribeToLinearWatcherEvents } from "./lib/linearWatcherEvents";
+import { startLinearIssueAgentDispatch } from "./lib/linearIssueAgentDispatch";
+import { LinearIssueAgentDispatchHost } from "./app/project-issues/LinearIssueAgentDispatchHost";
 import { SessionTabBar } from "./chat/SessionTabBar";
 import type { ModelMode } from "./chat/types";
 import { useCommandPanelShortcuts } from "./hooks/useCommandPanelShortcuts";
@@ -364,6 +366,11 @@ export default function App() {
   }, [ready]);
 
   useEffect(() => {
+    if (!ready) return;
+    return startLinearIssueAgentDispatch();
+  }, [ready]);
+
+  useEffect(() => {
     if (!ready || import.meta.env.DEV || !isTauriRuntime()) return;
 
     let active = true;
@@ -572,6 +579,7 @@ export default function App() {
     <NotificationProvider>
     <UiPreviewProvider>
     <div className="app-shell">
+      <LinearIssueAgentDispatchHost />
       {healthError && (
         <div className="warning-banner">
           <span>{healthError}</span>

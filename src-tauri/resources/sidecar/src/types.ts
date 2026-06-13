@@ -285,6 +285,10 @@ export type LinearProjectWatcherConfig = {
   enabled: boolean;
   pollIntervalMs: number;
   statusChangesOnly: boolean;
+  /** When true, spin up a terminal agent for issues entering dispatchStatuses. */
+  autoDispatchAgents?: boolean;
+  /** Linear workflow status names that trigger agent dispatch (case-insensitive). */
+  dispatchStatuses?: string[];
   projectName?: string;
 };
 

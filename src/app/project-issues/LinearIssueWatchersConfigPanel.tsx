@@ -4,6 +4,7 @@ import {
   updateLinearProjectWatcherConfig,
   type LinearProjectWatcherConfig,
 } from "../../lib/api";
+import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
 import {
   getLinearWatcherActivityLogEntries,
   subscribeToLinearWatcherActivityLog,
@@ -12,6 +13,7 @@ import {
 import { CursorIcon } from "../../chat/CursorIcon";
 import { LinearIcon } from "../../chat/LinearIcon";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
+import { canonicalWatcherStatusKey } from "../../lib/linearIssueAgentDispatch";
 import { ResizablePanel } from "../ResizablePanel";
 
 const LINEAR_WATCHER_SETTINGS_WIDTH_KEY = "backsteros.layout.linearWatcherSettingsWidth";
@@ -30,6 +32,8 @@ function defaultWatcherConfig(): LinearProjectWatcherConfig {
     enabled: false,
     pollIntervalMs: 30_000,
     statusChangesOnly: true,
+    autoDispatchAgents: false,
+    dispatchStatuses: [],
   };
 }
 
@@ -175,14 +179,38 @@ function WatcherConfigSettingsPanel({
   saving,
   error,
   savedMessage,
+  workflowStates,
   onUpdate,
 }: {
   config: LinearProjectWatcherConfig;
   saving: boolean;
   error: string | null;
   savedMessage: string | null;
+  workflowStates: Array<{ id: string; name: string; type: string; color?: string }>;
   onUpdate: (patch: Partial<LinearProjectWatcherConfig>) => void;
 }) {
+  const dispatchStatusKeys = useMemo(() => {
+    const keys = new Set(
+      (config.dispatchStatuses ?? []).map((status) => canonicalWatcherStatusKey(status)),
+    );
+    return keys;
+  }, [config.dispatchStatuses]);
+
+  const toggleDispatchStatus = (statusName: string) => {
+    const key = canonicalWatcherStatusKey(statusName);
+    if (!key) return;
+    const current = config.dispatchStatuses ?? [];
+    const next = dispatchStatusKeys.has(key)
+      ? current.filter((status) => canonicalWatcherStatusKey(status) !== key)
+      : [...current, statusName.trim()];
+    onUpdate({ dispatchStatuses: next });
+  };
+
+  const agentsReady =
+    config.enabled &&
+    config.autoDispatchAgents &&
+    (config.dispatchStatuses?.length ?? 0) > 0;
+
   return (
     <div className="linear-issue-details-panel linear-issue-watchers-config-panel">
       {error ? <p className="linear-issue-watchers-config__error">{error}</p> : null}
@@ -229,6 +257,74 @@ function WatcherConfigSettingsPanel({
         </label>
       </WatcherConfigSection>
 
+      <WatcherConfigSection title="Agent dispatch">
+        <p className="linear-issue-watchers-config__hint">
+          When an issue enters a selected status, Backster opens an issue terminal and
+          starts the Cursor agent automatically.
+        </p>
+        <label className="linear-issue-watchers-config__field linear-issue-watchers-config__field--toggle">
+          <span>
+            <span className="linear-issue-details-row-label">Auto-dispatch agents</span>
+            <span className="linear-issue-watchers-config__hint">
+              Requires the watcher and a configured projects folder in Settings.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="linear-issue-watchers-config__checkbox"
+            checked={config.autoDispatchAgents ?? false}
+            disabled={saving || !config.enabled}
+            onChange={(event) => onUpdate({ autoDispatchAgents: event.target.checked })}
+          />
+        </label>
+        {config.autoDispatchAgents ? (
+          <>
+            <p className="linear-issue-watchers-config__hint linear-issue-watchers-config__hint--spaced">
+              Dispatch when an issue enters one of these statuses:
+            </p>
+            {workflowStates.length > 0 ? (
+              <ul className="linear-issue-watchers-config__status-list">
+                {workflowStates.map((state) => {
+                  const checked = dispatchStatusKeys.has(canonicalWatcherStatusKey(state.name));
+                  return (
+                    <li key={state.id} className="linear-issue-watchers-config__status-item">
+                      <label className="linear-issue-watchers-config__status-label">
+                        <input
+                          type="checkbox"
+                          className="linear-issue-watchers-config__checkbox"
+                          checked={checked}
+                          disabled={saving || !config.enabled}
+                          onChange={() => toggleDispatchStatus(state.name)}
+                        />
+                        <LinearStatusIcon
+                          status={state.name}
+                          stateType={state.type}
+                          title={state.name}
+                        />
+                        <span>{state.name}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="linear-issue-watchers-config__status">
+                Load project issues to pick workflow statuses.
+              </p>
+            )}
+            {agentsReady ? (
+              <p className="linear-issue-watchers-config__saved">
+                Agent dispatch is armed for this project.
+              </p>
+            ) : (
+              <p className="linear-issue-watchers-config__hint">
+                Select at least one status to arm agent dispatch.
+              </p>
+            )}
+          </>
+        ) : null}
+      </WatcherConfigSection>
+
       <WatcherConfigSection title="Notifications">
         <label className="linear-issue-watchers-config__field linear-issue-watchers-config__field--toggle">
           <span>
@@ -264,6 +360,7 @@ export function LinearIssueWatchersConfigPanel({
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [logVersion, setLogVersion] = useState(0);
   const [visibleRows, setVisibleRows] = useState(WATCHER_LOG_INITIAL_ROWS);
+  const { workflowStates } = useLinearProjectIssues(projectId, true);
 
   useEffect(() => {
     return subscribeToLinearWatcherActivityLog((entry) => {
@@ -411,6 +508,7 @@ export function LinearIssueWatchersConfigPanel({
                 saving={saving}
                 error={error}
                 savedMessage={savedMessage}
+                workflowStates={workflowStates}
                 onUpdate={updateConfig}
               />
             )}
