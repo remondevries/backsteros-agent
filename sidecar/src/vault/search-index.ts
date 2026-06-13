@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { listVaultFiles } from "./vault-files.ts";
+import { listVaultFiles } from "../vault-files.ts";
 
 export type VaultSearchIndexEntry = {
   path: string;
