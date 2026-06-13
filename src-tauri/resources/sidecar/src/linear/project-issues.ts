@@ -18,6 +18,7 @@ export type LinearProjectIssue = {
   labels: { name: string; color: string }[];
   projectName: string;
   createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type LinearProjectWorkflowState = {
@@ -38,6 +39,7 @@ type GraphqlProjectIssueNode = {
   title?: string | null;
   url?: string | null;
   createdAt?: string | null;
+  updatedAt?: string | null;
   dueDate?: string | null;
   estimate?: number | null;
   priority?: number | null;
@@ -101,6 +103,7 @@ const PROJECT_ISSUES_QUERY = `
           title
           url
           createdAt
+          updatedAt
           dueDate
           estimate
           priority
@@ -155,6 +158,7 @@ function mapGraphqlProjectIssueNode(
     projectName,
     estimate: node.estimate ?? null,
     createdAt: (node.createdAt ?? "").trim() || null,
+    updatedAt: (node.updatedAt ?? "").trim() || null,
   };
 }
 

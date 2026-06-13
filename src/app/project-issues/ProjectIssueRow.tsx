@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearIssueEntity } from "../../chat/types";
@@ -43,11 +44,15 @@ function EstimateIcon() {
 export function ProjectIssueRow({
   issue,
   grouped = true,
+  dragging = false,
   onClick,
+  onPointerDragStart,
 }: {
   issue: LinearIssueEntity;
   grouped?: boolean;
+  dragging?: boolean;
   onClick: () => void;
+  onPointerDragStart?: (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const labels = issue.labels ?? [];
   const primaryLabel = labels[0];
@@ -59,6 +64,7 @@ export function ProjectIssueRow({
   const rowClass = [
     "project-issue-row",
     grouped ? "project-issue-row--grouped" : null,
+    dragging ? "project-issue-row--dragging" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -68,7 +74,15 @@ export function ProjectIssueRow({
 
   return (
     <li className="workspace-status-list__item">
-      <button type="button" className={rowClass} onClick={onClick}>
+      <button
+        type="button"
+        className={rowClass}
+        draggable={false}
+        onMouseDown={(event) => {
+          onPointerDragStart?.(issue, event);
+        }}
+        onClick={onClick}
+      >
         <span className="project-issue-row__priority" title={priorityLabel}>
           <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
         </span>

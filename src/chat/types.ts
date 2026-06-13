@@ -24,6 +24,7 @@ export interface LinearIssueEntity {
   estimate?: number | null;
   labels?: LinearIssueLabel[];
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MarkdownFileEntity {

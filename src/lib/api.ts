@@ -643,6 +643,40 @@ export async function fetchLinearProjectIssues(projectId: string) {
   );
 }
 
+export type LinearProjectWatcherConfig = {
+  enabled: boolean;
+  pollIntervalMs: number;
+  statusChangesOnly: boolean;
+  projectName?: string;
+};
+
+export type LinearProjectWatchersMap = Record<string, LinearProjectWatcherConfig>;
+
+export async function fetchLinearProjectWatcherConfig(projectId: string) {
+  return request<{ projectId: string; config: LinearProjectWatcherConfig; error?: string }>(
+    `/linear/watchers/config/${encodeURIComponent(projectId)}`,
+  );
+}
+
+export async function fetchLinearProjectWatchersConfig() {
+  return request<{ watchers: LinearProjectWatchersMap; error?: string }>(
+    "/linear/watchers/config",
+  );
+}
+
+export async function updateLinearProjectWatcherConfig(
+  projectId: string,
+  updates: Partial<LinearProjectWatcherConfig>,
+) {
+  return request<{ projectId: string; config: LinearProjectWatcherConfig; error?: string }>(
+    `/linear/watchers/config/${encodeURIComponent(projectId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    },
+  );
+}
+
 export type LinearIssueDetail = {
   id: string;
   identifier: string;

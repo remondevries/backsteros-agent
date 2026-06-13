@@ -83,6 +83,13 @@ import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projec
 import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
 import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
 import {
+  getLinearProjectWatcherConfig,
+  getLinearProjectWatchersMap,
+  linearWatcherOrchestrator,
+  setLinearProjectWatcherConfig,
+  type LinearWatcherStreamEvent,
+} from "./linear/watcher-orchestrator.ts";
+import {
   createProjectDocument,
   deleteLinearDocument,
   fetchLinearDocument,
@@ -520,6 +527,124 @@ app.get("/linear/projects/:projectId/issues", async (c) => {
     const message = error instanceof Error ? error.message : "Failed to load project issues";
     return c.json({ error: message, issues: [], workflowStates: [] }, 500);
   }
+});
+
+app.get("/linear/watchers/config", async (c) => {
+  return c.json({ watchers: getLinearProjectWatchersMap() });
+});
+
+app.get("/linear/watchers/config/:projectId", async (c) => {
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", config: null }, 400);
+  }
+
+  return c.json({
+    projectId,
+    config: getLinearProjectWatcherConfig(projectId),
+  });
+});
+
+app.put("/linear/watchers/config/:projectId", async (c) => {
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", config: null }, 400);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    enabled?: unknown;
+    pollIntervalMs?: unknown;
+    statusChangesOnly?: unknown;
+    projectName?: unknown;
+  };
+
+  if (
+    body.enabled !== undefined &&
+    typeof body.enabled !== "boolean"
+  ) {
+    return c.json({ error: "enabled must be a boolean", config: null }, 400);
+  }
+
+  if (
+    body.pollIntervalMs !== undefined &&
+    (typeof body.pollIntervalMs !== "number" || !Number.isFinite(body.pollIntervalMs))
+  ) {
+    return c.json({ error: "pollIntervalMs must be a number", config: null }, 400);
+  }
+
+  if (
+    body.statusChangesOnly !== undefined &&
+    typeof body.statusChangesOnly !== "boolean"
+  ) {
+    return c.json({ error: "statusChangesOnly must be a boolean", config: null }, 400);
+  }
+
+  if (
+    body.projectName !== undefined &&
+    body.projectName !== null &&
+    typeof body.projectName !== "string"
+  ) {
+    return c.json({ error: "projectName must be a string", config: null }, 400);
+  }
+
+  try {
+    const config = setLinearProjectWatcherConfig(projectId, {
+      enabled: body.enabled,
+      pollIntervalMs:
+        typeof body.pollIntervalMs === "number" ? body.pollIntervalMs : undefined,
+      statusChangesOnly: body.statusChangesOnly,
+      projectName: typeof body.projectName === "string" ? body.projectName : undefined,
+    });
+    linearWatcherOrchestrator.notifyConfigChanged();
+    return c.json({ projectId, config });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save watcher config";
+    return c.json({ error: message, config: null }, 500);
+  }
+});
+
+app.get("/linear/watchers/events", (c) => {
+  const authHeader = c.req.header("authorization");
+  const authQuery = c.req.query("auth");
+  const provided = authHeader?.replace("Bearer ", "") ?? authQuery;
+  if (provided !== token) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  return streamSSE(c, async (stream) => {
+    const queue: LinearWatcherStreamEvent[] = [];
+    let notify: (() => void) | null = null;
+
+    const subscriber = (event: LinearWatcherStreamEvent) => {
+      queue.push(event);
+      notify?.();
+    };
+
+    const unsubscribe = linearWatcherOrchestrator.subscribe(subscriber);
+
+    try {
+      while (true) {
+        while (queue.length > 0) {
+          const event = queue.shift()!;
+          await stream.writeSSE({
+            event: event.type,
+            data: JSON.stringify(event),
+          });
+        }
+
+        await new Promise<void>((resolve) => {
+          notify = resolve;
+          if (queue.length > 0) {
+            notify = null;
+            resolve();
+          }
+        });
+        notify = null;
+      }
+    } finally {
+      unsubscribe();
+    }
+  });
 });
 
 app.get("/linear/issues/:issueId", async (c) => {
@@ -2852,6 +2977,8 @@ ensureUserProfile();
 void refreshMaxModelCache().catch(() => {
   // Fall back to MAX_MODEL_ID_FALLBACK when the model list is unavailable.
 });
+
+linearWatcherOrchestrator.start();
 
 export default {
   port,

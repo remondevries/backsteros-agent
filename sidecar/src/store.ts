@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   executionMode: "live",
   issueLinkMode: "external",
   groceryLinearProjectId: null,
+  linearProjectWatchers: {},
 };
 
 let cachedSettings: AppSettings | null = null;

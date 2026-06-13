@@ -15,7 +15,6 @@ describe("linearProjectViews", () => {
     expect(LINEAR_PROJECT_VIEWS.map((view) => view.label)).toEqual([
       "Overview",
       "Issues",
-      "Watchers",
       "Documents",
       "Meetings",
       "Letters",

@@ -4,6 +4,8 @@ import { CommandPanel } from "./app/CommandPanel";
 import type { AppView } from "./app/appViews";
 import { ChatView, type ChatViewHandle } from "./chat/ChatView";
 import { UiPreviewProvider } from "./chat/dev/UiPreviewContext";
+import { NotificationProvider } from "./app/notifications/NotificationProvider";
+import { subscribeToLinearWatcherEvents } from "./lib/linearWatcherEvents";
 import { SessionTabBar } from "./chat/SessionTabBar";
 import type { ModelMode } from "./chat/types";
 import { useCommandPanelShortcuts } from "./hooks/useCommandPanelShortcuts";
@@ -353,6 +355,11 @@ export default function App() {
     })();
   }, [connectToSidecar]);
 
+  useEffect(() => {
+    if (!ready) return;
+    return subscribeToLinearWatcherEvents();
+  }, [ready]);
+
   const handleCloseActiveTab = useCallback(async () => {
     if (appView === "lookup") {
       if (!activeLookupSessionId || lookupTabs.length <= 1) return;
@@ -509,6 +516,7 @@ export default function App() {
   }
 
   return (
+    <NotificationProvider>
     <UiPreviewProvider>
     <div className="app-shell">
       {healthError && (
@@ -784,5 +792,6 @@ export default function App() {
       )}
     </div>
     </UiPreviewProvider>
+    </NotificationProvider>
   );
 }

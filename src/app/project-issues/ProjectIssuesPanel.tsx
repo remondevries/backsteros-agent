@@ -2,8 +2,13 @@ import { useCallback, useMemo } from "react";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import type { LinearIssueEntity } from "../../chat/types";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useLinearIssueStatusDragDrop } from "../../hooks/useLinearIssueStatusDragDrop";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
 import { groupVariantFromStatusKey } from "../../lib/groupVariantFromStatusKey";
+import {
+  buildWorkflowStateByCanonical,
+  toStatusMoveTargetGroup,
+} from "../../lib/linearIssueStatusMove";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
@@ -18,11 +23,29 @@ export function ProjectIssuesPanel({
   enabled: boolean;
 }) {
   const { setActiveLinearIssue } = useContentPanelNavigation();
-  const { issues, loading, refreshing, error, refresh } = useLinearProjectIssues(projectId, enabled);
+  const { issues, workflowStates, loading, refreshing, error, refresh } = useLinearProjectIssues(
+    projectId,
+    enabled,
+  );
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
 
+  const {
+    effectiveIssues,
+    moveError,
+    draggingIssueId,
+    dropIndicator,
+    handlePointerDragStart,
+    handleGroupDragOver,
+    handlePointerGroupEnter,
+    handleGroupDrop,
+    handleGroupMouseUp,
+  } = useLinearIssueStatusDragDrop({
+    issues,
+    refresh,
+  });
+
   useContentPanelBarState({
-    error,
+    error: moveError ?? error,
     loading: loading && issues.length === 0,
     loadingMessage: "Loading issues…",
     refreshing,
@@ -31,6 +54,7 @@ export function ProjectIssuesPanel({
 
   const openLinearIssue = useCallback(
     (issue: LinearIssueEntity) => {
+      if (draggingIssueId) return;
       setActiveLinearIssue({
         id: issue.id,
         identifier: issue.identifier ?? issue.id,
@@ -39,11 +63,16 @@ export function ProjectIssuesPanel({
         stateType: issue.stateType,
       });
     },
-    [setActiveLinearIssue],
+    [draggingIssueId, setActiveLinearIssue],
+  );
+
+  const workflowStateByCanonical = useMemo(
+    () => buildWorkflowStateByCanonical(workflowStates),
+    [workflowStates],
   );
 
   const groups = useMemo(() => {
-    return groupLinearIssuesByStatus(issues).map((group) => ({
+    return groupLinearIssuesByStatus(effectiveIssues).map((group) => ({
       key: group.status,
       title: group.status,
       count: group.issues.length,
@@ -56,8 +85,16 @@ export function ProjectIssuesPanel({
           title={group.status}
         />
       ),
+      dropTarget: toStatusMoveTargetGroup({
+        status: group.status,
+        displayStatus: group.status,
+        stateType: group.stateType,
+        statusColor: group.statusColor,
+        issues: group.issues,
+        workflowStateByCanonical,
+      }),
     }));
-  }, [issues]);
+  }, [effectiveIssues, workflowStateByCanonical]);
 
   if (loading && issues.length === 0) {
     return (
@@ -69,11 +106,12 @@ export function ProjectIssuesPanel({
     );
   }
 
-  if (error) {
+  const panelError = moveError ?? error;
+  if (panelError) {
     return (
       <div className="workspace-status-list-scroll">
         <div className="workspace-status-list-error" role="alert">
-          {error}
+          {panelError}
         </div>
       </div>
     );
@@ -97,11 +135,22 @@ export function ProjectIssuesPanel({
         collapsedGroups={collapsedGroups}
         onToggleGroup={toggleGroup}
         idPrefix="project-issues-group"
+        dragDrop={{
+          draggingIssueId,
+          dropIndicator,
+          onPointerDragStart: handlePointerDragStart,
+          onGroupDragOver: handleGroupDragOver,
+          onGroupMouseEnter: handlePointerGroupEnter,
+          onGroupDrop: handleGroupDrop,
+          onGroupMouseUp: handleGroupMouseUp,
+        }}
         renderItem={(issue) => (
           <ProjectIssueRow
             key={issue.id}
             issue={issue}
             grouped
+            dragging={draggingIssueId === issue.id}
+            onPointerDragStart={handlePointerDragStart}
             onClick={() => {
               openLinearIssue(issue);
             }}

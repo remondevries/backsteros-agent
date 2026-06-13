@@ -277,7 +277,17 @@ export interface AppSettings {
   executionMode?: "live" | "test" | null;
   issueLinkMode?: "external" | "internal";
   groceryLinearProjectId?: string | null;
+  linearProjectWatchers?: Record<string, LinearProjectWatcherConfig>;
 }
+
+export type LinearProjectWatcherConfig = {
+  enabled: boolean;
+  pollIntervalMs: number;
+  statusChangesOnly: boolean;
+  projectName?: string;
+};
+
+export type LinearProjectWatchersMap = Record<string, LinearProjectWatcherConfig>;
 
 export interface SessionInfo {
   sessionId: string;

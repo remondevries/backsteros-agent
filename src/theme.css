@@ -112,6 +112,14 @@
   --linear-issue-details-card-bg: #171718;
   --linear-issue-details-card-border: #262629;
 
+  --notification-bg: var(--linear-issue-details-card-bg);
+  --notification-border: var(--linear-issue-details-card-border);
+  --notification-title: var(--text-primary);
+  --notification-description: var(--text-faint);
+  --notification-close: var(--text-subtle);
+  --notification-close-hover: var(--text-primary);
+  --notification-shadow: 0 12px 32px var(--shadow-lg);
+
   --searchable-dropdown-bg: #171718;
   --searchable-dropdown-border: #1e1e20;
 
@@ -251,6 +259,14 @@
 
     --linear-issue-details-card-bg: var(--bg-surface-2);
     --linear-issue-details-card-border: var(--border-subtle);
+
+    --notification-bg: var(--bg-surface);
+    --notification-border: var(--border-subtle);
+    --notification-title: var(--text-primary);
+    --notification-description: var(--text-muted);
+    --notification-close: var(--text-subtle);
+    --notification-close-hover: var(--text-primary);
+    --notification-shadow: 0 12px 32px var(--shadow-lg);
 
     --searchable-dropdown-bg: var(--bg-elevated, var(--bg-surface));
     --searchable-dropdown-border: var(--border-subtle);

@@ -10,7 +10,6 @@ export const LINEAR_TEAM_VIEWS = [
 export const LINEAR_PROJECT_VIEWS = [
   { id: "overview", label: "Overview" },
   { id: "issues", label: "Issues" },
-  { id: "watchers", label: "Watchers" },
   { id: "documents", label: "Documents" },
   { id: "meetings", label: "Meetings" },
   { id: "letters", label: "Letters" },

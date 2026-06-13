@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 import {
   groupVariantClassName,
   type GroupVariant,
 } from "../../lib/groupVariantFromStatusKey";
+import type { StatusMoveTargetGroup } from "../../lib/linearIssueStatusMove";
 
 function GroupChevron({ expanded }: { expanded: boolean }) {
   return (
@@ -36,6 +37,11 @@ export function CollapsibleStatusSection({
   variant = "default",
   idPrefix = "status-group",
   children,
+  isDropTarget = false,
+  onGroupDragOver,
+  onGroupDrop,
+  onGroupMouseEnter,
+  onGroupMouseUp,
 }: {
   groupKey: string;
   collapsed: boolean;
@@ -47,6 +53,12 @@ export function CollapsibleStatusSection({
   variant?: GroupVariant;
   idPrefix?: string;
   children: ReactNode;
+  dropTarget?: StatusMoveTargetGroup;
+  isDropTarget?: boolean;
+  onGroupDragOver?: (event: DragEvent<HTMLElement>) => void;
+  onGroupDrop?: (event: DragEvent<HTMLElement>) => void;
+  onGroupMouseEnter?: () => void;
+  onGroupMouseUp?: () => void;
 }) {
   const groupId = `${idPrefix}-${groupKey.replace(/\s+/g, "-").toLowerCase()}`;
   const hasIcon = icon != null;
@@ -61,6 +73,13 @@ export function CollapsibleStatusSection({
     .filter(Boolean)
     .join(" ");
 
+  const headerClass = [
+    "workspace-status-group__header",
+    isDropTarget ? "workspace-status-group__header--drop-target" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const chevronClass = [
     "workspace-status-group__chevron-slot",
     hasIcon ? "workspace-status-group__chevron-slot--swap" : null,
@@ -70,36 +89,52 @@ export function CollapsibleStatusSection({
     .join(" ");
 
   return (
-    <>
-      <li
-        className={groupClass}
-        id={groupId}
-        data-collapsed={collapsed ? "true" : "false"}
-        data-workspace-list-group-key={groupKey}
+    <li
+      className={groupClass}
+      id={groupId}
+      data-collapsed={collapsed ? "true" : "false"}
+      data-workspace-list-group-key={groupKey}
+      onDragOver={onGroupDragOver}
+      onDrop={onGroupDrop}
+      onMouseEnter={onGroupMouseEnter}
+      onMouseUp={onGroupMouseUp}
+    >
+      <button
+        type="button"
+        className={headerClass}
+        onClick={onToggle}
+        aria-expanded={!collapsed}
       >
-        <button
-          type="button"
-          className="workspace-status-group__header"
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-        >
-          <span className={chevronClass}>
-            {hasIcon ? <span className="workspace-status-group__icon">{icon}</span> : null}
-            <GroupChevron expanded={!collapsed} />
-          </span>
-          <span className="workspace-status-group__title">{title}</span>
-          {!hasHeaderAction && count != null ? (
-            <span className="workspace-status-group__count">{count}</span>
-          ) : null}
-        </button>
-        {hasHeaderAction ? (
-          <div className="workspace-status-group__detail">
-            {count != null ? <span className="workspace-status-group__count">{count}</span> : null}
-            <div className="workspace-status-group__action">{headerAction}</div>
-          </div>
+        <span className={chevronClass}>
+          {hasIcon ? <span className="workspace-status-group__icon">{icon}</span> : null}
+          <GroupChevron expanded={!collapsed} />
+        </span>
+        <span className="workspace-status-group__title">{title}</span>
+        {!hasHeaderAction && count != null ? (
+          <span className="workspace-status-group__count">{count}</span>
         ) : null}
-      </li>
-      {!collapsed ? children : null}
-    </>
+      </button>
+      {hasHeaderAction ? (
+        <div className="workspace-status-group__detail">
+          {count != null ? <span className="workspace-status-group__count">{count}</span> : null}
+          <div className="workspace-status-group__action">{headerAction}</div>
+        </div>
+      ) : null}
+      {!collapsed ? (
+        <ul
+          className="workspace-status-group__items"
+          onDragOver={onGroupDragOver}
+          onDrop={onGroupDrop}
+          onMouseEnter={onGroupMouseEnter}
+          onMouseUp={onGroupMouseUp}
+        >
+          {children}
+        </ul>
+      ) : isDropTarget ? (
+        <div className="workspace-status-group__collapsed-drop" aria-hidden="true">
+          <span className="workspace-status-list-drop-divider" />
+        </div>
+      ) : null}
+    </li>
   );
 }

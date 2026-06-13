@@ -7,6 +7,7 @@ import { useLinearWorkspaceFocusSnapshot } from "../hooks/useLinearWorkspaceFocu
 import { ProjectDocumentsPanel } from "./project-documents/ProjectDocumentsPanel";
 import { ProjectIssuesPanel } from "./project-issues/ProjectIssuesPanel";
 import { ProjectWatchersKanbanPanel } from "./project-issues/ProjectWatchersKanbanPanel";
+import { LinearIssueWatchersConfigPanel } from "./project-issues/LinearIssueWatchersConfigPanel";
 import { ProjectOverviewPanel } from "./project-overview/ProjectOverviewPanel";
 import { LinearProjectViewTabs } from "./LinearProjectViewTabs";
 import type { LinearProjectCollectionToggleOption } from "./LinearProjectListBoardToggle";
@@ -25,37 +26,34 @@ function LinearWorkspaceViewPlaceholder({ message }: { message: string }) {
   );
 }
 
-function LinearWorkspaceEmptyPage() {
-  return <div className="linear-workspace-view-placeholder" aria-hidden="true" />;
-}
-
 function LinearWorkspaceDetailBody({
   selection,
   activeView,
   issuesPanelMode,
-  watchersPanelMode,
+  issuesSettingsOpen,
 }: {
   selection: LinearWorkspaceSelection;
   activeView: LinearWorkspaceViewId;
   issuesPanelMode: "list" | "board";
-  watchersPanelMode: "list" | "board";
+  issuesSettingsOpen: boolean;
 }) {
   if (activeView === "overview" && selection.kind === "project") {
     return <ProjectOverviewPanel projectId={selection.id} enabled />;
   }
 
   if (activeView === "issues" && selection.kind === "project") {
+    if (issuesSettingsOpen) {
+      return (
+        <LinearIssueWatchersConfigPanel
+          projectId={selection.id}
+          projectName={selection.name}
+        />
+      );
+    }
     if (issuesPanelMode === "board") {
       return <ProjectWatchersKanbanPanel projectId={selection.id} enabled />;
     }
     return <ProjectIssuesPanel projectId={selection.id} enabled />;
-  }
-
-  if (activeView === "watchers" && selection.kind === "project") {
-    if (watchersPanelMode === "list") {
-      return <LinearWorkspaceEmptyPage />;
-    }
-    return <ProjectWatchersKanbanPanel projectId={selection.id} enabled />;
   }
 
   if (activeView === "documents") {
@@ -103,36 +101,34 @@ export function LinearProjectContent({
     setLinearWorkspaceView,
     issuesPanelMode,
     setIssuesPanelMode,
-    watchersPanelMode,
-    setWatchersPanelMode,
   } =
     useContentPanelNavigation();
   const [activeView, setActiveView] = useState<LinearWorkspaceViewId>(() =>
     initialWorkspaceViewForSelection(selection, linearWorkspaceView),
   );
+  const [issuesSettingsOpen, setIssuesSettingsOpen] = useState(false);
 
   useEnsureLinearWorkspaceVaultStructure(selection, vaultStructureEnabled);
   useLinearWorkspaceFocusSnapshot();
 
-  const showCollectionModeToggle =
-    selection.kind === "project" && (activeView === "issues" || activeView === "watchers");
-  const collectionMode = activeView === "issues" ? issuesPanelMode : watchersPanelMode;
-  const collectionToggleOptions: readonly LinearProjectCollectionToggleOption[] =
-    activeView === "watchers"
-      ? [
-          { mode: "board", label: "Board" },
-          { mode: "list", label: "Config" },
-        ]
-      : [
-          { mode: "list", label: "List" },
-          { mode: "board", label: "Board" },
-        ];
-  const collectionToggleAriaLabel =
-    activeView === "watchers" ? "Watchers view mode" : "Issues view mode";
+  const showCollectionModeToggle = selection.kind === "project" && activeView === "issues";
+  const showIssuesSettingsButton = selection.kind === "project" && activeView === "issues";
+  const collectionMode = issuesPanelMode;
+  const collectionToggleOptions: readonly LinearProjectCollectionToggleOption[] = [
+    { mode: "list", label: "List" },
+    { mode: "board", label: "Board" },
+  ];
+  const collectionToggleAriaLabel = "Issues view mode";
 
   useEffect(() => {
     setActiveView(initialWorkspaceViewForSelection(selection, linearWorkspaceView));
   }, [linearWorkspaceView, selection]);
+
+  useEffect(() => {
+    if (activeView !== "issues" && issuesSettingsOpen) {
+      setIssuesSettingsOpen(false);
+    }
+  }, [activeView, issuesSettingsOpen]);
 
   useEffect(() => {
     setLinearWorkspaceView(activeView);
@@ -146,9 +142,18 @@ export function LinearProjectContent({
         onChange={setActiveView}
         showCollectionModeToggle={showCollectionModeToggle}
         collectionMode={collectionMode}
-        onCollectionModeChange={activeView === "issues" ? setIssuesPanelMode : setWatchersPanelMode}
+        onCollectionModeChange={(mode) => {
+          setIssuesPanelMode(mode);
+          setIssuesSettingsOpen(false);
+        }}
         collectionToggleOptions={collectionToggleOptions}
         collectionToggleAriaLabel={collectionToggleAriaLabel}
+        showIssuesSettingsButton={showIssuesSettingsButton}
+        issuesSettingsActive={issuesSettingsOpen}
+        issuesWatcherProjectId={selection.kind === "project" ? selection.id : null}
+        onIssuesSettingsClick={() => {
+          setIssuesSettingsOpen((current) => !current);
+        }}
       />
       <div
         className="linear-project-view-body"
@@ -160,7 +165,7 @@ export function LinearProjectContent({
           selection={selection}
           activeView={activeView}
           issuesPanelMode={issuesPanelMode}
-          watchersPanelMode={watchersPanelMode}
+          issuesSettingsOpen={issuesSettingsOpen}
         />
       </div>
     </div>
