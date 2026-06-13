@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { cors } from "hono/cors";
 import { bearerAuth } from "hono/bearer-auth";
 import { HTTPException } from "hono/http-exception";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -1463,6 +1463,7 @@ app.get("/settings", async (c) => {
   return c.json({
     notesPath: settings.notesPath,
     vaultName: settings.vaultName ?? null,
+    projectsPath: settings.projectsPath ?? null,
     agentId: settings.agentId,
     modelMode,
     modelId,
@@ -1484,6 +1485,7 @@ app.put("/settings", async (c) => {
   const body = (await c.req.json()) as {
     notesPath?: string;
     vaultName?: string | null;
+    projectsPath?: string | null;
     modelMode?: string;
     executionMode?: string;
     autoModelId?: string | null;
@@ -1492,9 +1494,11 @@ app.put("/settings", async (c) => {
     groceryLinearProjectId?: string | null;
   };
   const notesPath = body.notesPath?.trim();
+  const projectsPath = body.projectsPath?.trim();
   const modelMode = body.modelMode?.trim();
   const executionMode = body.executionMode?.trim();
   const hasVaultName = body.vaultName !== undefined;
+  const hasProjectsPath = body.projectsPath !== undefined;
   const hasIssueLinkMode = body.issueLinkMode !== undefined;
   const hasGroceryLinearProjectId = body.groceryLinearProjectId !== undefined;
 
@@ -1506,6 +1510,7 @@ app.put("/settings", async (c) => {
     !modelMode &&
     !executionMode &&
     !hasVaultName &&
+    !hasProjectsPath &&
     !hasIssueLinkMode &&
     !hasGroceryLinearProjectId &&
     !hasAutoModelId &&
@@ -1514,7 +1519,7 @@ app.put("/settings", async (c) => {
     return c.json(
       {
         error:
-          "notesPath, vaultName, modelMode, executionMode, autoModelId, maxModelId, issueLinkMode, or groceryLinearProjectId is required",
+          "notesPath, vaultName, projectsPath, modelMode, executionMode, autoModelId, maxModelId, issueLinkMode, or groceryLinearProjectId is required",
       },
       400,
     );
@@ -1548,6 +1553,10 @@ app.put("/settings", async (c) => {
   if (hasVaultName) {
     const trimmedVaultName = body.vaultName?.trim();
     settings.vaultName = trimmedVaultName || null;
+  }
+
+  if (hasProjectsPath) {
+    settings.projectsPath = projectsPath || null;
   }
 
   if (modelMode === "auto" || modelMode === "max") {
@@ -1598,6 +1607,7 @@ app.put("/settings", async (c) => {
   return c.json({
     notesPath: next.notesPath,
     vaultName: next.vaultName ?? null,
+    projectsPath: next.projectsPath ?? null,
     agentId: next.notesPath ? next.agentIdByNotesPath[next.notesPath] ?? null : null,
     modelMode: resolvedMode,
     modelId: getSelectedModelId(next),
@@ -1741,6 +1751,21 @@ app.put("/profiles/:kind", async (c) => {
 function resolveNotesPath(): string {
   const settings = loadSettings();
   return settings.notesPath ?? getNotesDirOverride() ?? join(homedir(), "notes");
+}
+
+function sanitizeWorkspaceFolderPart(input: string): string {
+  return input
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+}
+
+function buildIssueWorkspaceFolderName(projectName: string, issueIdentifier: string): string {
+  const safeProject = sanitizeWorkspaceFolderPart(projectName) || "project";
+  const safeIssue = sanitizeWorkspaceFolderPart(issueIdentifier) || "issue";
+  return `${safeProject}-${safeIssue}`;
 }
 
 function listRecentDailyNotes(notesPath: string, limit = 7): MarkdownFileEntity[] {
@@ -2817,6 +2842,36 @@ app.post("/workspace/revert", (c) => {
     return c.json({ ok: false }, 400);
   }
   return c.json({ ok: revertLastChanges(settings.notesPath) });
+});
+
+app.post("/workspace/issue-terminal-directory", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    projectsPath?: string;
+    projectName?: string;
+    issueIdentifier?: string;
+  };
+  const projectsPath = body.projectsPath?.trim() || "";
+  const projectName = body.projectName?.trim() || "";
+  const issueIdentifier = body.issueIdentifier?.trim() || "";
+
+  if (!projectsPath || !projectName || !issueIdentifier) {
+    return c.json(
+      { error: "projectsPath, projectName, and issueIdentifier are required" },
+      400,
+    );
+  }
+
+  const folderName = buildIssueWorkspaceFolderName(projectName, issueIdentifier);
+  const path = join(projectsPath, folderName);
+
+  try {
+    mkdirSync(path, { recursive: true });
+    return c.json({ path, folderName });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to prepare issue terminal directory";
+    return c.json({ error: message }, 500);
+  }
 });
 
 app.post("/approvals/request", async (c) => {

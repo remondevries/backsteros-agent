@@ -1,3 +1,4 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { ComposerModeToggle } from "../chat/ComposerModeToggle";
 import { TtsToggle } from "../chat/TtsToggle";
 import type { ComposerMode } from "../chat/composerMode";
@@ -7,17 +8,21 @@ import { useUiPreview } from "../chat/dev/UiPreviewContext";
 export function GeneralSettingsSection({
   composerMode,
   saving,
+  projectsPath,
   userProfilePath,
   agentProfilePath,
   onComposerModeChange,
+  onProjectsPathChange,
   onEditAgentProfile,
   onEditUserProfile,
 }: {
   composerMode: ComposerMode;
   saving: boolean;
+  projectsPath: string;
   userProfilePath: string | null;
   agentProfilePath: string | null;
   onComposerModeChange: (mode: ComposerMode) => void;
+  onProjectsPathChange: (path: string) => void;
   onEditAgentProfile: () => void;
   onEditUserProfile: () => void;
 }) {
@@ -25,6 +30,21 @@ export function GeneralSettingsSection({
 
   const { enabled: uiPreviewEnabled, open: uiPreviewOpen, toggle: toggleUiPreview } =
     useUiPreview();
+
+  async function pickProjectsFolder() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: projectsPath || undefined,
+      });
+      if (typeof selected === "string") {
+        onProjectsPathChange(selected);
+      }
+    } catch {
+      // Browser dev mode: keep manual path input
+    }
+  }
 
   return (
     <>
@@ -56,6 +76,36 @@ export function GeneralSettingsSection({
             {userProfilePath && <>User: {userProfilePath}</>}
           </p>
         )}
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-subsection-title">Projects</h3>
+        <p className="settings-hint settings-hint-spaced-top">
+          Folder used as the working directory when opening Issue Terminal.
+        </p>
+        <label className="settings-field-label" htmlFor="projects-path">
+          Projects location
+        </label>
+        <div className="settings-row">
+          <input
+            id="projects-path"
+            type="text"
+            value={projectsPath}
+            disabled={saving}
+            placeholder="/Users/name/code"
+            onChange={(event) => onProjectsPathChange(event.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={saving}
+            onClick={() => {
+              void pickProjectsFolder();
+            }}
+          >
+            Browse
+          </button>
+        </div>
       </section>
 
       <section className="settings-section">

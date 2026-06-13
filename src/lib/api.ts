@@ -476,6 +476,21 @@ export async function getSettings() {
   return request<AppSettings>("/settings", undefined, SETTINGS_REQUEST_TIMEOUT_MS);
 }
 
+export async function ensureLinearIssueTerminalDirectory(options: {
+  projectsPath: string;
+  projectName: string;
+  issueIdentifier: string;
+}) {
+  return request<{ path: string; folderName: string }>(
+    "/workspace/issue-terminal-directory",
+    {
+      method: "POST",
+      body: JSON.stringify(options),
+    },
+    SETTINGS_REQUEST_TIMEOUT_MS,
+  );
+}
+
 export type VaultDirectoryEntry = {
   name: string;
   kind: "file" | "directory";
@@ -847,6 +862,7 @@ export async function fetchCursorModels() {
 export async function updateSettings(updates: {
   notesPath?: string;
   vaultName?: string | null;
+  projectsPath?: string | null;
   modelMode?: ModelMode;
   executionMode?: ExecutionMode;
   autoModelId?: string | null;
@@ -857,6 +873,7 @@ export async function updateSettings(updates: {
   return request<{
     notesPath: string | null;
     vaultName: string | null;
+    projectsPath: string | null;
     agentId: string | null;
     modelMode: ModelMode;
     modelId: string;

@@ -59,6 +59,7 @@ export function SettingsPanel({
 }) {
   const [manualPath, setManualPath] = useState(notesPath ?? defaultNotesPath);
   const [manualVaultName, setManualVaultName] = useState(vaultName ?? "");
+  const [projectsPath, setProjectsPath] = useState("");
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [issueLinkMode, setIssueLinkMode] = useState<LinearIssueLinkMode>("external");
   const [groceryLinearProjectId, setGroceryLinearProjectId] = useState<string>("");
@@ -157,6 +158,7 @@ export function SettingsPanel({
       if (settings?.groceryLinearProjectId) {
         setGroceryLinearProjectId(settings.groceryLinearProjectId);
       }
+      setProjectsPath(settings?.projectsPath ?? "");
       const paths = await resolveProfilePaths({
         userProfilePath: initialUserProfilePath ?? settings?.userProfilePath,
         agentProfilePath: initialAgentProfilePath ?? settings?.agentProfilePath,
@@ -195,6 +197,7 @@ export function SettingsPanel({
       const result = await updateSettings({
         notesPath: manualPath,
         vaultName: manualVaultName.trim() || null,
+        projectsPath: projectsPath.trim() || null,
         ...settingsFromComposerMode(composerMode),
         issueLinkMode,
         groceryLinearProjectId: groceryLinearProjectId || null,
@@ -205,6 +208,7 @@ export function SettingsPanel({
       setIssueLinkMode(result.issueLinkMode);
       setLinearIssueLinkMode(result.issueLinkMode);
       setGroceryLinearProjectId(result.groceryLinearProjectId ?? "");
+      setProjectsPath(result.projectsPath ?? "");
       setSaveMessage("Saved");
       onUpdated(manualPath, result.vaultName ?? null);
     } catch (err) {
@@ -292,9 +296,11 @@ export function SettingsPanel({
             <GeneralSettingsSection
               composerMode={composerMode}
               saving={saving}
+              projectsPath={projectsPath}
               userProfilePath={userProfilePath}
               agentProfilePath={agentProfilePath}
               onComposerModeChange={setComposerMode}
+              onProjectsPathChange={setProjectsPath}
               onEditAgentProfile={() => setProfileEditor("agent")}
               onEditUserProfile={() => setProfileEditor("user")}
             />

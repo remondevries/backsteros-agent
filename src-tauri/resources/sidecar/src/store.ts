@@ -5,6 +5,7 @@ import { getDataDir } from "./config.ts";
 
 const DEFAULT_SETTINGS: AppSettings = {
   notesPath: null,
+  projectsPath: null,
   agentId: null,
   agentIdByNotesPath: {},
   modelId: null,

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   fetchLinearProjectWatcherConfig,
   updateLinearProjectWatcherConfig,
   type LinearProjectWatcherConfig,
 } from "../../lib/api";
+import { ResizablePanel } from "../ResizablePanel";
+
+const LINEAR_WATCHER_SETTINGS_WIDTH_KEY = "backsteros.layout.linearWatcherSettingsWidth";
 
 const POLL_INTERVAL_OPTIONS = [
   { value: 15_000, label: "Every 15 seconds" },
@@ -17,6 +20,108 @@ function defaultWatcherConfig(): LinearProjectWatcherConfig {
     pollIntervalMs: 30_000,
     statusChangesOnly: true,
   };
+}
+
+function WatcherConfigSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="linear-issue-details-section">
+      <header className="linear-issue-details-section-header">
+        <span className="linear-issue-details-section-heading">
+          <span className="linear-issue-details-section-chevron" aria-hidden="true">
+            ▾
+          </span>
+          <h3 className="linear-issue-details-section-title">{title}</h3>
+        </span>
+      </header>
+      <div className="linear-issue-details-section-body">{children}</div>
+    </section>
+  );
+}
+
+function WatcherConfigSettingsPanel({
+  config,
+  saving,
+  error,
+  savedMessage,
+  onUpdate,
+}: {
+  config: LinearProjectWatcherConfig;
+  saving: boolean;
+  error: string | null;
+  savedMessage: string | null;
+  onUpdate: (patch: Partial<LinearProjectWatcherConfig>) => void;
+}) {
+  return (
+    <div className="linear-issue-details-panel linear-issue-watchers-config-panel">
+      {error ? <p className="linear-issue-watchers-config__error">{error}</p> : null}
+      {savedMessage ? (
+        <p className="linear-issue-watchers-config__saved">{savedMessage}</p>
+      ) : null}
+
+      <WatcherConfigSection title="Watcher">
+        <p className="linear-issue-watchers-config__hint">
+          Runs in the background even when you are not on this project.
+        </p>
+        <button
+          type="button"
+          className={[
+            "linear-issue-watchers-config__enable-button",
+            "linear-issue-watchers-config__enable-button--full",
+            config.enabled ? "linear-issue-watchers-config__enable-button--active" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          disabled={saving}
+          aria-pressed={config.enabled}
+          onClick={() => onUpdate({ enabled: !config.enabled })}
+        >
+          {config.enabled ? "Disable watcher" : "Enable watcher"}
+        </button>
+      </WatcherConfigSection>
+
+      <WatcherConfigSection title="Polling">
+        <label className="linear-issue-watchers-config__field">
+          <span className="linear-issue-details-row-label">Poll interval</span>
+          <select
+            className="linear-issue-watchers-config__select"
+            value={config.pollIntervalMs}
+            disabled={saving || !config.enabled}
+            onChange={(event) => onUpdate({ pollIntervalMs: Number(event.target.value) })}
+          >
+            {POLL_INTERVAL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </WatcherConfigSection>
+
+      <WatcherConfigSection title="Notifications">
+        <label className="linear-issue-watchers-config__field linear-issue-watchers-config__field--toggle">
+          <span>
+            <span className="linear-issue-details-row-label">Status changes only</span>
+            <span className="linear-issue-watchers-config__hint">
+              Notify only when issue status changes or new issues appear.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="linear-issue-watchers-config__checkbox"
+            checked={config.statusChangesOnly}
+            disabled={saving || !config.enabled}
+            onChange={(event) => onUpdate({ statusChangesOnly: event.target.checked })}
+          />
+        </label>
+      </WatcherConfigSection>
+    </div>
+  );
 }
 
 export function LinearIssueWatchersConfigPanel({
@@ -95,80 +200,43 @@ export function LinearIssueWatchersConfigPanel({
     [persistConfig, projectName],
   );
 
-  if (loading) {
-    return (
-      <div className="linear-issue-watchers-config">
-        <p className="linear-issue-watchers-config__status">Loading watcher settings…</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="linear-issue-watchers-config">
-      <header className="linear-issue-watchers-config__header">
-        <div>
-          <h2 className="linear-issue-watchers-config__title">Issue watchers</h2>
-          <p className="linear-issue-watchers-config__subtitle">
-            Poll Linear for changes in <strong>{projectName}</strong> and show global notifications
-            when issues update.
-          </p>
+    <div className="linear-issue-layout linear-issue-watchers-config-layout">
+      <div className="linear-issue-main">
+        <div className="linear-issue-scroll linear-issue-watchers-log-scroll">
+          <div className="linear-issue-watchers-log">
+            <div className="linear-issue-watchers-log-empty" aria-live="polite">
+              <p>Watcher activity will appear here.</p>
+            </div>
+          </div>
         </div>
-        {savedMessage ? (
-          <span className="linear-issue-watchers-config__saved">{savedMessage}</span>
-        ) : null}
-      </header>
+      </div>
 
-      {error ? <p className="linear-issue-watchers-config__error">{error}</p> : null}
-
-      <section className="linear-issue-watchers-config__section">
-        <label className="linear-issue-watchers-config__row">
-          <span>
-            <span className="linear-issue-watchers-config__label">Enable watcher</span>
-            <span className="linear-issue-watchers-config__hint">
-              Runs in the background even when you are not on this project.
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            checked={config.enabled}
-            disabled={saving}
-            onChange={(event) => updateConfig({ enabled: event.target.checked })}
-          />
-        </label>
-
-        <label className="linear-issue-watchers-config__row">
-          <span className="linear-issue-watchers-config__label">Poll interval</span>
-          <select
-            className="linear-issue-watchers-config__select"
-            value={config.pollIntervalMs}
-            disabled={saving || !config.enabled}
-            onChange={(event) =>
-              updateConfig({ pollIntervalMs: Number(event.target.value) })
-            }
-          >
-            {POLL_INTERVAL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="linear-issue-watchers-config__row">
-          <span>
-            <span className="linear-issue-watchers-config__label">Status changes only</span>
-            <span className="linear-issue-watchers-config__hint">
-              Notify only when issue status changes or new issues appear.
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            checked={config.statusChangesOnly}
-            disabled={saving || !config.enabled}
-            onChange={(event) => updateConfig({ statusChangesOnly: event.target.checked })}
-          />
-        </label>
-      </section>
+      <ResizablePanel
+        side="right"
+        className="app-resizable-panel-inset linear-issue-details-resizable"
+        storageKey={LINEAR_WATCHER_SETTINGS_WIDTH_KEY}
+        defaultWidth={300}
+        minWidth={300}
+        maxWidth={480}
+        ariaLabel="Watcher settings"
+      >
+        <div className="linear-issue-details-shell">
+          <div className="linear-issue-details-scroll">
+            {loading ? (
+              <p className="linear-issue-watchers-config__status">Loading watcher settings…</p>
+            ) : (
+              <WatcherConfigSettingsPanel
+                config={config}
+                saving={saving}
+                error={error}
+                savedMessage={savedMessage}
+                onUpdate={updateConfig}
+              />
+            )}
+          </div>
+        </div>
+      </ResizablePanel>
     </div>
   );
 }

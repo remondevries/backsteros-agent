@@ -119,6 +119,7 @@
   --notification-close: var(--text-subtle);
   --notification-close-hover: var(--text-primary);
   --notification-shadow: 0 12px 32px var(--shadow-lg);
+  --watcher-accent: #5f6acc;
 
   --searchable-dropdown-bg: #171718;
   --searchable-dropdown-border: #1e1e20;
@@ -144,6 +145,28 @@
   --settings-connection-badge-bg: color-mix(in srgb, #4ade80 10%, transparent);
   --settings-connection-badge-border: color-mix(in srgb, #4ade80 34%, transparent);
   --settings-connection-badge-text: #86efac;
+
+  --terminal-background: var(--bg-app);
+  --terminal-foreground: var(--text-primary);
+  --terminal-cursor: var(--text-primary);
+  --terminal-cursor-accent: var(--bg-app);
+  --terminal-selection: var(--bg-surface-2);
+  --terminal-ansi-black: #1e1e1e;
+  --terminal-ansi-red: #e06c75;
+  --terminal-ansi-green: #98c379;
+  --terminal-ansi-yellow: #e5c07b;
+  --terminal-ansi-blue: #61afef;
+  --terminal-ansi-magenta: #c678dd;
+  --terminal-ansi-cyan: #56b6c2;
+  --terminal-ansi-white: #abb2bf;
+  --terminal-ansi-bright-black: #5c6370;
+  --terminal-ansi-bright-red: #e06c75;
+  --terminal-ansi-bright-green: #98c379;
+  --terminal-ansi-bright-yellow: #e5c07b;
+  --terminal-ansi-bright-blue: #61afef;
+  --terminal-ansi-bright-magenta: #c678dd;
+  --terminal-ansi-bright-cyan: #56b6c2;
+  --terminal-ansi-bright-white: #ffffff;
 }
 
 @media (prefers-color-scheme: light) {
@@ -296,5 +319,27 @@
     --settings-connection-badge-bg: #dcfce7;
     --settings-connection-badge-border: #86efac;
     --settings-connection-badge-text: #166534;
+
+    --terminal-background: var(--bg-app);
+    --terminal-foreground: var(--text-primary);
+    --terminal-cursor: var(--text-primary);
+    --terminal-cursor-accent: var(--bg-app);
+    --terminal-selection: var(--bg-surface-2);
+    --terminal-ansi-black: #383a42;
+    --terminal-ansi-red: #e45649;
+    --terminal-ansi-green: #50a14f;
+    --terminal-ansi-yellow: #c18401;
+    --terminal-ansi-blue: #4078f2;
+    --terminal-ansi-magenta: #a626a4;
+    --terminal-ansi-cyan: #0184bc;
+    --terminal-ansi-white: #a0a1a7;
+    --terminal-ansi-bright-black: #4f525e;
+    --terminal-ansi-bright-red: #e06c75;
+    --terminal-ansi-bright-green: #98c379;
+    --terminal-ansi-bright-yellow: #e5c07b;
+    --terminal-ansi-bright-blue: #61afef;
+    --terminal-ansi-bright-magenta: #c678dd;
+    --terminal-ansi-bright-cyan: #56b6c2;
+    --terminal-ansi-bright-white: #ffffff;
   }
 }

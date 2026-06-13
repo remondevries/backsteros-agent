@@ -3,6 +3,10 @@ import type { LinearIssueDetail } from "../../lib/api";
 import { CursorIcon } from "../../chat/CursorIcon";
 import { copyTextToClipboard, openLinearIssueInCursor } from "../../lib/linearIssueActions";
 import { openExternalUrl } from "../../lib/openExternalUrl";
+import {
+  LinearIssueViewModeToggle,
+  type LinearIssueViewMode,
+} from "./LinearIssueViewModeToggle";
 
 function ActionButton({
   label,
@@ -74,7 +78,17 @@ function BranchIcon() {
   );
 }
 
-export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
+export function LinearIssueActionBar({
+  issue,
+  watcherActive = false,
+  viewMode = "issue",
+  onViewModeChange,
+}: {
+  issue: LinearIssueDetail;
+  watcherActive?: boolean;
+  viewMode?: LinearIssueViewMode;
+  onViewModeChange?: (mode: LinearIssueViewMode) => void;
+}) {
   const [copiedField, setCopiedField] = useState<"id" | "branch" | null>(null);
 
   const flashCopied = useCallback((field: "id" | "branch") => {
@@ -104,38 +118,51 @@ export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
   }, [issue.branchName, issue.url]);
 
   return (
-    <div className="linear-issue-action-bar" aria-label="Issue actions">
-      <ActionButton label="Open in Linear" title="Open Linear URL" onClick={handleOpenUrl}>
-        <LinkIcon />
-      </ActionButton>
-      <ActionButton
-        label="Copy Linear ID"
-        title={copiedField === "id" ? "Copied" : `Copy ${issue.identifier}`}
-        onClick={() => void handleCopyIdentifier()}
-      >
-        <IdIcon />
-      </ActionButton>
-      <ActionButton
-        label="Copy git branch"
-        title={
-          copiedField === "branch"
-            ? "Copied"
-            : issue.branchName
-              ? `Copy ${issue.branchName}`
-              : "No git branch"
-        }
-        disabled={!issue.branchName}
-        onClick={() => void handleCopyBranch()}
-      >
-        <BranchIcon />
-      </ActionButton>
-      <ActionButton
-        label="Open in Cursor"
-        title={issue.branchName ? `Open branch in Cursor` : "Open in Cursor"}
-        onClick={handleOpenInCursor}
-      >
-        <CursorIcon size={14} />
-      </ActionButton>
+    <div
+      className={[
+        "linear-issue-action-bar",
+        watcherActive ? "linear-issue-action-bar--with-watcher" : null,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-label="Issue actions"
+    >
+      {watcherActive && onViewModeChange ? (
+        <LinearIssueViewModeToggle mode={viewMode} onChange={onViewModeChange} />
+      ) : null}
+      <div className="linear-issue-action-bar__actions">
+        <ActionButton label="Open in Linear" title="Open Linear URL" onClick={handleOpenUrl}>
+          <LinkIcon />
+        </ActionButton>
+        <ActionButton
+          label="Copy Linear ID"
+          title={copiedField === "id" ? "Copied" : `Copy ${issue.identifier}`}
+          onClick={() => void handleCopyIdentifier()}
+        >
+          <IdIcon />
+        </ActionButton>
+        <ActionButton
+          label="Copy git branch"
+          title={
+            copiedField === "branch"
+              ? "Copied"
+              : issue.branchName
+                ? `Copy ${issue.branchName}`
+                : "No git branch"
+          }
+          disabled={!issue.branchName}
+          onClick={() => void handleCopyBranch()}
+        >
+          <BranchIcon />
+        </ActionButton>
+        <ActionButton
+          label="Open in Cursor"
+          title={issue.branchName ? `Open branch in Cursor` : "Open in Cursor"}
+          onClick={handleOpenInCursor}
+        >
+          <CursorIcon size={14} />
+        </ActionButton>
+      </div>
     </div>
   );
 }

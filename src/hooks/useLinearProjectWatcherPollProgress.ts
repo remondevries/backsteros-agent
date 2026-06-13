@@ -5,12 +5,20 @@ import {
   isLinearWatcherPollEvent,
 } from "../lib/linearWatcherEvents";
 
+function normalizePollIntervalMs(value: number): 15_000 | 30_000 | 60_000 {
+  if (value <= 15_000) return 15_000;
+  if (value >= 60_000) return 60_000;
+  if (value <= 22_500) return 15_000;
+  if (value <= 45_000) return 30_000;
+  return 60_000;
+}
+
 export function useLinearProjectWatcherPollProgress(
   projectId: string | null,
   options?: { settingsPanelOpen?: boolean },
 ) {
   const [enabled, setEnabled] = useState(false);
-  const [pollIntervalMs, setPollIntervalMs] = useState(30_000);
+  const [pollIntervalMs, setPollIntervalMs] = useState<15_000 | 30_000 | 60_000>(30_000);
   const [animationKey, setAnimationKey] = useState(0);
   const previousSettingsOpenRef = useRef(options?.settingsPanelOpen ?? false);
 
@@ -28,7 +36,7 @@ export function useLinearProjectWatcherPollProgress(
       }
 
       setEnabled(result.config.enabled);
-      setPollIntervalMs(result.config.pollIntervalMs);
+      setPollIntervalMs(normalizePollIntervalMs(result.config.pollIntervalMs));
       if (result.config.enabled) {
         setAnimationKey((current) => current + 1);
       }
@@ -57,7 +65,7 @@ export function useLinearProjectWatcherPollProgress(
         return;
       }
       setEnabled(true);
-      setPollIntervalMs(event.pollIntervalMs);
+      setPollIntervalMs(normalizePollIntervalMs(event.pollIntervalMs));
       setAnimationKey((current) => current + 1);
     });
   }, [projectId]);

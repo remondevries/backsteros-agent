@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TiptapEditor } from "../../editor/TiptapEditor";
+import { XTermView } from "../../editor/XTermView";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearIssueDetail } from "../../hooks/useLinearIssueDetail";
+import { useLinearProjectWatcherPollProgress } from "../../hooks/useLinearProjectWatcherPollProgress";
+import { ensureLinearIssueTerminalDirectory, getSettings } from "../../lib/api";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { ResizablePanel } from "../ResizablePanel";
 import { LinearIssueActionBar } from "./LinearIssueActionBar";
 import { LinearIssueDetailsPanel } from "./LinearIssueDetailsPanel";
+import type { LinearIssueViewMode } from "./LinearIssueViewModeToggle";
 
 const LINEAR_ISSUE_DETAILS_WIDTH_KEY = "backsteros.layout.linearIssueDetailsWidth";
 const SAVE_DEBOUNCE_MS = 800;
@@ -16,6 +20,11 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   const { issue, loading, refreshing, updating, error, refresh, updateIssue } = useLinearIssueDetail(
     issueId,
   );
+  const [contentMode, setContentMode] = useState<LinearIssueViewMode>("issue");
+  const [terminalWorkingDirectory, setTerminalWorkingDirectory] = useState<string | null>(null);
+  const [terminalWorkingDirectoryResolved, setTerminalWorkingDirectoryResolved] = useState(false);
+  const projectId = issue?.projectId?.trim() || null;
+  const { watcherActive } = useLinearProjectWatcherPollProgress(projectId);
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [descriptionDirty, setDescriptionDirty] = useState(false);
   const [descriptionSaving, setDescriptionSaving] = useState(false);
@@ -45,6 +54,7 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     setDescriptionDirty(false);
     setDescriptionSaving(false);
     setDescriptionSaveError(null);
+    setContentMode("issue");
     userEditedDescriptionRef.current = false;
   }, [issueId]);
 
@@ -178,29 +188,108 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     }
   };
 
+  useEffect(() => {
+    if (!watcherActive && contentMode === "terminal") {
+      setContentMode("issue");
+    }
+  }, [contentMode, watcherActive]);
+
+  const showTerminal = watcherActive && contentMode === "terminal";
+
+  useEffect(() => {
+    if (!showTerminal) {
+      setTerminalWorkingDirectoryResolved(false);
+      return;
+    }
+    let cancelled = false;
+
+    void getSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        const configuredPath = settings.projectsPath?.trim() || null;
+        if (!configuredPath) {
+          setTerminalWorkingDirectory(null);
+          setTerminalWorkingDirectoryResolved(true);
+          return;
+        }
+
+        const projectName = issue?.projectName?.trim() || null;
+        const issueIdentifier = issue?.identifier?.trim() || null;
+        if (!projectName || !issueIdentifier) {
+          setTerminalWorkingDirectory(configuredPath);
+          setTerminalWorkingDirectoryResolved(true);
+          return;
+        }
+
+        void ensureLinearIssueTerminalDirectory({
+          projectsPath: configuredPath,
+          projectName,
+          issueIdentifier,
+        })
+          .then((result) => {
+            if (cancelled) return;
+            setTerminalWorkingDirectory(result.path);
+            setTerminalWorkingDirectoryResolved(true);
+          })
+          .catch(() => {
+            if (cancelled) return;
+            setTerminalWorkingDirectory(configuredPath);
+            setTerminalWorkingDirectoryResolved(true);
+          });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTerminalWorkingDirectory(null);
+          setTerminalWorkingDirectoryResolved(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [issue?.identifier, issue?.projectName, showTerminal]);
+
   return (
     <div className="linear-issue-layout">
       <div className="linear-issue-main">
         {!issue ? (
           <div className="linear-issue-scroll" />
         ) : (
-          <div className="linear-issue-scroll">
-            <article className="linear-issue">
-              <header className="linear-issue-header">
-                <h1 className="linear-issue-title">{issue.title}</h1>
-              </header>
-              <div className="linear-issue-body-editor">
-                <TiptapEditor
-                  value={descriptionDraft}
-                  onChange={handleDescriptionChange}
-                  onFocus={handleDescriptionFocus}
-                  onBlur={handleDescriptionBlur}
-                  format="markdown"
-                  placeholder="Add a description…"
-                  className="linear-issue-tiptap"
-                />
+          <div
+            className={[
+              "linear-issue-scroll",
+              showTerminal ? "linear-issue-scroll--terminal" : null,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {showTerminal ? (
+              <div className="linear-issue-terminal-shell">
+                {terminalWorkingDirectoryResolved ? (
+                  <XTermView
+                    className="linear-issue-terminal"
+                    workingDirectory={terminalWorkingDirectory}
+                  />
+                ) : null}
               </div>
-            </article>
+            ) : (
+              <article className="linear-issue">
+                <header className="linear-issue-header">
+                  <h1 className="linear-issue-title">{issue.title}</h1>
+                </header>
+                <div className="linear-issue-body-editor">
+                  <TiptapEditor
+                    value={descriptionDraft}
+                    onChange={handleDescriptionChange}
+                    onFocus={handleDescriptionFocus}
+                    onBlur={handleDescriptionBlur}
+                    format="markdown"
+                    placeholder="Add a description…"
+                    className="linear-issue-tiptap"
+                  />
+                </div>
+              </article>
+            )}
           </div>
         )}
       </div>
@@ -216,7 +305,12 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
           ariaLabel="Issue details"
         >
           <div className="linear-issue-details-shell">
-            <LinearIssueActionBar issue={issue} />
+            <LinearIssueActionBar
+              issue={issue}
+              watcherActive={watcherActive}
+              viewMode={contentMode}
+              onViewModeChange={setContentMode}
+            />
             <div className="linear-issue-details-scroll">
               <LinearIssueDetailsPanel
                 issue={issue}

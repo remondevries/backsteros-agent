@@ -34,6 +34,27 @@
   padding: 8px 10px;
 }
 
+.xterm-view.linear-issue-terminal .xterm {
+  padding: 0 10px 0 0;
+}
+
+.xterm-view .xterm-rows {
+  line-height: 1;
+}
+
 .xterm-view .xterm-viewport {
   background: transparent !important;
+}
+
+.xterm-view-fallback {
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.xterm-view-fallback-path {
+  margin-top: 8px;
+  color: var(--text-subtle);
+  font-size: 12px;
 }

@@ -69,13 +69,14 @@ export function ContentPanelMainSlot({
     !showVaultEmptyState &&
     activeVaultNavItem !== "daily" &&
     !hideDefaultMainContent;
+  const showMainChildren = settingsOpen || showDefault;
 
   return (
     <div className="content-panel-slot-stack">
       <div className="content-panel-main-slot" hidden={!showProjectsBrowse}>
         <LinearProjectsTableView enabled={vaultStructureEnabled} />
       </div>
-      <div className="content-panel-main-slot" hidden={!showDefault}>
+      <div className="content-panel-main-slot" hidden={!showMainChildren}>
         {children}
       </div>
       <div className="content-panel-main-slot" hidden={!showVaultEmptyState}>

@@ -333,6 +333,7 @@ export interface AppSettings {
   vaultName?: string | null;
   agentId: string | null;
   defaultNotesPath: string;
+  projectsPath?: string | null;
   modelMode: ModelMode;
   modelId: string;
   autoModelId?: string | null;

@@ -265,6 +265,7 @@ export type AgentEvent =
 export interface AppSettings {
   notesPath: string | null;
   vaultName?: string | null;
+  projectsPath?: string | null;
   agentId: string | null;
   agentIdByNotesPath: Record<string, string>;
   modelId: string | null;

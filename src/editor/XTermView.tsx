@@ -1,47 +1,52 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
-import "@xterm/xterm/css/xterm.css";
+import { isTauriRuntime } from "../lib/tauriRuntime";
+import { disposeSession, useTerminalSession } from "../modules/terminal/lib/useTerminalSession";
 
-function readThemeColors() {
-  const styles = getComputedStyle(document.documentElement);
-  return {
-    background: styles.getPropertyValue("--bg-app").trim() || "#070707",
-    foreground: styles.getPropertyValue("--text-primary").trim() || "#f5f5f7",
-    cursor: styles.getPropertyValue("--text-primary").trim() || "#f5f5f7",
-    selectionBackground: styles.getPropertyValue("--surface-2").trim() || "#2a2b30",
-  };
-}
+/** Single embedded terminal in LinearIssueView — one stable session across remounts. */
+const EMBEDDED_TERMINAL_LEAF_ID = 1;
 
-export function XTermView({ className }: { className?: string }) {
+export function XTermView({
+  className,
+  workingDirectory,
+}: {
+  className?: string;
+  workingDirectory?: string | null;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const { focus } = useTerminalSession({
+    leafId: EMBEDDED_TERMINAL_LEAF_ID,
+    container: containerRef,
+    visible: true,
+    focused: true,
+    initialCwd: workingDirectory?.trim() || undefined,
+  });
+
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    if (!isTauriRuntime()) return;
+    focus();
+  }, [focus]);
 
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-      fontSize: 12,
-      lineHeight: 1.4,
-      theme: readThemeColors(),
-    });
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(container);
-    fitAddon.fit();
-
-    const observer = new ResizeObserver(() => {
-      fitAddon.fit();
-    });
-    observer.observe(container);
-
+  useEffect(() => {
     return () => {
-      observer.disconnect();
-      terminal.dispose();
+      disposeSession(EMBEDDED_TERMINAL_LEAF_ID);
     };
   }, []);
+
+  if (!isTauriRuntime()) {
+    return (
+      <div className={["xterm-view", className].filter(Boolean).join(" ")}>
+        <div className="xterm-view-fallback">
+          Terminal is only available in the desktop app.
+          {workingDirectory ? (
+            <div className="xterm-view-fallback-path">
+              Configured project location: {workingDirectory}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,8 +1,10 @@
 mod hotkeys;
+mod modules;
 mod sidecar;
 mod traffic_lights;
 mod window;
 
+use modules::pty::PtyState;
 use sidecar::SidecarState;
 use tauri::Manager;
 
@@ -30,10 +32,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(SidecarState::new())
+        .manage(PtyState::default())
         .invoke_handler(tauri::generate_handler![
             get_sidecar_connection,
             restart_sidecar,
-            set_traffic_lights_visible
+            set_traffic_lights_visible,
+            modules::pty::pty_open,
+            modules::pty::pty_write,
+            modules::pty::pty_resize,
+            modules::pty::pty_close,
+            modules::pty::pty_close_all,
+            modules::pty::pty_has_foreground_job,
+            modules::pty::pty_has_foreground_process,
+            modules::pty::pty_shell_name,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -48,6 +59,8 @@ pub fn run() {
                 eprintln!("Failed to start agent server: {error}");
             }
             hotkeys::register_hotkeys(app.handle())?;
+
+            let _ = modules::pty::pty_close_all(app.state::<PtyState>());
 
             if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
                 let _ = window.set_theme(None);
