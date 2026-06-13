@@ -170,6 +170,19 @@ import {
   listVaultDirectoryEntries,
   VAULT_NAV_FOLDER_NAMES,
 } from "./vault-nav-structure.ts";
+import {
+  appendWorkoutSets,
+  assertWorkoutDateKey,
+  deleteWorkoutExercise,
+  deleteWorkoutSession,
+  deleteWorkoutSet,
+  loadExerciseCatalog,
+  prepareAppendSets,
+  readAllWorkoutSets,
+  readWorkoutDaySets,
+  renameWorkoutExercise,
+  updateWorkoutSet,
+} from "./workouts/store.ts";
 import { ensureLinearWorkspaceVaultStructure } from "./linear-workspace-vault-structure.ts";
 import type { LinearIssueEntity, MarkdownFileEntity, ToolCategory } from "./types.ts";
 import { ensureAgentProfile } from "./context/agent.ts";
@@ -1816,6 +1829,209 @@ app.patch("/vault/documents", async (c) => {
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update document";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.get("/vault/workouts/sets", (c) => {
+  const notesPath = resolveNotesPath();
+  const from = c.req.query("from")?.trim() || undefined;
+  const to = c.req.query("to")?.trim() || undefined;
+  try {
+    const result = readAllWorkoutSets(notesPath, { from, to });
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load workout sets";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.get("/vault/workouts/sets/:date", (c) => {
+  const notesPath = resolveNotesPath();
+  try {
+    const dateKey = assertWorkoutDateKey(c.req.param("date"));
+    const result = readWorkoutDaySets(notesPath, dateKey);
+    return c.json({ date: dateKey, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load workout day";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.get("/vault/workouts/catalog", (c) => {
+  const notesPath = resolveNotesPath();
+  try {
+    const result = loadExerciseCatalog(notesPath);
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load exercise catalog";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/vault/workouts/sets", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const sets =
+    body && typeof body === "object" && "sets" in body && Array.isArray(body.sets)
+      ? body.sets
+      : null;
+  if (!sets || sets.length === 0) {
+    return c.json({ error: "sets array is required" }, 400);
+  }
+  try {
+    const prepared = prepareAppendSets(notesPath, sets);
+    const count = appendWorkoutSets(notesPath, prepared);
+    return c.json({ inserted: count, sets: prepared });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to append workout sets";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.patch("/vault/workouts/sets", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const locator =
+    body && typeof body === "object" && "date" in body && "exercise" in body && "setNumber" in body
+      ? {
+          date: String(body.date),
+          exercise: String(body.exercise),
+          setNumber: Number(body.setNumber),
+        }
+      : null;
+  const patch =
+    body && typeof body === "object" && "patch" in body && typeof body.patch === "object"
+      ? body.patch
+      : null;
+  if (!locator || !patch) {
+    return c.json({ error: "locator and patch are required" }, 400);
+  }
+  try {
+    const ok = updateWorkoutSet(notesPath, locator, {
+      reps: Number(patch.reps),
+      weight: Number(patch.weight),
+      isBodyweight: Boolean(patch.isBodyweight),
+    });
+    return c.json({ ok });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update workout set";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.delete("/vault/workouts/sets", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const locator =
+    body && typeof body === "object" && "date" in body && "exercise" in body && "setNumber" in body
+      ? {
+          date: String(body.date),
+          exercise: String(body.exercise),
+          setNumber: Number(body.setNumber),
+        }
+      : null;
+  if (!locator) {
+    return c.json({ error: "locator is required" }, 400);
+  }
+  try {
+    const ok = deleteWorkoutSet(notesPath, locator);
+    return c.json({ ok });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete workout set";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.delete("/vault/workouts/session", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const date =
+    body && typeof body === "object" && "date" in body ? String(body.date) : "";
+  if (!date) {
+    return c.json({ error: "date is required" }, 400);
+  }
+  const sessionStartMs =
+    body && typeof body === "object" && "sessionStartMs" in body
+      ? Number(body.sessionStartMs)
+      : undefined;
+  try {
+    const ok = deleteWorkoutSession(notesPath, assertWorkoutDateKey(date), sessionStartMs);
+    return c.json({ ok });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete workout session";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.delete("/vault/workouts/exercise", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const locator =
+    body && typeof body === "object" && "date" in body && "exercise" in body
+      ? { date: String(body.date), exercise: String(body.exercise) }
+      : null;
+  if (!locator) {
+    return c.json({ error: "date and exercise are required" }, 400);
+  }
+  try {
+    const ok = deleteWorkoutExercise(notesPath, locator);
+    return c.json({ ok });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete workout exercise";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/vault/workouts/exercise/rename", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const locator =
+    body && typeof body === "object" && "date" in body && "exercise" in body
+      ? { date: String(body.date), exercise: String(body.exercise) }
+      : null;
+  const newExercise =
+    body && typeof body === "object" && "newExercise" in body
+      ? String(body.newExercise)
+      : "";
+  if (!locator || !newExercise.trim()) {
+    return c.json({ error: "date, exercise, and newExercise are required" }, 400);
+  }
+  try {
+    const ok = renameWorkoutExercise(notesPath, locator, newExercise);
+    return c.json({ ok });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to rename workout exercise";
     return c.json({ error: message }, 400);
   }
 });

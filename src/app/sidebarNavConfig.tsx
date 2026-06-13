@@ -84,6 +84,7 @@ export function isSidebarPrimaryNavItem(
 
 /** Primary nav sections that show the content empty state until the user picks an item. */
 export function shouldShowPrimaryNavEmptyState(id: SidebarNavItemId): boolean {
+  if (id === "workouts") return false;
   if (id === "meetings") return true;
   if (id === "knowledge-base") return true;
   return isSidebarPrimaryNavItem(id) && id !== "daily";

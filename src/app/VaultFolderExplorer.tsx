@@ -10,6 +10,14 @@ import {
 } from "./contentPanelNavigation";
 import { ProjectIssueRow } from "./project-issues/ProjectIssueRow";
 import { requestLinearIssueViewMode } from "./project-issues/issueViewModeIntent";
+import { formatWorkoutDayLabel } from "../lib/workouts/workoutsBreadcrumb";
+import { workoutDateKeyFromPath } from "../lib/workouts/workoutDays";
+
+const RESERVED_WORKOUT_FILES = new Set([
+  "dashboard.md",
+  "exercise-catalog.md",
+  "personal-records.csv",
+]);
 
 function splitRelativePath(path: string): string[] {
   return path.split("/").filter(Boolean);
@@ -66,7 +74,7 @@ export function VaultFolderExplorer({
   activeNavItem: VaultNavItemId;
   enabled: boolean;
 }) {
-  const { activeVaultDocument, setActiveVaultDocument, setActiveLinearIssue } =
+  const { activeVaultDocument, setActiveVaultDocument, setActiveLinearIssue, clearActiveVaultDocument } =
     useContentPanelNavigation();
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
@@ -109,6 +117,21 @@ export function VaultFolderExplorer({
   }, [relativePath]);
 
   const orderedEntries = useMemo(() => {
+    if (activeNavItem === "workouts") {
+      return entries
+        .filter((entry) => {
+          if (entry.kind !== "file") return false;
+          const base = entry.name.toLowerCase();
+          if (RESERVED_WORKOUT_FILES.has(base)) return false;
+          return workoutDateKeyFromPath(entry.path) != null;
+        })
+        .slice()
+        .sort((left, right) => {
+          const leftDate = workoutDateKeyFromPath(left.path) ?? "";
+          const rightDate = workoutDateKeyFromPath(right.path) ?? "";
+          return rightDate.localeCompare(leftDate);
+        });
+    }
     if (entries.length <= 1) return entries;
     const directories = entries.filter((entry) => entry.kind === "directory");
     const filesNewestFirst = entries
@@ -116,7 +139,7 @@ export function VaultFolderExplorer({
       .slice()
       .reverse();
     return [...directories, ...filesNewestFirst];
-  }, [entries]);
+  }, [activeNavItem, entries]);
 
   const filteredEntries = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -236,8 +259,26 @@ export function VaultFolderExplorer({
       ) : null}
 
       {!loading && !error ? (
-        filteredEntries.length > 0 ? (
+        filteredEntries.length > 0 || activeNavItem === "workouts" ? (
           <ul className="vault-folder-explorer-list">
+            {activeNavItem === "workouts" ? (
+              <li className="vault-folder-explorer-item">
+                <button
+                  type="button"
+                  className={[
+                    "vault-folder-explorer-entry",
+                    "vault-folder-explorer-entry-file",
+                    "vault-folder-explorer-entry-selectable",
+                    activeVaultDocument == null ? "vault-folder-explorer-entry-selected" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => clearActiveVaultDocument()}
+                >
+                  <span className="vault-folder-explorer-entry-name">Dashboard</span>
+                </button>
+              </li>
+            ) : null}
             {showDailyWeekGroups ? (
               <>
                 {nonFileEntries.map((entry) => (
@@ -306,7 +347,10 @@ export function VaultFolderExplorer({
               </>
             ) : (
               filteredEntries.map((entry) => {
-                const displayName = formatVaultNoteDisplayName(entry.name);
+                const displayName =
+                  activeNavItem === "workouts"
+                    ? formatWorkoutDayLabel(workoutDateKeyFromPath(entry.path) ?? entry.name)
+                    : formatVaultNoteDisplayName(entry.name);
                 const selected =
                   entry.kind === "file" && activeVaultDocument?.path === entry.path;
 

@@ -568,6 +568,109 @@ export async function updateVaultDocument(
   });
 }
 
+export type WorkoutSetWire = {
+  date: string;
+  exercise: string;
+  muscleGroup?: string;
+  setNumber?: number;
+  reps: number;
+  weight: number;
+  detail?: string;
+  isBodyweight?: boolean;
+  loggedAt?: string;
+};
+
+export type ExerciseCatalogEntryWire = {
+  name: string;
+  muscleGroup: string;
+  aliases: string[];
+};
+
+export async function fetchWorkoutSets(options?: { from?: string; to?: string }) {
+  const query = new URLSearchParams();
+  if (options?.from) query.set("from", options.from);
+  if (options?.to) query.set("to", options.to);
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  return request<{
+    sets: WorkoutSetWire[];
+    parseError: string | null;
+    dateKeys: string[];
+    error?: string;
+  }>(`/vault/workouts/sets${suffix}`);
+}
+
+export async function fetchWorkoutDay(date: string) {
+  return request<{
+    date: string;
+    sets: WorkoutSetWire[];
+    parseError: string | null;
+    error?: string;
+  }>(`/vault/workouts/sets/${encodeURIComponent(date)}`);
+}
+
+export async function fetchWorkoutCatalog() {
+  return request<{
+    entries: ExerciseCatalogEntryWire[];
+    markdown: string;
+    error?: string;
+  }>("/vault/workouts/catalog");
+}
+
+export async function appendWorkoutSets(sets: WorkoutSetWire[]) {
+  return request<{ inserted: number; sets: WorkoutSetWire[]; error?: string }>(
+    "/vault/workouts/sets",
+    {
+      method: "POST",
+      body: JSON.stringify({ sets }),
+    },
+  );
+}
+
+export async function updateWorkoutSet(
+  locator: { date: string; exercise: string; setNumber: number },
+  patch: { reps: number; weight: number; isBodyweight: boolean },
+) {
+  return request<{ ok: boolean; error?: string }>("/vault/workouts/sets", {
+    method: "PATCH",
+    body: JSON.stringify({ ...locator, patch }),
+  });
+}
+
+export async function deleteWorkoutSet(locator: {
+  date: string;
+  exercise: string;
+  setNumber: number;
+}) {
+  return request<{ ok: boolean; error?: string }>("/vault/workouts/sets", {
+    method: "DELETE",
+    body: JSON.stringify(locator),
+  });
+}
+
+export async function deleteWorkoutSession(date: string, sessionStartMs?: number) {
+  return request<{ ok: boolean; error?: string }>("/vault/workouts/session", {
+    method: "DELETE",
+    body: JSON.stringify({ date, sessionStartMs }),
+  });
+}
+
+export async function deleteWorkoutExercise(locator: { date: string; exercise: string }) {
+  return request<{ ok: boolean; error?: string }>("/vault/workouts/exercise", {
+    method: "DELETE",
+    body: JSON.stringify(locator),
+  });
+}
+
+export async function renameWorkoutExercise(
+  locator: { date: string; exercise: string },
+  newExercise: string,
+) {
+  return request<{ ok: boolean; error?: string }>("/vault/workouts/exercise/rename", {
+    method: "POST",
+    body: JSON.stringify({ ...locator, newExercise }),
+  });
+}
+
 export async function ensureLinearWorkspaceVaultStructure(options: {
   teamId?: string;
   projectId?: string;

@@ -8,6 +8,14 @@ import { LinearProjectContent } from "./LinearProjectContent";
 import { LinearDocumentView } from "./project-documents/LinearDocumentView";
 import { LinearProjectsTableView } from "./projects/LinearProjectsTableView";
 import { VaultDocumentView } from "./project-documents/VaultDocumentView";
+import { WorkoutsDashboard } from "./workouts/WorkoutsDashboard";
+import { WorkoutSessionView } from "./workouts/WorkoutSessionView";
+import { workoutDateKeyFromPath } from "../lib/workouts/workoutDays";
+
+export function isWorkoutSessionPath(path: string | undefined | null): boolean {
+  if (!path) return false;
+  return workoutDateKeyFromPath(path) != null;
+}
 
 export function shouldHideDefaultMainContent({
   activeVaultNavItem,
@@ -38,9 +46,21 @@ export function ContentPanelMainSlot({
 }) {
   const { linearSelection, activeVaultDocument, activeLinearDocument, activeLinearIssue } =
     useContentPanelNavigation();
+  const showWorkoutSession =
+    !settingsOpen && isWorkoutSessionPath(activeVaultDocument?.path ?? null);
+  const showWorkoutsDashboard =
+    !settingsOpen &&
+    activeVaultNavItem === "workouts" &&
+    !showWorkoutSession &&
+    activeLinearDocument === null &&
+    activeLinearIssue === null &&
+    linearSelection === null;
   const showLinearDocument = !settingsOpen && activeLinearDocument !== null;
   const showVaultDocument =
-    !settingsOpen && activeVaultDocument !== null && !showLinearDocument;
+    !settingsOpen &&
+    activeVaultDocument !== null &&
+    !showWorkoutSession &&
+    !showLinearDocument;
   const showLinearIssue =
     !settingsOpen && activeLinearIssue !== null && !showVaultDocument && !showLinearDocument;
   const showLinearWorkspace =
@@ -50,7 +70,12 @@ export function ContentPanelMainSlot({
     !showLinearDocument &&
     !showLinearIssue;
   const hasFocusedContent =
-    showVaultDocument || showLinearDocument || showLinearIssue || showLinearWorkspace;
+    showVaultDocument ||
+    showWorkoutSession ||
+    showWorkoutsDashboard ||
+    showLinearDocument ||
+    showLinearIssue ||
+    showLinearWorkspace;
   const showVaultEmptyState =
     !settingsOpen &&
     vaultStructureEnabled &&
@@ -101,6 +126,14 @@ export function ContentPanelMainSlot({
             documentId={activeLinearDocument.id}
             projectId={activeLinearDocument.projectId}
           />
+        ) : null}
+      </div>
+      <div className="content-panel-main-slot" hidden={!showWorkoutsDashboard}>
+        <WorkoutsDashboard />
+      </div>
+      <div className="content-panel-main-slot" hidden={!showWorkoutSession}>
+        {activeVaultDocument && showWorkoutSession ? (
+          <WorkoutSessionView path={activeVaultDocument.path} />
         ) : null}
       </div>
       <div className="content-panel-main-slot" hidden={!showVaultDocument}>

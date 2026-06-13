@@ -84,6 +84,11 @@ export function ContentPanelSidebar({
       };
     }
 
+    if (activeVaultNavItem === "workouts") {
+      clearActiveVaultDocument();
+      return;
+    }
+
     clearActiveVaultDocument();
   }, [
     activeVaultNavItem,

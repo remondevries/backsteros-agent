@@ -175,7 +175,7 @@ export async function fetchLinearIssuesByDueDates(
   let nodes: GraphqlIssueNode[] = [];
   try {
     nodes = await fetchIssueNodesForDueDates(dueDates);
-  } catch {
+  } catch (error) {
     // Fallback: query each due date separately in case `in` filter support differs by account.
     for (const dueDate of dueDates) {
       const perDateNodes = await fetchIssueNodesForSingleDueDate(dueDate);
