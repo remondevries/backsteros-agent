@@ -9,7 +9,6 @@ import {
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
 import { vaultFolderTitle } from "../lib/vaultFolderContext";
-import { debugSessionLog } from "../lib/debugSessionLog";
 import { onVaultContentChanged } from "../lib/vaultContentEvents";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
@@ -133,14 +132,6 @@ export function VaultFolderExplorer({
         title: vaultFolderTitle(nextRootPath),
       });
     }
-    // #region agent log
-    debugSessionLog(
-      "VaultFolderExplorer.tsx:nav-change",
-      "activeNavItem changed, reset relativePath",
-      { activeNavItem, rootPath: nextRootPath },
-      "E",
-    );
-    // #endregion
   }, [activeNavItem, enabled, setActiveVaultFolder]);
 
   useEffect(() => {
@@ -148,20 +139,11 @@ export function VaultFolderExplorer({
       setActiveVaultFolder(null);
       return;
     }
-    const folder = {
+    setActiveVaultFolder({
       path: relativePath,
       title: vaultFolderTitle(relativePath),
-    };
-    setActiveVaultFolder(folder);
-    // #region agent log
-    debugSessionLog(
-      "VaultFolderExplorer.tsx:publish-folder",
-      "setActiveVaultFolder from relativePath",
-      { activeNavItem, relativePath, folder },
-      "C",
-    );
-    // #endregion
-  }, [enabled, relativePath, setActiveVaultFolder, activeNavItem]);
+    });
+  }, [enabled, relativePath, setActiveVaultFolder]);
 
   useEffect(() => {
     return () => {

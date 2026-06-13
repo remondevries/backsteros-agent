@@ -8,7 +8,6 @@ import { LinearWorkspacePanel } from "./LinearWorkspacePanel";
 import { OrganizationTeamsList } from "./OrganizationTeamsList";
 import { VaultFolderExplorer } from "./VaultFolderExplorer";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
-import { debugSessionLog } from "../lib/debugSessionLog";
 
 export function ContentPanelSidebar({
   activeVaultNavItem,
@@ -27,15 +26,6 @@ export function ContentPanelSidebar({
   const showEmptyState = !activeVaultNavItem;
 
   useEffect(() => {
-    // #region agent log
-    debugSessionLog(
-      "ContentPanelSidebar.tsx:nav-change",
-      "sidebar vault nav item changed",
-      { activeVaultNavItem, vaultExplorerEnabled },
-      "D",
-    );
-    // #endregion
-
     if (!vaultExplorerEnabled || !activeVaultNavItem) return;
 
     if (isSidebarPrimaryNavItem(activeVaultNavItem)) {

@@ -23,7 +23,6 @@ import {
   supportsLinearPanelAgent,
 } from "./rightPanelAgents";
 import { registerRightPanelComposerFocus } from "../lib/rightPanelChatFocus";
-import { debugSessionLog } from "../lib/debugSessionLog";
 
 type RightPanelSession = {
   sessionId: string;
@@ -58,17 +57,6 @@ export function RightPanelChatSlot({
     useState<ActiveVaultFolder | null>(null);
 
   useEffect(() => {
-    // #region agent log
-    debugSessionLog(
-      "RightPanelChatSlot.tsx:override-reset",
-      "vaultChatContextOverride reset due to document or folder change",
-      {
-        documentPath: activeVaultDocument?.path ?? null,
-        folderPath: activeVaultFolder?.path ?? null,
-      },
-      "A",
-    );
-    // #endregion
     setVaultChatContextOverride(null);
   }, [activeVaultDocument?.path, activeVaultFolder?.path]);
 
@@ -96,33 +84,6 @@ export function RightPanelChatSlot({
     ],
   );
 
-  useEffect(() => {
-    // #region agent log
-    debugSessionLog(
-      "RightPanelChatSlot.tsx:focus-context",
-      "chat focus context resolved",
-      {
-        focusKind: focusContext?.kind ?? null,
-        focusPath:
-          focusContext?.kind === "vault_document" || focusContext?.kind === "vault_folder"
-            ? focusContext.path
-            : null,
-        focusName:
-          focusContext?.kind === "vault_folder" ? focusContext.name : null,
-        activeVaultDocumentPath: activeVaultDocument?.path ?? null,
-        activeVaultFolderPath: activeVaultFolder?.path ?? null,
-        overridePath: vaultChatContextOverride?.path ?? null,
-      },
-      "B",
-    );
-    // #endregion
-  }, [
-    focusContext,
-    activeVaultDocument?.path,
-    activeVaultFolder?.path,
-    vaultChatContextOverride?.path,
-  ]);
-
   const composerContextLoading = useMemo(
     () =>
       focusContext
@@ -141,28 +102,11 @@ export function RightPanelChatSlot({
     const target = resolveVaultChatContextGoUpTarget(focusContext);
     if (!target) return;
 
-    // #region agent log
-    debugSessionLog(
-      "RightPanelChatSlot.tsx:context-go-up",
-      "widening chat context to folder",
-      {
-        fromKind: focusContext.kind,
-        fromPath:
-          focusContext.kind === "vault_document" || focusContext.kind === "vault_folder"
-            ? focusContext.path
-            : null,
-        targetPath: target.path,
-        activeVaultFolderPath: activeVaultFolder?.path ?? null,
-      },
-      "A",
-    );
-    // #endregion
-
     setVaultChatContextOverride({
       path: target.path,
       title: target.title,
     });
-  }, [focusContext, activeVaultFolder?.path]);
+  }, [focusContext]);
 
   const composerContextGoUp = useMemo(() => {
     if (!focusContext || !canWidenVaultChatContext(focusContext)) return undefined;
