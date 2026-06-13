@@ -138,6 +138,8 @@ export function useContentListNavigationRegistration({
   itemsRef.current = items;
   selectedIdRef.current = selectedId;
 
+  const itemIdsKey = enabled ? items.map((item) => item.id).join("\u0000") : "";
+
   useEffect(() => {
     if (!register || !unregister) return undefined;
     register(id, {
@@ -147,16 +149,18 @@ export function useContentListNavigationRegistration({
       itemsRef,
       selectedIdRef,
     });
-    if (enabled && items.length > 0) {
-      getContentListNavigationController()?.autoFocus();
-    }
     return () => {
       unregister(id);
       window.requestAnimationFrame(() => {
         getContentListNavigationController()?.autoFocus();
       });
     };
-  }, [enabled, id, items, priority, region, register, selectedId, unregister]);
+  }, [enabled, id, priority, region, register, unregister]);
+
+  useEffect(() => {
+    if (!enabled || items.length === 0) return;
+    getContentListNavigationController()?.autoFocus();
+  }, [enabled, itemIdsKey, items.length, selectedId]);
 }
 
 export function isContentListKeyboardFocused(

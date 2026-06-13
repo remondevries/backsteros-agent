@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { createVaultDocument, fetchLinearIssuesByDueDates } from "../lib/api";
 import {
@@ -126,9 +126,12 @@ export function VaultFolderExplorer({
     return () => window.clearTimeout(timeoutId);
   }, [searchQuery]);
 
-  const openVaultNote = (path: string, title: string) => {
-    setActiveVaultDocument({ path, title });
-  };
+  const openVaultNote = useCallback(
+    (path: string, title: string) => {
+      setActiveVaultDocument({ path, title });
+    },
+    [setActiveVaultDocument],
+  );
 
   const sidebarBreadcrumbs = useMemo(() => {
     const pathSegments = splitRelativePath(relativePath);
@@ -256,18 +259,21 @@ export function VaultFolderExplorer({
   const virtualizeFlatList = useVirtualListEnabled(filteredEntries.length);
   const keyboardFocusedId = useContentListKeyboardFocusedId();
 
-  const openLinearIssue = (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
-    if (mode === "terminal") {
-      requestLinearIssueViewMode(issue.id, "terminal");
-    }
-    setActiveLinearIssue({
-      id: issue.id,
-      identifier: issue.identifier ?? issue.id,
-      title: issue.title,
-      status: issue.status,
-      stateType: issue.stateType,
-    });
-  };
+  const openLinearIssue = useCallback(
+    (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
+      if (mode === "terminal") {
+        requestLinearIssueViewMode(issue.id, "terminal");
+      }
+      setActiveLinearIssue({
+        id: issue.id,
+        identifier: issue.identifier ?? issue.id,
+        title: issue.title,
+        status: issue.status,
+        stateType: issue.stateType,
+      });
+    },
+    [setActiveLinearIssue],
+  );
 
   const toggleWeekGroup = (groupKey: string) => {
     setCollapsedWeekGroups((current) => {
@@ -283,21 +289,36 @@ export function VaultFolderExplorer({
 
   useContentPanelSidebarBreadcrumbs(sidebarBreadcrumbs, enabled);
 
-  const listNavItems = buildVaultFolderNavItems({
-    activeNavItem,
-    showDailyWeekGroups,
-    nonFileEntries,
-    groupedDailyEntries,
-    collapsedWeekGroups,
-    filteredEntries,
-    dailyIssuesByDueDate,
-    handlers: {
-      clearDashboard: () => clearActiveVaultDocument(),
-      openDirectory: (path) => setRelativePath(path),
-      openFile: openVaultNote,
-      openLinearIssue: (issue) => openLinearIssue(issue),
-    },
-  });
+  const listNavItems = useMemo(
+    () =>
+      buildVaultFolderNavItems({
+        activeNavItem,
+        showDailyWeekGroups,
+        nonFileEntries,
+        groupedDailyEntries,
+        collapsedWeekGroups,
+        filteredEntries,
+        dailyIssuesByDueDate,
+        handlers: {
+          clearDashboard: () => clearActiveVaultDocument(),
+          openDirectory: (path) => setRelativePath(path),
+          openFile: openVaultNote,
+          openLinearIssue: (issue) => openLinearIssue(issue),
+        },
+      }),
+    [
+      activeNavItem,
+      clearActiveVaultDocument,
+      collapsedWeekGroups,
+      dailyIssuesByDueDate,
+      filteredEntries,
+      groupedDailyEntries,
+      nonFileEntries,
+      openLinearIssue,
+      openVaultNote,
+      showDailyWeekGroups,
+    ],
+  );
 
   const selectedListId = resolveVaultFolderSelectedListId({
     activeNavItem,
@@ -438,12 +459,6 @@ export function VaultFolderExplorer({
                                         "vault-folder-explorer-entry-file",
                                         "vault-folder-explorer-entry-selectable",
                                         selected ? "vault-folder-explorer-entry-selected" : null,
-                            keyboardFocusedId === entry.path
-                              ? "vault-folder-explorer-entry-keyboard-focused"
-                              : null,
-                                      keyboardFocusedId === entry.path
-                                        ? "vault-folder-explorer-entry-keyboard-focused"
-                                        : null,
                                         keyboardFocusedId === entry.path
                                           ? "vault-folder-explorer-entry-keyboard-focused"
                                           : null,
@@ -496,9 +511,6 @@ export function VaultFolderExplorer({
                                       "vault-folder-explorer-entry-file",
                                       "vault-folder-explorer-entry-selectable",
                                       selected ? "vault-folder-explorer-entry-selected" : null,
-                            keyboardFocusedId === entry.path
-                              ? "vault-folder-explorer-entry-keyboard-focused"
-                              : null,
                                       keyboardFocusedId === entry.path
                                         ? "vault-folder-explorer-entry-keyboard-focused"
                                         : null,
@@ -634,6 +646,9 @@ export function VaultFolderExplorer({
                           "vault-folder-explorer-entry-file",
                           "vault-folder-explorer-entry-selectable",
                           selected ? "vault-folder-explorer-entry-selected" : null,
+                          keyboardFocusedId === entry.path
+                            ? "vault-folder-explorer-entry-keyboard-focused"
+                            : null,
                         ]
                           .filter(Boolean)
                           .join(" ")}
