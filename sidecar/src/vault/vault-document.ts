@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { loadUserTimezone } from "../context/profile.ts";
 import { formatDateInTimezone, joinFrontmatterAndBody, readDailyNoteStats, splitFrontmatter } from "../daily-note.ts";
 import { updateLinearApiDocument } from "../linear/project-documents-api.ts";
+import { workoutDateKeyFromPath } from "../workouts/lib/workoutDays.ts";
 import { normalizeVaultRelativePath } from "../vault-paths.ts";
 import { ensureDocumentDateFrontmatter } from "./vault-frontmatter.ts";
 import { readLinearDocumentIdFromVault } from "./linear-document-sync.ts";
@@ -24,37 +25,13 @@ export type VaultDocumentContent = {
   whoop?: VaultNoteWhoopStats | null;
 };
 
-function titleFromBody(path: string, body: string): { title: string; body: string } {
-  const lines = body.split("\n");
-  const firstNonEmptyIndex = lines.findIndex((line) => line.trim().length > 0);
-  if (firstNonEmptyIndex === -1) {
-    return { title: basename(path, ".md"), body: "" };
-  }
-
-  const match = /^#\s+(.+)$/.exec(lines[firstNonEmptyIndex]!.trim());
-  if (!match?.[1]) {
-    return { title: basename(path, ".md"), body };
-  }
-
-  const title = match[1].trim() || basename(path, ".md");
-  const remaining = [...lines.slice(0, firstNonEmptyIndex), ...lines.slice(firstNonEmptyIndex + 1)];
-  while (remaining.length > 0 && remaining[0]?.trim() === "") {
-    remaining.shift();
-  }
-
-  return { title, body: remaining.join("\n") };
+function titleFromFilename(path: string): string {
+  return basename(path, ".md");
 }
 
-function bodyWithTitle(title: string, body: string): string {
-  const trimmedTitle = title.trim();
-  const trimmedBody = body.trimEnd();
-  if (!trimmedTitle) {
-    return trimmedBody ? `${trimmedBody}\n` : "";
-  }
-  if (!trimmedBody) {
-    return `# ${trimmedTitle}\n`;
-  }
-  return `# ${trimmedTitle}\n\n${trimmedBody}\n`;
+function normalizeDocumentBody(body: string): string {
+  const trimmed = body.trimEnd();
+  return trimmed.length > 0 ? `${trimmed}\n` : "";
 }
 
 export function readVaultDocument(notesPath: string, relativePath: string): VaultDocumentContent {
@@ -70,7 +47,6 @@ export function readVaultDocument(notesPath: string, relativePath: string): Vaul
 
   const raw = readFileSync(abs, "utf8");
   const { frontmatter, body } = splitFrontmatter(raw);
-  const parsed = titleFromBody(path, body);
   const date = resolveVaultNoteDate(path, raw);
   let whoop: VaultNoteWhoopStats | null = null;
 
@@ -87,8 +63,8 @@ export function readVaultDocument(notesPath: string, relativePath: string): Vaul
 
   return {
     path,
-    title: parsed.title,
-    body: parsed.body,
+    title: titleFromFilename(path),
+    body,
     frontmatter,
     date,
     whoop,
@@ -101,6 +77,50 @@ function sanitizeNoteFileBase(title: string): string {
     .replace(/\s+/g, " ")
     .trim();
   return cleaned || "Untitled";
+}
+
+function canRenameVaultDocumentByTitle(path: string, titleUpdated: boolean): boolean {
+  if (!titleUpdated) return false;
+  if (!path.endsWith(".md")) return false;
+  if (isDailyVaultNotePath(path)) return false;
+  if (workoutDateKeyFromPath(path)) return false;
+  return true;
+}
+
+function resolveUniqueFileNameInDir(
+  dirAbs: string,
+  fileBase: string,
+  excludeFileName?: string,
+): string {
+  let fileName = `${fileBase}.md`;
+  let counter = 2;
+
+  while (existsSync(join(dirAbs, fileName)) && fileName !== excludeFileName) {
+    fileName = `${fileBase} ${counter}.md`;
+    counter += 1;
+  }
+
+  return fileName;
+}
+
+function resolveRenamedVaultDocumentPath(
+  notesPath: string,
+  currentPath: string,
+  nextTitle: string,
+): string | null {
+  if (!canRenameVaultDocumentByTitle(currentPath, true)) return null;
+
+  const nextFileBase = sanitizeNoteFileBase(nextTitle);
+  const currentFileBase = basename(currentPath, ".md");
+  if (nextFileBase === currentFileBase) return null;
+
+  const relativeDir = dirname(currentPath);
+  const absDir = join(notesPath, relativeDir === "." ? "" : relativeDir);
+  const currentFileName = basename(currentPath);
+  const nextFileName = resolveUniqueFileNameInDir(absDir, nextFileBase, currentFileName);
+  if (nextFileName === currentFileName) return null;
+
+  return relativeDir === "." ? nextFileName : `${relativeDir}/${nextFileName}`;
 }
 
 export function createVaultDocument(
@@ -128,7 +148,7 @@ export function createVaultDocument(
   const relativePath = folder ? `${folder}/${fileName}` : fileName;
   const date = formatDateInTimezone(loadUserTimezone());
   const frontmatter = ensureDocumentDateFrontmatter(null, date);
-  const content = joinFrontmatterAndBody(frontmatter, bodyWithTitle(title, ""));
+  const content = joinFrontmatterAndBody(frontmatter, normalizeDocumentBody(""));
   writeFileSync(join(absFolder, fileName), content, "utf8");
 
   return readVaultDocument(notesPath, relativePath);
@@ -142,13 +162,26 @@ export async function updateVaultDocument(
   const current = readVaultDocument(notesPath, relativePath);
   const nextTitle = updates.title !== undefined ? updates.title : current.title;
   const nextBody = updates.body !== undefined ? updates.body : current.body;
-  const abs = join(notesPath, current.path);
   const date = formatDateInTimezone(loadUserTimezone());
   const frontmatter = ensureDocumentDateFrontmatter(current.frontmatter, date);
-  const content = joinFrontmatterAndBody(frontmatter, bodyWithTitle(nextTitle, nextBody));
-  writeFileSync(abs, content, "utf8");
+  const content = joinFrontmatterAndBody(frontmatter, normalizeDocumentBody(nextBody));
+  const nextPath =
+    updates.title !== undefined
+      ? resolveRenamedVaultDocumentPath(notesPath, current.path, nextTitle)
+      : null;
+  const currentAbs = join(notesPath, current.path);
 
-  const linearDocumentId = readLinearDocumentIdFromVault(notesPath, current.path);
+  if (nextPath && nextPath !== current.path) {
+    const nextAbs = join(notesPath, nextPath);
+    writeFileSync(nextAbs, content, "utf8");
+    unlinkSync(currentAbs);
+  } else {
+    writeFileSync(currentAbs, content, "utf8");
+  }
+
+  const savedPath = nextPath ?? current.path;
+
+  const linearDocumentId = readLinearDocumentIdFromVault(notesPath, savedPath);
   if (linearDocumentId) {
     await updateLinearApiDocument(linearDocumentId, {
       title: nextTitle,
@@ -156,5 +189,5 @@ export async function updateVaultDocument(
     });
   }
 
-  return readVaultDocument(notesPath, current.path);
+  return readVaultDocument(notesPath, savedPath);
 }

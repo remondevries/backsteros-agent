@@ -8,6 +8,11 @@ import { useVaultDocumentWhoopSnapshot } from "../../hooks/useVaultDocumentWhoop
 import { fetchLinearIssuesByDueDates } from "../../lib/api";
 import { isDailyVaultNotePath } from "../../lib/vaultNotePaths";
 import { dailyDateFromPath } from "../../lib/vaultDates";
+import { notifyVaultContentChanged } from "../../lib/vaultContentEvents";
+import {
+  handleVaultDocumentTitleEnter,
+  registerVaultDocumentTitleFocus,
+} from "../../lib/vaultDocumentTitleFocus";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
 import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
 import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
@@ -105,6 +110,18 @@ export function VaultDocumentView({ path }: { path: string }) {
   useDebouncedFocusContentSnapshot(focusSnapshot, Boolean(document && document.path === path));
 
   useEffect(() => {
+    if (!document || document.path !== path) return undefined;
+    return registerVaultDocumentTitleFocus({
+      focusTitle: () => {
+        const input = titleInputRef.current;
+        if (!input) return;
+        input.focus();
+        input.select();
+      },
+    });
+  }, [document, path]);
+
+  useEffect(() => {
     if (!isDailyNote || !dueDate) {
       setDueDateIssues([]);
       setDueDateIssuesLoading(false);
@@ -191,20 +208,30 @@ export function VaultDocumentView({ path }: { path: string }) {
       setSaving(true);
       setSaveError(null);
       try {
-        const saveErrorMessage = await save({ title, body });
-        if (saveErrorMessage) {
-          setSaveError(saveErrorMessage);
+        const result = await save({ title, body });
+        if (result.error) {
+          setSaveError(result.error);
           return;
         }
         setDirty(false);
-        updateActiveVaultDocument({ title: title.trim() || document?.title || "Untitled" });
+        const savedDocument = result.document;
+        const nextTitle = title.trim() || savedDocument?.title || document?.title || "Untitled";
+        if (savedDocument && savedDocument.path !== path) {
+          updateActiveVaultDocument({
+            path: savedDocument.path,
+            title: nextTitle,
+          });
+          notifyVaultContentChanged();
+        } else {
+          updateActiveVaultDocument({ title: nextTitle });
+        }
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : "Failed to save document");
       } finally {
         setSaving(false);
       }
     },
-    [document?.title, save, updateActiveVaultDocument],
+    [document?.title, path, save, updateActiveVaultDocument],
   );
 
   const scheduleSave = useCallback(
@@ -287,6 +314,7 @@ export function VaultDocumentView({ path }: { path: string }) {
             onChange={(event) => handleTitleChange(event.target.value)}
             onFocus={handleTitleFocus}
             onBlur={handleBlur}
+            onKeyDown={handleVaultDocumentTitleEnter}
             placeholder="Untitled"
             aria-label="Document title"
           />

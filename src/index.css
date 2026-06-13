@@ -5889,9 +5889,87 @@ body.app-panel-resizing * {
 .composer-context-card-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   min-height: 18px;
+}
+
+.composer-context-card-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.composer-context-card-breadcrumb-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.composer-context-card-breadcrumb-folder:hover {
+  color: var(--text-primary);
+}
+
+.composer-context-card-breadcrumb-folder--static {
+  cursor: default;
+  color: var(--text-secondary);
+}
+
+.composer-context-card-breadcrumb-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.composer-context-card-breadcrumb-folder:hover .composer-context-card-breadcrumb-icon {
+  color: var(--text-primary);
+}
+
+.composer-context-card-breadcrumb-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.composer-context-card-breadcrumb-folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-context-card-breadcrumb-sep {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.composer-context-card-breadcrumb-document {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.composer-context-card-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
 .composer-context-card-item-icon {
@@ -6505,6 +6583,39 @@ body.app-panel-resizing * {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.chat-scroll-to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--transcript-fade-zone) + 10px);
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--shadow-color, #000) 16%, transparent);
+}
+
+.chat-scroll-to-bottom:hover {
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.chat-scroll-to-bottom svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .chat-transcript-shell::after {
@@ -9124,149 +9235,6 @@ body.app-panel-resizing * {
   gap: 8px;
   flex-wrap: nowrap;
   height: 28px;
-}
-
-.composer-floating-controls {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 0 4px 8px;
-  background: transparent;
-  pointer-events: none;
-}
-
-.composer-floating-controls > * {
-  pointer-events: auto;
-}
-
-.composer-tool-indicators {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 24px;
-}
-
-.composer-tool-indicator {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0;
-  cursor: default;
-  overflow: hidden;
-}
-
-button.composer-tool-indicator {
-  cursor: pointer;
-}
-
-button.composer-tool-indicator:hover {
-  color: var(--text-secondary);
-  border-color: var(--border-subtle);
-  background: var(--overlay-bg-3);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-
-.composer-tool-indicator-active {
-  color: var(--text-primary);
-  border-color: var(--border-subtle);
-  background: var(--overlay-bg-3);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-
-.composer-tool-indicator-pinned-on {
-  box-shadow: inset 0 0 0 1px var(--text-muted);
-}
-
-.composer-tool-indicator-pinned-off {
-  opacity: 0.35;
-}
-
-.composer-tool-indicator-idle {
-  opacity: 0.42;
-}
-
-.composer-tool-indicator-linear {
-  color: var(--text-secondary);
-}
-
-.composer-tool-indicator-calendar {
-  color: var(--text-secondary);
-}
-
-.composer-tool-indicator-whoop {
-  color: var(--text-secondary);
-}
-
-.composer-tool-indicator-icon {
-  display: block;
-  flex-shrink: 0;
-  transition: opacity 0.12s ease;
-}
-
-.composer-tool-indicator-dismiss {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--text-primary);
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-button.composer-tool-indicator:hover .composer-tool-indicator-icon,
-button.composer-tool-indicator:focus-visible .composer-tool-indicator-icon {
-  opacity: 0.2;
-}
-
-button.composer-tool-indicator:hover .composer-tool-indicator-dismiss,
-button.composer-tool-indicator:focus-visible .composer-tool-indicator-dismiss {
-  opacity: 1;
-}
-
-.composer-tool-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px dashed transparent;
-  background: transparent;
-  color: var(--text-subtle);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.composer-tool-add:hover {
-  border-color: var(--border-subtle);
-  color: var(--text-secondary);
-  background: var(--overlay-bg-3);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-
-.composer-tool-add-done {
-  font-size: 11px;
-  padding: 0 8px;
 }
 
 .quick-actions-bar {

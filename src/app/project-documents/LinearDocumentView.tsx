@@ -3,6 +3,10 @@ import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearDocument } from "../../hooks/useLinearDocument";
 import { deleteLinearDocument } from "../../lib/api";
+import {
+  handleVaultDocumentTitleEnter,
+  registerVaultDocumentTitleFocus,
+} from "../../lib/vaultDocumentTitleFocus";
 import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
 import { DocumentNoteIcon } from "./DocumentNoteIcon";
 
@@ -27,6 +31,7 @@ export function LinearDocumentView({
   const titleRef = useRef(titleDraft);
   const bodyRef = useRef(bodyDraft);
   const userEditedRef = useRef(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   titleRef.current = titleDraft;
   bodyRef.current = bodyDraft;
 
@@ -66,6 +71,18 @@ export function LinearDocumentView({
     focusSnapshot,
     Boolean(document && document.id === documentId),
   );
+
+  useEffect(() => {
+    if (!document || document.id !== documentId) return undefined;
+    return registerVaultDocumentTitleFocus({
+      focusTitle: () => {
+        const input = titleInputRef.current;
+        if (!input) return;
+        input.focus();
+        input.select();
+      },
+    });
+  }, [document, documentId]);
 
   const persist = useCallback(
     async (title: string, body: string) => {
@@ -176,12 +193,14 @@ export function LinearDocumentView({
             <DocumentNoteIcon size={16} />
           </div>
           <input
+            ref={titleInputRef}
             type="text"
             className="vault-document-title"
             value={titleDraft}
             onChange={(event) => handleTitleChange(event.target.value)}
             onFocus={handleTitleFocus}
             onBlur={handleBlur}
+            onKeyDown={handleVaultDocumentTitleEnter}
             placeholder="Untitled"
             aria-label="Document title"
           />

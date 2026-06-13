@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useStickToBottom } from "../hooks/useStickToBottom";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import { showsBacksterComposerOptions, isLinearOnlyComposer } from "../app/rightPanelAgents";
 import type { PanelChatComposerVariant } from "../app/rightPanelAgents";
@@ -15,6 +16,7 @@ import {
   validateAttachment,
 } from "./attachments";
 import { Composer, type ComposerHandle } from "./Composer";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { ComposerContextCard } from "./ComposerContextCard";
 import type { ComposerContextItem } from "../lib/chatFocusContext";
 import { VoiceTurnBubble } from "./VoiceTurnBubble";
@@ -109,10 +111,7 @@ import { createRunEventBatcher } from "./runStreamUpdates";
 import { mergeStructuredPayload } from "./runEntities";
 import {
   EMPTY_TOOL_PINS,
-  hasManualToolPins,
-  resolveToolSelection,
   type ToolPinSelection,
-  type ToolSelection,
 } from "./tool-routing";
 import type {
   AgentEvent,
@@ -140,8 +139,6 @@ import {
   updateSettings,
 } from "../lib/api";
 import { subscribeToRunWithAuth } from "../lib/sse";
-
-const EMPTY_TOOLS: ToolSelection = { obsidian: false, linear: false, calendar: false, whoop: false };
 
 function isShortcutBlockedTarget(target: EventTarget | null): boolean {
   return (
@@ -327,6 +324,10 @@ export const ChatView = forwardRef<
     focusContext?: import("../lib/chatFocusContext").ChatFocusContext | null;
     composerContextItems?: ComposerContextItem[];
     composerContextLoading?: boolean;
+    composerContextGoUp?: {
+      label: string;
+      onGoUp: () => void;
+    };
     composerPlaceholder?: string;
     panelComposerVariant?: PanelChatComposerVariant;
   }
@@ -344,6 +345,7 @@ export const ChatView = forwardRef<
     focusContext = null,
     composerContextItems = [],
     composerContextLoading = false,
+    composerContextGoUp,
     composerPlaceholder,
     panelComposerVariant,
   },
@@ -411,12 +413,17 @@ export const ChatView = forwardRef<
     composerModeDisplayName("auto"),
   );
   const [savingComposerMode, setSavingComposerMode] = useState(false);
-  const [committedTools, setCommittedTools] = useState<ToolSelection | null>(null);
   const [toolPins, setToolPins] = useState<ToolPinSelection>(EMPTY_TOOL_PINS);
   const composerRef = useRef<ComposerHandle>(null);
   const chatContentRef = useRef<HTMLDivElement>(null);
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(true);
+  const {
+    scrollRef: transcriptRef,
+    contentRef: transcriptInnerRef,
+    handleScroll: handleTranscriptScroll,
+    pin: pinTranscriptScroll,
+    scrollToBottom: scrollTranscriptToBottom,
+    showScrollButton: showTranscriptScrollButton,
+  } = useStickToBottom({ enabled: isActive });
   const dragDepthRef = useRef(0);
   const pendingAttachmentsRef = useRef(pendingAttachments);
   const liveRunIdRef = useRef<string | null>(null);
@@ -509,38 +516,6 @@ export const ChatView = forwardRef<
     latestFinishedRunId,
   });
 
-  const scrollTranscriptToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    const el = transcriptRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  }, []);
-
-  const scrollFrameRef = useRef<number | null>(null);
-
-  const scheduleScrollToBottom = useCallback(() => {
-    if (!isActive || !stickToBottomRef.current) return;
-    if (scrollFrameRef.current != null) return;
-    scrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollFrameRef.current = null;
-      scrollTranscriptToBottom();
-    });
-  }, [isActive, scrollTranscriptToBottom]);
-
-  useEffect(() => {
-    return () => {
-      if (scrollFrameRef.current != null) {
-        window.cancelAnimationFrame(scrollFrameRef.current);
-      }
-    };
-  }, []);
-
-  const handleTranscriptScroll = useCallback(() => {
-    const el = transcriptRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < 64;
-  }, []);
-
   const focusComposer = useCallback(() => {
     composerFocusSuspendedRef.current = false;
     scheduleComposerFocus(() => {
@@ -576,7 +551,7 @@ export const ChatView = forwardRef<
       void clearDeleteFilePending(sessionId).catch(() => undefined);
     }
     setInput("");
-    stickToBottomRef.current = true;
+    pinTranscriptScroll();
     setMessages((current) => [
       ...current,
       {
@@ -619,7 +594,7 @@ export const ChatView = forwardRef<
           [runId]: { confirmed: true },
         }));
         setComposerQuickActionId(null);
-        stickToBottomRef.current = true;
+        pinTranscriptScroll();
         setMessages((current) => [
           ...current,
           {
@@ -658,7 +633,7 @@ export const ChatView = forwardRef<
           [runId]: { confirmed: false },
         }));
         setComposerQuickActionId(null);
-        stickToBottomRef.current = true;
+        pinTranscriptScroll();
         setMessages((current) => [
           ...current,
           {
@@ -750,31 +725,9 @@ export const ChatView = forwardRef<
     await handleCancelRun();
   }, [handleCancelRun, interruptVoice]);
 
-  const composerTools = useMemo(() => {
-    if (linearOnlyComposer) {
-      return EMPTY_TOOLS;
-    }
-    if (input.trim()) {
-      return resolveToolSelection(input, toolPins);
-    }
-    if (hasManualToolPins(toolPins)) {
-      return resolveToolSelection("", toolPins);
-    }
-    if (committedTools) return committedTools;
-    return EMPTY_TOOLS;
-  }, [committedTools, input, linearOnlyComposer, toolPins]);
-
-  const handleDismissTool = useCallback((tool: keyof ToolSelection) => {
-    setToolPins((current) => ({
-      ...current,
-      [tool]: "off",
-    }));
-  }, []);
-
   useEffect(() => {
     if (!linearOnlyComposer) return;
     setToolPins(EMPTY_TOOL_PINS);
-    setCommittedTools(null);
   }, [focusContext, linearOnlyComposer]);
 
   useEffect(() => {
@@ -992,11 +945,6 @@ export const ChatView = forwardRef<
   );
 
   const runCount = useMemo(() => Object.keys(runs).length, [runs]);
-  const activeRunTextLength = useMemo(() => {
-    const activeRunId = liveRunIdRef.current;
-    if (!activeRunId) return 0;
-    return runs[activeRunId]?.text.length ?? 0;
-  }, [runs]);
 
   const refreshDiff = useCallback(async () => {
     try {
@@ -1010,18 +958,6 @@ export const ChatView = forwardRef<
   useEffect(() => {
     void refreshDiff();
   }, [refreshDiff, runCount]);
-
-  useEffect(() => {
-    scheduleScrollToBottom();
-  }, [
-    messages.length,
-    runCount,
-    activeRunTextLength,
-    error,
-    voiceModeEnabled,
-    voiceTurnPhase,
-    scheduleScrollToBottom,
-  ]);
 
   useEffect(() => {
     const anyRunning = Object.values(runs).some((run) => run.status === "running");
@@ -1085,7 +1021,6 @@ export const ChatView = forwardRef<
     setError(null);
     setInput("");
     setPendingAttachments([]);
-    setCommittedTools(null);
 
     try {
       const result = await clearSessionChat(sessionId);
@@ -1103,7 +1038,7 @@ export const ChatView = forwardRef<
       void clearLetterPending(sessionId).catch(() => undefined);
       liveRunIdRef.current = null;
       titleUpdatedRef.current = false;
-      stickToBottomRef.current = true;
+      pinTranscriptScroll();
       onSessionClear?.(result.title);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to clear chat");
@@ -1258,7 +1193,7 @@ export const ChatView = forwardRef<
         flowId: activeComposerFlow.id,
         text,
         appendUserMessage: (message) => {
-          stickToBottomRef.current = true;
+          pinTranscriptScroll();
           setMessages((current) => [...current, message]);
         },
       });
@@ -1382,9 +1317,6 @@ export const ChatView = forwardRef<
         : [...composerAttachments];
     setBusy(true);
     setError(null);
-    setCommittedTools(
-      linearOnlyComposer ? null : resolveToolSelection(agentText, toolPins),
-    );
     if (attachmentsToSend.length > 0) {
       pendingAttachmentsRef.current = [];
       setPendingAttachments([]);
@@ -1417,7 +1349,9 @@ export const ChatView = forwardRef<
       ? {
           linear: "on" as const,
           obsidian:
-            focusContext.kind === "vault_document" ? ("on" as const) : ("off" as const),
+            focusContext.kind === "vault_document" || focusContext.kind === "vault_folder"
+              ? ("on" as const)
+              : ("off" as const),
         }
       : linearOnlyComposer
         ? { linear: "on" as const, obsidian: "off" as const }
@@ -1458,11 +1392,15 @@ export const ChatView = forwardRef<
                     ? focusContext.documentId
                     : focusContext.kind === "vault_document"
                       ? focusContext.path
-                      : focusContext.workspaceId,
+                      : focusContext.kind === "vault_folder"
+                        ? focusContext.path
+                        : focusContext.workspaceId,
               title:
                 focusContext.kind === "linear_workspace"
                   ? focusContext.name
-                  : focusContext.title,
+                  : focusContext.kind === "vault_folder"
+                    ? `${focusContext.name} folder`
+                    : focusContext.title,
               entityType: focusContext.kind,
             },
           ]
@@ -1471,7 +1409,7 @@ export const ChatView = forwardRef<
     if (effectiveQuickActionId === GOOD_MORNING_ACTION_ID) {
       recordMorningReviewUsage();
     }
-    stickToBottomRef.current = true;
+    pinTranscriptScroll();
     setMessages((current) => [...current, userMessage]);
 
     if (!titleUpdatedRef.current && displayText) {
@@ -1602,7 +1540,6 @@ export const ChatView = forwardRef<
       if (!streamController?.signal.aborted) {
         liveRunIdRef.current = null;
         setBusy(false);
-        setCommittedTools(null);
         focusComposer();
       }
     }
@@ -1976,12 +1913,16 @@ export const ChatView = forwardRef<
         onDrop={handleDrop}
       >
         <div className="chat-transcript-shell">
+          <ScrollToBottomButton
+            visible={showTranscriptScrollButton}
+            onClick={() => scrollTranscriptToBottom("smooth")}
+          />
           <div
             className="chat-transcript"
             ref={transcriptRef}
             onScroll={handleTranscriptScroll}
           >
-          <div className="chat-transcript-inner">
+          <div className="chat-transcript-inner" ref={transcriptInnerRef}>
         {virtualizeTranscript ? (
           <VirtualList
             items={messages}
@@ -2027,6 +1968,7 @@ export const ChatView = forwardRef<
             <ComposerContextCard
               items={composerContextItems}
               loading={composerContextLoading}
+              contextGoUp={composerContextGoUp}
             />
           ) : null}
           <Composer
@@ -2062,10 +2004,6 @@ export const ChatView = forwardRef<
             savingComposerMode={showBacksterComposerOptions ? savingComposerMode : undefined}
             inputModeControls={showBacksterComposerOptions ? inputModeControls : undefined}
             voiceMode={showBacksterComposerOptions ? voiceModeEnabled : false}
-            hideToolIndicators={linearOnlyComposer}
-            toolIndicators={composerTools}
-            toolPins={toolPins}
-            onDismissTool={handleDismissTool}
             composerQuickAction={
               isDailyCaptureComposerMode(composerQuickActionId)
                 ? { onClear: handleClearDailyCaptureMode }

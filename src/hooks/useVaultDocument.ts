@@ -1,15 +1,36 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchVaultDocument, updateVaultDocument, type VaultDocumentContent } from "../lib/api";
+import { onVaultContentChanged } from "../lib/vaultContentEvents";
+
+const EXTERNAL_SYNC_INTERVAL_MS = 2_000;
 
 export function useVaultDocument(path: string, enabled = true) {
-  const [document, setDocument] = useState<VaultDocumentContent | null>(null);
+  const [vaultDocument, setVaultDocument] = useState<VaultDocumentContent | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadDocument = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!enabled || !path) return null;
+
+      const result = await fetchVaultDocument(path, { force: options?.force ?? false });
+      if (result.error || !result.document) {
+        setVaultDocument(null);
+        setError(result.error ?? "Failed to load document.");
+        return null;
+      }
+
+      setVaultDocument(result.document);
+      setError(null);
+      return result.document;
+    },
+    [enabled, path],
+  );
+
   useEffect(() => {
     if (!enabled || !path) {
-      setDocument(null);
+      setVaultDocument(null);
       setLoading(false);
       setError(null);
       return;
@@ -19,20 +40,60 @@ export function useVaultDocument(path: string, enabled = true) {
     setLoading(true);
     setError(null);
 
-    void fetchVaultDocument(path).then((result) => {
-      if (cancelled) return;
-      if (result.error || !result.document) {
-        setDocument(null);
-        setError(result.error ?? "Failed to load document.");
-      } else {
-        setDocument(result.document);
-        setError(null);
+    void loadDocument({ force: true }).finally(() => {
+      if (!cancelled) {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
       cancelled = true;
+    };
+  }, [enabled, loadDocument, path]);
+
+  useEffect(() => {
+    if (!enabled || !path) return undefined;
+
+    let cancelled = false;
+
+    async function syncFromDisk() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+
+      const result = await fetchVaultDocument(path, { force: true });
+      if (cancelled || result.error || !result.document) return;
+      setVaultDocument(result.document);
+      setError(null);
+    }
+
+    const interval = window.setInterval(() => {
+      void syncFromDisk();
+    }, EXTERNAL_SYNC_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void syncFromDisk();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      void syncFromDisk();
+    };
+
+    const unsubscribeVault = onVaultContentChanged(() => {
+      void syncFromDisk();
+    });
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+      unsubscribeVault();
     };
   }, [enabled, path]);
 
@@ -40,10 +101,13 @@ export function useVaultDocument(path: string, enabled = true) {
     async (updates: { title?: string; body?: string }) => {
       const result = await updateVaultDocument(path, updates);
       if (result.error || !result.document) {
-        return result.error ?? "Failed to save document.";
+        return {
+          error: result.error ?? "Failed to save document.",
+          document: null,
+        };
       }
-      setDocument(result.document);
-      return null;
+      setVaultDocument(result.document);
+      return { error: null, document: result.document };
     },
     [path],
   );
@@ -53,18 +117,11 @@ export function useVaultDocument(path: string, enabled = true) {
     setRefreshing(true);
     setError(null);
     try {
-      const result = await fetchVaultDocument(path);
-      if (result.error || !result.document) {
-        setDocument(null);
-        setError(result.error ?? "Failed to load document.");
-      } else {
-        setDocument(result.document);
-        setError(null);
-      }
+      await loadDocument({ force: true });
     } finally {
       setRefreshing(false);
     }
-  }, [enabled, path]);
+  }, [enabled, loadDocument, path]);
 
-  return { document, loading, refreshing, error, save, refresh };
+  return { document: vaultDocument, loading, refreshing, error, save, refresh };
 }

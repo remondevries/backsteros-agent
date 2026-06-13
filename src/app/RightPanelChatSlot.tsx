@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatView, type ChatViewHandle } from "../chat/ChatView";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import type { IntegrationsStatus } from "../lib/api";
@@ -8,6 +8,12 @@ import {
   composerPlaceholderForFocus,
   isChatFocusContextLoading,
 } from "../lib/chatFocusContext";
+import {
+  canWidenVaultChatContext,
+  resolveVaultChatContextGoUpTarget,
+  vaultChatContextGoUpLabel,
+} from "../lib/vaultFolderContext";
+import type { ActiveVaultFolder } from "./contentPanelNavigation";
 import { useContentPanelNavigation, useFocusContent } from "./contentPanelNavigation";
 import { LinearIssueAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
 import { RightPanelChatHeader } from "./RightPanelChatHeader";
@@ -17,6 +23,7 @@ import {
   supportsLinearPanelAgent,
 } from "./rightPanelAgents";
 import { registerRightPanelComposerFocus } from "../lib/rightPanelChatFocus";
+import { debugSessionLog } from "../lib/debugSessionLog";
 
 type RightPanelSession = {
   sessionId: string;
@@ -41,11 +48,29 @@ export function RightPanelChatSlot({
     activeLinearIssue,
     activeLinearDocument,
     activeVaultDocument,
+    activeVaultFolder,
     linearSelection,
     linearWorkspaceView,
   } = useContentPanelNavigation();
   const { focusContentSnapshot } = useFocusContent();
   const chatRef = useRef<ChatViewHandle>(null);
+  const [vaultChatContextOverride, setVaultChatContextOverride] =
+    useState<ActiveVaultFolder | null>(null);
+
+  useEffect(() => {
+    // #region agent log
+    debugSessionLog(
+      "RightPanelChatSlot.tsx:override-reset",
+      "vaultChatContextOverride reset due to document or folder change",
+      {
+        documentPath: activeVaultDocument?.path ?? null,
+        folderPath: activeVaultFolder?.path ?? null,
+      },
+      "A",
+    );
+    // #endregion
+    setVaultChatContextOverride(null);
+  }, [activeVaultDocument?.path, activeVaultFolder?.path]);
 
   const focusContext = useMemo(
     () =>
@@ -53,6 +78,8 @@ export function RightPanelChatSlot({
         activeLinearIssue,
         activeLinearDocument,
         activeVaultDocument,
+        activeVaultFolder,
+        vaultChatContextOverride,
         linearSelection,
         linearWorkspaceView,
         focusContentSnapshot,
@@ -61,11 +88,40 @@ export function RightPanelChatSlot({
       activeLinearDocument,
       activeLinearIssue,
       activeVaultDocument,
+      activeVaultFolder,
+      vaultChatContextOverride,
       focusContentSnapshot,
       linearSelection,
       linearWorkspaceView,
     ],
   );
+
+  useEffect(() => {
+    // #region agent log
+    debugSessionLog(
+      "RightPanelChatSlot.tsx:focus-context",
+      "chat focus context resolved",
+      {
+        focusKind: focusContext?.kind ?? null,
+        focusPath:
+          focusContext?.kind === "vault_document" || focusContext?.kind === "vault_folder"
+            ? focusContext.path
+            : null,
+        focusName:
+          focusContext?.kind === "vault_folder" ? focusContext.name : null,
+        activeVaultDocumentPath: activeVaultDocument?.path ?? null,
+        activeVaultFolderPath: activeVaultFolder?.path ?? null,
+        overridePath: vaultChatContextOverride?.path ?? null,
+      },
+      "B",
+    );
+    // #endregion
+  }, [
+    focusContext,
+    activeVaultDocument?.path,
+    activeVaultFolder?.path,
+    vaultChatContextOverride?.path,
+  ]);
 
   const composerContextLoading = useMemo(
     () =>
@@ -79,6 +135,44 @@ export function RightPanelChatSlot({
     () => (focusContext ? buildComposerContextItems(focusContext) : []),
     [focusContext],
   );
+
+  const handleContextGoUp = useCallback(() => {
+    if (!focusContext) return;
+    const target = resolveVaultChatContextGoUpTarget(focusContext);
+    if (!target) return;
+
+    // #region agent log
+    debugSessionLog(
+      "RightPanelChatSlot.tsx:context-go-up",
+      "widening chat context to folder",
+      {
+        fromKind: focusContext.kind,
+        fromPath:
+          focusContext.kind === "vault_document" || focusContext.kind === "vault_folder"
+            ? focusContext.path
+            : null,
+        targetPath: target.path,
+        activeVaultFolderPath: activeVaultFolder?.path ?? null,
+      },
+      "A",
+    );
+    // #endregion
+
+    setVaultChatContextOverride({
+      path: target.path,
+      title: target.title,
+    });
+  }, [focusContext, activeVaultFolder?.path]);
+
+  const composerContextGoUp = useMemo(() => {
+    if (!focusContext || !canWidenVaultChatContext(focusContext)) return undefined;
+    const target = resolveVaultChatContextGoUpTarget(focusContext);
+    if (!target) return undefined;
+    return {
+      label: vaultChatContextGoUpLabel(focusContext),
+      onGoUp: handleContextGoUp,
+    };
+  }, [focusContext, handleContextGoUp]);
 
   const resolvedAgent = useMemo(
     () =>
@@ -139,6 +233,7 @@ export function RightPanelChatSlot({
             focusContext={focusContext}
             composerContextItems={contextCardItems}
             composerContextLoading={composerContextLoading}
+            composerContextGoUp={composerContextGoUp}
             composerPlaceholder={composerPlaceholderForFocus(
               focusContext,
               resolvedAgent.active,

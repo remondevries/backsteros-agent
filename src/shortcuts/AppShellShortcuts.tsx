@@ -9,6 +9,7 @@ import { PanelToggleShortcuts } from "./PanelToggleShortcuts";
 import { RightPanelChatFocusShortcuts } from "./RightPanelChatFocusShortcuts";
 import { SidebarNavCycleShortcuts } from "./SidebarNavCycleShortcuts";
 import { TiptapEditorFocusShortcuts } from "./TiptapEditorFocusShortcuts";
+import { VaultDocumentTitleFocusShortcuts } from "./VaultDocumentTitleFocusShortcuts";
 import { useCommandPaletteShortcut } from "./useCommandPaletteShortcut";
 
 export function AppShellShortcuts({
@@ -52,6 +53,7 @@ export function AppShellShortcuts({
         activeVaultNavItem={activeVaultNavItem}
       />
       <TiptapEditorFocusShortcuts enabled={globalShortcutsEnabled} />
+      <VaultDocumentTitleFocusShortcuts enabled={globalShortcutsEnabled} />
       <RightPanelChatFocusShortcuts
         enabled={globalShortcutsEnabled}
         rightSidePanelOpen={rightSidePanelOpen}

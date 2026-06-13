@@ -8,6 +8,9 @@ import {
 } from "../lib/vaultDates";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
+import { vaultFolderTitle } from "../lib/vaultFolderContext";
+import { debugSessionLog } from "../lib/debugSessionLog";
+import { onVaultContentChanged } from "../lib/vaultContentEvents";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import {
@@ -74,7 +77,7 @@ export function VaultFolderExplorer({
   activeNavItem: VaultNavItemId;
   enabled: boolean;
 }) {
-  const { activeVaultDocument, activeLinearIssue, setActiveVaultDocument, setActiveLinearIssue, clearActiveVaultDocument } =
+  const { activeVaultDocument, activeLinearIssue, setActiveVaultDocument, setActiveVaultFolder, setActiveLinearIssue, clearActiveVaultDocument } =
     useContentPanelNavigation();
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
@@ -120,10 +123,51 @@ export function VaultFolderExplorer({
   };
 
   useEffect(() => {
-    setRelativePath(vaultNavItemLabel(activeNavItem));
+    const nextRootPath = vaultNavItemLabel(activeNavItem);
+    setRelativePath(nextRootPath);
     setSearchQuery("");
     setDebouncedSearchQuery("");
-  }, [activeNavItem]);
+    if (enabled) {
+      setActiveVaultFolder({
+        path: nextRootPath,
+        title: vaultFolderTitle(nextRootPath),
+      });
+    }
+    // #region agent log
+    debugSessionLog(
+      "VaultFolderExplorer.tsx:nav-change",
+      "activeNavItem changed, reset relativePath",
+      { activeNavItem, rootPath: nextRootPath },
+      "E",
+    );
+    // #endregion
+  }, [activeNavItem, enabled, setActiveVaultFolder]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setActiveVaultFolder(null);
+      return;
+    }
+    const folder = {
+      path: relativePath,
+      title: vaultFolderTitle(relativePath),
+    };
+    setActiveVaultFolder(folder);
+    // #region agent log
+    debugSessionLog(
+      "VaultFolderExplorer.tsx:publish-folder",
+      "setActiveVaultFolder from relativePath",
+      { activeNavItem, relativePath, folder },
+      "C",
+    );
+    // #endregion
+  }, [enabled, relativePath, setActiveVaultFolder, activeNavItem]);
+
+  useEffect(() => {
+    return () => {
+      setActiveVaultFolder(null);
+    };
+  }, [setActiveVaultFolder]);
 
   useEffect(() => {
     return registerContentPanelLocalBack(() => {
@@ -141,6 +185,12 @@ export function VaultFolderExplorer({
     }, 200);
     return () => window.clearTimeout(timeoutId);
   }, [searchQuery]);
+
+  useEffect(() => {
+    return onVaultContentChanged(() => {
+      void refresh();
+    });
+  }, [refresh]);
 
   const openVaultNote = useCallback(
     (path: string, title: string) => {

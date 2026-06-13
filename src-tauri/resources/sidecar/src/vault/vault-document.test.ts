@@ -61,8 +61,25 @@ describe("vault-document", () => {
 
     const saved = readFileSync(join(notesPath, "Inbox", "idea.md"), "utf8");
     expect(saved.startsWith("---\ndate: ")).toBe(true);
-    expect(saved).toContain("# Idea");
+    expect(saved).toContain("Some text");
+    expect(saved).toContain("More text");
     expect(readVaultNoteDateFromContent(saved)?.length).toBeGreaterThan(0);
+  });
+
+  test("uses the filename for title even when the body starts with h1", () => {
+    const notesPath = makeNotesDir();
+    mkdirSync(join(notesPath, "Inbox"), { recursive: true });
+    writeFileSync(
+      join(notesPath, "Inbox", "my-note.md"),
+      "# Different heading\n\nBody text\n",
+      "utf8",
+    );
+
+    const document = readVaultDocument(notesPath, "Inbox/my-note.md");
+
+    expect(document.title).toBe("my-note");
+    expect(document.body).toContain("# Different heading");
+    expect(document.body).toContain("Body text");
   });
 
   test("preserves existing frontmatter date on save", async () => {

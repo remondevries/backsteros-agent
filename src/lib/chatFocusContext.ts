@@ -1,10 +1,16 @@
-import type { ActiveLinearDocument, ActiveLinearIssue, ActiveVaultDocument } from "../app/contentPanelNavigation";
+import type { ActiveLinearDocument, ActiveLinearIssue, ActiveVaultDocument, ActiveVaultFolder } from "../app/contentPanelNavigation";
 import type { LinearWorkspaceSelection } from "../app/linearWorkspaceSelection";
 import {
   defaultLinearWorkspaceViewId,
   linearWorkspaceViewLabel,
   type LinearWorkspaceViewId,
 } from "../app/linearProjectViews";
+import { vaultNavItemIdFromPath } from "../command-palette/vaultNavFromPath";
+import type { VaultNavItemId } from "./vaultNavFolders";
+import {
+  vaultFolderPathFromDocumentPath,
+  vaultFolderTitle,
+} from "./vaultFolderContext";
 
 export type ChatFocusContentSnapshot =
   | {
@@ -27,6 +33,13 @@ export type ChatFocusContentSnapshot =
       description: string | null;
     };
 
+export type ComposerContextVaultBreadcrumb = {
+  folderPath: string;
+  folderName: string;
+  navItemId: VaultNavItemId | null;
+  documentTitle?: string;
+};
+
 export type ComposerContextItem = {
   id: string;
   label: string;
@@ -34,6 +47,7 @@ export type ComposerContextItem = {
   stateType?: string;
   issueIdentifier?: string;
   issueTitle?: string;
+  vaultBreadcrumb?: ComposerContextVaultBreadcrumb;
 };
 
 export type ChatFocusContext =
@@ -60,6 +74,11 @@ export type ChatFocusContext =
       body?: string;
     }
   | {
+      kind: "vault_folder";
+      path: string;
+      name: string;
+    }
+  | {
       kind: "linear_workspace";
       workspaceKind: "team" | "project";
       workspaceId: string;
@@ -73,6 +92,8 @@ export function buildChatFocusContext(options: {
   activeLinearIssue: ActiveLinearIssue | null;
   activeLinearDocument: ActiveLinearDocument | null;
   activeVaultDocument: ActiveVaultDocument | null;
+  activeVaultFolder: ActiveVaultFolder | null;
+  vaultChatContextOverride?: ActiveVaultFolder | null;
   linearSelection: LinearWorkspaceSelection | null;
   linearWorkspaceView: LinearWorkspaceViewId | null;
   focusContentSnapshot: ChatFocusContentSnapshot | null;
@@ -81,6 +102,8 @@ export function buildChatFocusContext(options: {
     activeLinearIssue,
     activeLinearDocument,
     activeVaultDocument,
+    activeVaultFolder,
+    vaultChatContextOverride = null,
     linearSelection,
     linearWorkspaceView,
     focusContentSnapshot,
@@ -112,6 +135,14 @@ export function buildChatFocusContext(options: {
     };
   }
 
+  if (vaultChatContextOverride) {
+    return {
+      kind: "vault_folder",
+      path: vaultChatContextOverride.path,
+      name: vaultChatContextOverride.title,
+    };
+  }
+
   if (activeVaultDocument) {
     const snapshot =
       focusContentSnapshot?.kind === "vault_document" ? focusContentSnapshot : null;
@@ -120,6 +151,14 @@ export function buildChatFocusContext(options: {
       path: activeVaultDocument.path,
       title: snapshot?.title ?? activeVaultDocument.title,
       body: snapshot?.body,
+    };
+  }
+
+  if (activeVaultFolder) {
+    return {
+      kind: "vault_folder",
+      path: activeVaultFolder.path,
+      name: activeVaultFolder.title,
     };
   }
 
@@ -152,6 +191,9 @@ export function chatFocusContextLabel(context: ChatFocusContext): string {
   if (context.kind === "vault_document") {
     return context.title;
   }
+  if (context.kind === "vault_folder") {
+    return `${context.name} folder`;
+  }
   const viewLabel = linearWorkspaceViewLabel(context.workspaceKind, context.view);
   return `${context.name} · ${viewLabel}`;
 }
@@ -173,7 +215,33 @@ export function composerContextItems(context: ChatFocusContext): ComposerContext
     return [{ id: context.documentId, label: context.title }];
   }
   if (context.kind === "vault_document") {
-    return [{ id: context.path, label: context.title }];
+    const folderPath = vaultFolderPathFromDocumentPath(context.path);
+    const folderName = vaultFolderTitle(folderPath);
+    return [
+      {
+        id: context.path,
+        label: context.title,
+        vaultBreadcrumb: {
+          folderPath,
+          folderName,
+          navItemId: vaultNavItemIdFromPath(folderPath),
+          documentTitle: context.title,
+        },
+      },
+    ];
+  }
+  if (context.kind === "vault_folder") {
+    return [
+      {
+        id: context.path,
+        label: context.name,
+        vaultBreadcrumb: {
+          folderPath: context.path,
+          folderName: context.name,
+          navItemId: vaultNavItemIdFromPath(context.path),
+        },
+      },
+    ];
   }
   const viewLabel = linearWorkspaceViewLabel(context.workspaceKind, context.view);
   return [{ id: context.workspaceId, label: `${context.name} · ${viewLabel}` }];
@@ -192,6 +260,9 @@ export function isChatFocusContextLoading(
   if (context.kind === "vault_document") {
     return snapshot?.kind !== "vault_document";
   }
+  if (context.kind === "vault_folder") {
+    return false;
+  }
   if (context.workspaceKind === "team") {
     return false;
   }
@@ -207,11 +278,13 @@ export function composerPlaceholderForFocus(
     if (context.kind === "linear_issue") return "Ask about this issue…";
     if (context.kind === "linear_document") return "Ask about this document…";
     if (context.kind === "vault_document") return "Ask about this document…";
+    if (context.kind === "vault_folder") return "Ask about this folder…";
     return "Ask Linear…";
   }
   if (context.kind === "linear_workspace") return "Ask about this project…";
   if (context.kind === "linear_issue") return "Ask about this issue…";
   if (context.kind === "linear_document") return "Ask about this document…";
   if (context.kind === "vault_document") return "Ask about this document…";
+  if (context.kind === "vault_folder") return "Ask about this folder…";
   return undefined;
 }

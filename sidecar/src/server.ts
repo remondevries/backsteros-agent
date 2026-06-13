@@ -2426,7 +2426,9 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
   const focusToolSelection = body.focusContext
     ? {
-        obsidian: body.focusContext.kind === "vault_document",
+        obsidian:
+          body.focusContext.kind === "vault_document" ||
+          body.focusContext.kind === "vault_folder",
         linear: true,
         calendar: false,
         whoop: false,

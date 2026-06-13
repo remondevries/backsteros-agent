@@ -11,6 +11,7 @@ describe("buildChatFocusContext", () => {
       activeLinearIssue: null,
       activeLinearDocument: null,
       activeVaultDocument: { path: "Daily/note.md", title: "Note" },
+      activeVaultFolder: null,
       linearSelection: { kind: "project", id: "p1", name: "Project" },
       linearWorkspaceView: "issues",
       focusContentSnapshot: { kind: "vault_document", title: "Note", body: "Body" },
@@ -24,6 +25,7 @@ describe("buildChatFocusContext", () => {
       activeLinearIssue: null,
       activeLinearDocument: { id: "doc-1", title: "Spec", projectId: "p1" },
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: { kind: "project", id: "p1", name: "Project" },
       linearWorkspaceView: "documents",
       focusContentSnapshot: { kind: "linear_document", title: "Spec", content: "Body" },
@@ -38,11 +40,31 @@ describe("buildChatFocusContext", () => {
     });
   });
 
+  test("uses vault folder override without closing the open document", () => {
+    const context = buildChatFocusContext({
+      activeLinearIssue: null,
+      activeLinearDocument: null,
+      activeVaultDocument: { path: "Inbox/note.md", title: "note" },
+      activeVaultFolder: { path: "Inbox", title: "Inbox" },
+      vaultChatContextOverride: { path: "Inbox", title: "Inbox" },
+      linearSelection: null,
+      linearWorkspaceView: null,
+      focusContentSnapshot: { kind: "vault_document", title: "note", body: "Body" },
+    });
+
+    expect(context).toEqual({
+      kind: "vault_folder",
+      path: "Inbox",
+      name: "Inbox",
+    });
+  });
+
   test("returns issue when open over workspace", () => {
     const context = buildChatFocusContext({
       activeLinearIssue: { id: "i1", identifier: "BOS-1", title: "Issue" },
       activeLinearDocument: null,
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: { kind: "project", id: "p1", name: "Project" },
       linearWorkspaceView: "issues",
       focusContentSnapshot: { kind: "linear_issue", description: "Desc" },
@@ -51,11 +73,30 @@ describe("buildChatFocusContext", () => {
     expect(context?.kind).toBe("linear_issue");
   });
 
+  test("returns vault folder when browsing without an open note", () => {
+    const context = buildChatFocusContext({
+      activeLinearIssue: null,
+      activeLinearDocument: null,
+      activeVaultDocument: null,
+      activeVaultFolder: { path: "Daily", title: "Daily" },
+      linearSelection: null,
+      linearWorkspaceView: null,
+      focusContentSnapshot: null,
+    });
+
+    expect(context).toEqual({
+      kind: "vault_folder",
+      path: "Daily",
+      name: "Daily",
+    });
+  });
+
   test("returns workspace when browsing a project", () => {
     const context = buildChatFocusContext({
       activeLinearIssue: null,
       activeLinearDocument: null,
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: { kind: "project", id: "p1", name: "BacksterOS" },
       linearWorkspaceView: "issues",
       focusContentSnapshot: null,
@@ -79,6 +120,7 @@ describe("isChatFocusContextLoading", () => {
       activeLinearIssue: null,
       activeLinearDocument: { id: "doc-1", title: "Spec" },
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: null,
       linearWorkspaceView: null,
       focusContentSnapshot: null,
@@ -100,6 +142,7 @@ describe("isChatFocusContextLoading", () => {
       activeLinearIssue: null,
       activeLinearDocument: null,
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: { kind: "project", id: "p1", name: "BacksterOS" },
       linearWorkspaceView: "overview",
       focusContentSnapshot: null,
@@ -129,6 +172,7 @@ describe("composerContextItems", () => {
       },
       activeLinearDocument: null,
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: null,
       linearWorkspaceView: null,
       focusContentSnapshot: null,
@@ -151,6 +195,7 @@ describe("composerContextItems", () => {
       activeLinearIssue: null,
       activeLinearDocument: { id: "doc-1", title: "Spec" },
       activeVaultDocument: null,
+      activeVaultFolder: null,
       linearSelection: null,
       linearWorkspaceView: null,
       focusContentSnapshot: null,
@@ -158,6 +203,55 @@ describe("composerContextItems", () => {
 
     expect(context && composerContextItems(context)).toEqual([
       { id: "doc-1", label: "Spec" },
+    ]);
+  });
+
+  test("builds vault breadcrumb for open documents", () => {
+    const context = buildChatFocusContext({
+      activeLinearIssue: null,
+      activeLinearDocument: null,
+      activeVaultDocument: { path: "Inbox/note.md", title: "Markdown Elements" },
+      activeVaultFolder: null,
+      linearSelection: null,
+      linearWorkspaceView: null,
+      focusContentSnapshot: { kind: "vault_document", title: "Markdown Elements", body: "" },
+    });
+
+    expect(context && composerContextItems(context)).toEqual([
+      {
+        id: "Inbox/note.md",
+        label: "Markdown Elements",
+        vaultBreadcrumb: {
+          folderPath: "Inbox",
+          folderName: "Inbox",
+          navItemId: "inbox",
+          documentTitle: "Markdown Elements",
+        },
+      },
+    ]);
+  });
+
+  test("builds vault breadcrumb for folder context", () => {
+    const context = buildChatFocusContext({
+      activeLinearIssue: null,
+      activeLinearDocument: null,
+      activeVaultDocument: null,
+      activeVaultFolder: { path: "Daily/June", title: "June" },
+      linearSelection: null,
+      linearWorkspaceView: null,
+      focusContentSnapshot: null,
+    });
+
+    expect(context && composerContextItems(context)).toEqual([
+      {
+        id: "Daily/June",
+        label: "June",
+        vaultBreadcrumb: {
+          folderPath: "Daily/June",
+          folderName: "June",
+          navItemId: "daily",
+        },
+      },
     ]);
   });
 });

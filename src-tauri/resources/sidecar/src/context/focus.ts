@@ -1,4 +1,5 @@
 import { readVaultDocument } from "../vault/vault-document.ts";
+import { listVaultDirectoryEntries } from "../vault-nav-structure.ts";
 import { fetchLinearIssueDetail } from "../linear/issue-detail.ts";
 import { fetchLinearApiDocumentById } from "../linear/project-documents-api.ts";
 import { fetchLinearProjectOverview } from "../linear/project-overview.ts";
@@ -24,6 +25,11 @@ export type FocusContextInput =
       path: string;
       title?: string;
       body?: string;
+    }
+  | {
+      kind: "vault_folder";
+      path: string;
+      name: string;
     }
   | {
       kind: "linear_workspace";
@@ -132,6 +138,38 @@ export async function buildFocusContextSection(
       } else if (!summary) {
         lines.push("", "Project description: (empty)");
       }
+    }
+
+    return truncateContextSection(lines.join("\n"));
+  }
+
+  if (input.kind === "vault_folder") {
+    const entries = listVaultDirectoryEntries(notesPath, input.path);
+    const lines = [
+      "The user is browsing this vault folder in BacksterOS. Treat it as the active workspace focus.",
+      `Folder: ${input.name}`,
+      `Path: ${input.path}`,
+    ];
+
+    const files = entries.filter((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".md"));
+    const folders = entries.filter((entry) => entry.kind === "directory");
+
+    if (folders.length > 0) {
+      lines.push("", "Subfolders:");
+      for (const folder of folders) {
+        lines.push(`- ${folder.path}/`);
+      }
+    }
+
+    if (files.length > 0) {
+      lines.push("", "Notes in this folder:");
+      for (const file of files) {
+        lines.push(`- ${file.path}`);
+      }
+    }
+
+    if (files.length === 0 && folders.length === 0) {
+      lines.push("", "This folder is empty.");
     }
 
     return truncateContextSection(lines.join("\n"));

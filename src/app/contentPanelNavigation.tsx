@@ -164,6 +164,11 @@ export type ActiveVaultDocument = {
   focusTitle?: boolean;
 };
 
+export type ActiveVaultFolder = {
+  path: string;
+  title: string;
+};
+
 export type ActiveLinearIssue = {
   id: string;
   identifier: string;
@@ -227,6 +232,8 @@ type ContentPanelNavigationContextValue = {
   setActiveVaultDocument: (document: ActiveVaultDocument | null) => void;
   updateActiveVaultDocument: (patch: Partial<ActiveVaultDocument>) => void;
   clearActiveVaultDocument: () => void;
+  activeVaultFolder: ActiveVaultFolder | null;
+  setActiveVaultFolder: (folder: ActiveVaultFolder | null) => void;
   activeLinearDocument: ActiveLinearDocument | null;
   setActiveLinearDocument: (document: ActiveLinearDocument | null) => void;
   updateActiveLinearDocument: (patch: Partial<ActiveLinearDocument>) => void;
@@ -268,6 +275,7 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
   const [activeVaultDocument, setActiveVaultDocumentState] = useState<ActiveVaultDocument | null>(
     null,
   );
+  const [activeVaultFolder, setActiveVaultFolderState] = useState<ActiveVaultFolder | null>(null);
   const [activeLinearIssue, setActiveLinearIssueState] = useState<ActiveLinearIssue | null>(() =>
     persistedState.activeLinearIssue ?? null,
   );
@@ -302,6 +310,7 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       return;
     }
     setActiveVaultDocumentState(null);
+    setActiveVaultFolderState(null);
     setActiveLinearDocumentState(null);
     setActiveLinearIssueState(null);
     setLinearWorkspaceViewState(null);
@@ -336,6 +345,10 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
   const clearActiveVaultDocument = useCallback(() => {
     setActiveVaultDocumentState(null);
     getFocusContentController()?.clearKind("vault_document");
+  }, []);
+
+  const setActiveVaultFolder = useCallback((folder: ActiveVaultFolder | null) => {
+    setActiveVaultFolderState(folder);
   }, []);
 
   const setActiveLinearDocument = useCallback((document: ActiveLinearDocument | null) => {
@@ -449,6 +462,8 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       setActiveVaultDocument,
       updateActiveVaultDocument,
       clearActiveVaultDocument,
+      activeVaultFolder,
+      setActiveVaultFolder,
       activeLinearDocument,
       setActiveLinearDocument,
       updateActiveLinearDocument,
@@ -473,6 +488,7 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       activeLinearDocument,
       activeLinearIssue,
       activeVaultDocument,
+      activeVaultFolder,
       clearActiveLinearDocument,
       clearActiveLinearIssue,
       clearActiveVaultDocument,
@@ -488,6 +504,7 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       setActiveLinearDocument,
       setActiveLinearIssue,
       setActiveVaultDocument,
+      setActiveVaultFolder,
       setLinearSelection,
       setLinearWorkspaceView,
       setIssuesPanelMode,

@@ -14,6 +14,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
+function isVaultDocumentTitleTarget(target: EventTarget | null): target is HTMLInputElement {
+  return target instanceof HTMLInputElement && target.classList.contains("vault-document-title");
+}
+
 export function ContentPanelBackShortcuts({
   enabled,
   settingsOpen,
@@ -86,6 +90,13 @@ export function ContentPanelBackShortcuts({
       if (event.key !== "Escape" || event.metaKey || event.ctrlKey || event.altKey) return;
 
       if (shouldRestoreTiptapEditorFocus() && restoreTiptapEditorFocus()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      if (isVaultDocumentTitleTarget(event.target)) {
+        event.target.blur();
         event.preventDefault();
         event.stopImmediatePropagation();
         return;

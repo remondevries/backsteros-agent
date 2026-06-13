@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createVaultDocument, readVaultDocument, updateVaultDocument } from "./vault-document.ts";
@@ -61,8 +61,25 @@ describe("vault-document", () => {
 
     const saved = readFileSync(join(notesPath, "Inbox", "idea.md"), "utf8");
     expect(saved.startsWith("---\ndate: ")).toBe(true);
-    expect(saved).toContain("# Idea");
+    expect(saved).toContain("Some text");
+    expect(saved).toContain("More text");
     expect(readVaultNoteDateFromContent(saved)?.length).toBeGreaterThan(0);
+  });
+
+  test("uses the filename for title even when the body starts with h1", () => {
+    const notesPath = makeNotesDir();
+    mkdirSync(join(notesPath, "Inbox"), { recursive: true });
+    writeFileSync(
+      join(notesPath, "Inbox", "my-note.md"),
+      "# Different heading\n\nBody text\n",
+      "utf8",
+    );
+
+    const document = readVaultDocument(notesPath, "Inbox/my-note.md");
+
+    expect(document.title).toBe("my-note");
+    expect(document.body).toContain("# Different heading");
+    expect(document.body).toContain("Body text");
   });
 
   test("preserves existing frontmatter date on save", async () => {
@@ -89,9 +106,10 @@ describe("vault-document", () => {
 
     expect(document.path).toBe("Inbox/Untitled.md");
     expect(document.title).toBe("Untitled");
+    expect(document.body).toBe("");
     const saved = readFileSync(join(notesPath, "Inbox", "Untitled.md"), "utf8");
     expect(saved.startsWith("---\ndate: ")).toBe(true);
-    expect(saved).toContain("# Untitled");
+    expect(saved).not.toContain("# Untitled");
   });
 
   test("creates a unique filename when one already exists", () => {
@@ -102,6 +120,42 @@ describe("vault-document", () => {
 
     expect(first.path).toBe("Inbox/Untitled.md");
     expect(second.path).toBe("Inbox/Untitled 2.md");
+  });
+
+  test("renames the file when the title changes", async () => {
+    const notesPath = makeNotesDir();
+    mkdirSync(join(notesPath, "Inbox"), { recursive: true });
+    const relativePath = "Inbox/Untitled.md";
+    writeFileSync(join(notesPath, "Inbox", "Untitled.md"), "# Untitled\n\nBody\n", "utf8");
+
+    const document = await updateVaultDocument(notesPath, relativePath, {
+      title: "Untitledtest",
+      body: "Body",
+    });
+
+    expect(document.path).toBe("Inbox/Untitledtest.md");
+    expect(document.title).toBe("Untitledtest");
+    expect(existsSync(join(notesPath, "Inbox", "Untitledtest.md"))).toBe(true);
+    expect(existsSync(join(notesPath, "Inbox", "Untitled.md"))).toBe(false);
+  });
+
+  test("does not rename daily notes when the title changes", async () => {
+    const notesPath = makeNotesDir();
+    mkdirSync(join(notesPath, "Daily"), { recursive: true });
+    const relativePath = "Daily/2026-06-12.md";
+    writeFileSync(
+      join(notesPath, "Daily", "2026-06-12.md"),
+      "---\ndate: 2026-06-12\n---\n\n# Thursday\n",
+      "utf8",
+    );
+
+    const document = await updateVaultDocument(notesPath, relativePath, {
+      title: "New title",
+      body: "",
+    });
+
+    expect(document.path).toBe("Daily/2026-06-12.md");
+    expect(existsSync(join(notesPath, "Daily", "2026-06-12.md"))).toBe(true);
   });
 
   test("includes whoop stats from frontmatter", () => {

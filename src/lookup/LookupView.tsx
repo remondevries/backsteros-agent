@@ -21,7 +21,9 @@ import {
 import { validateLookupAttachment } from "./lookupAttachments";
 import { MessageActions } from "../chat/MessageActions";
 import { RunBlock } from "../chat/RunBlock";
+import { ScrollToBottomButton } from "../chat/ScrollToBottomButton";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
+import { useStickToBottom } from "../hooks/useStickToBottom";
 import type {
   AgentEvent,
   AttachmentPreviewTarget,
@@ -162,10 +164,16 @@ export const LookupView = forwardRef<
   const { format: lookupOutputFormat, setFormat: setLookupOutputFormat } = useLookupOutputFormat();
 
   const composerRef = useRef<LookupComposerHandle>(null);
-  const transcriptRef = useRef<HTMLDivElement>(null);
   const chatContentRef = useRef<HTMLDivElement>(null);
+  const {
+    scrollRef: transcriptRef,
+    contentRef: transcriptInnerRef,
+    handleScroll: handleTranscriptScroll,
+    pin: pinTranscriptScroll,
+    scrollToBottom: scrollTranscriptToBottom,
+    showScrollButton: showTranscriptScrollButton,
+  } = useStickToBottom({ enabled: isActive });
   const dragDepthRef = useRef(0);
-  const stickToBottomRef = useRef(true);
   const pendingAttachmentsRef = useRef(pendingAttachments);
   const titleUpdatedRef = useRef(
     initialMessages.some((message) => message.role === "user" && message.text.trim()),
@@ -258,25 +266,6 @@ export const LookupView = forwardRef<
     }
   }, [isActive, voiceModeEnabled]);
 
-  const scrollToBottom = useCallback(() => {
-    const node = transcriptRef.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, []);
-
-  useEffect(() => {
-    if (stickToBottomRef.current) {
-      scrollToBottom();
-    }
-  }, [messages, runs, scrollToBottom]);
-
-  const handleTranscriptScroll = useCallback(() => {
-    const node = transcriptRef.current;
-    if (!node) return;
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < 48;
-  }, []);
-
   const handleCancelRun = useCallback(async () => {
     void stopSpeaking();
 
@@ -328,7 +317,7 @@ export const LookupView = forwardRef<
       setMessages([]);
       setRuns({});
       titleUpdatedRef.current = false;
-      stickToBottomRef.current = true;
+      pinTranscriptScroll();
       onTitleChange?.(result.title);
       onStateChange?.([], {});
     } catch (err) {
@@ -502,7 +491,7 @@ export const LookupView = forwardRef<
         setInput("");
         setPendingAttachments([]);
       }
-      stickToBottomRef.current = true;
+      pinTranscriptScroll();
 
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
@@ -702,12 +691,16 @@ export const LookupView = forwardRef<
         onDrop={handleDrop}
       >
         <div className="chat-transcript-shell">
+          <ScrollToBottomButton
+            visible={showTranscriptScrollButton}
+            onClick={() => scrollTranscriptToBottom("smooth")}
+          />
           <div
             className="chat-transcript"
             ref={transcriptRef}
             onScroll={handleTranscriptScroll}
           >
-            <div className="chat-transcript-inner">
+            <div className="chat-transcript-inner" ref={transcriptInnerRef}>
               {messages.length === 0 && (
                 <div className="lookup-empty-state">
                   <p>Research with Gemini and grounded web search.</p>

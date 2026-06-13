@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
+import { ScrollToBottomButton } from "../../chat/ScrollToBottomButton";
 import { ChatTurn } from "../../chat/ChatTurn";
 import { Composer, type ComposerHandle } from "../../chat/Composer";
 import { ComposerContextCard } from "../../chat/ComposerContextCard";
@@ -6,6 +7,7 @@ import { LinearAssistantBlock } from "../../chat/LinearAssistantBlock";
 import type { ComposerContextItem } from "../../lib/chatFocusContext";
 import { shouldRefreshLinearIssueFromAgentReply } from "../../lib/linearIssueAgentRefresh";
 import { useLinearIssueCommentThread } from "../../hooks/useLinearIssueCommentThread";
+import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { useTts } from "../../hooks/useTts";
 import type { ChatMessage } from "../../chat/types";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
@@ -54,7 +56,14 @@ export const LinearIssueThreadChat = forwardRef<
     });
   const { supported: ttsSupported } = useTts({ isActive: true });
   const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const {
+    scrollRef,
+    contentRef: transcriptInnerRef,
+    handleScroll,
+    pin: pinTranscriptScroll,
+    scrollToBottom,
+    showScrollButton,
+  } = useStickToBottom();
   const composerRef = useRef<ComposerHandle>(null);
   const hydratedMessageIdsRef = useRef<Set<string> | null>(null);
   const observedInitialLoadRef = useRef(false);
@@ -91,12 +100,6 @@ export const LinearIssueThreadChat = forwardRef<
     hydratedMessageIdsRef.current = new Set(messages.map((message) => message.id));
   }, [loading, messages]);
 
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, [messages.length, sending]);
-
   const shouldAnimateAssistant = useCallback((message: ChatMessage) => {
     const hydrated = hydratedMessageIdsRef.current;
     if (!hydrated) return false;
@@ -112,12 +115,14 @@ export const LinearIssueThreadChat = forwardRef<
       const started = await onStartThread(trimmed);
       if (started) {
         setInput("");
+        pinTranscriptScroll();
         composerRef.current?.focus();
       }
       return;
     }
 
     if (sending) return;
+    pinTranscriptScroll();
     awaitingAgentRef.current = {
       assistantIds: new Set(
         messages.filter((message) => message.role === "assistant").map((message) => message.id),
@@ -127,11 +132,12 @@ export const LinearIssueThreadChat = forwardRef<
     const sent = await sendReply(trimmed);
     if (sent) {
       setInput("");
+      pinTranscriptScroll();
       composerRef.current?.focus();
       return;
     }
     awaitingAgentRef.current = null;
-  }, [input, messages, onStartThread, sendReply, sending, starting, threadId]);
+  }, [input, messages, onStartThread, pinTranscriptScroll, sendReply, sending, starting, threadId]);
 
   const busy = threadId ? sending : starting;
 
@@ -171,8 +177,12 @@ export const LinearIssueThreadChat = forwardRef<
     <div className="chat-view chat-view--panel">
       <div className="chat-content">
         <div className="chat-transcript-shell">
-          <div ref={scrollRef} className="chat-transcript">
-            <div className="chat-transcript-inner">
+          <ScrollToBottomButton
+            visible={showScrollButton}
+            onClick={() => scrollToBottom("smooth")}
+          />
+          <div ref={scrollRef} className="chat-transcript" onScroll={handleScroll}>
+            <div className="chat-transcript-inner" ref={transcriptInnerRef}>
               {messages.map((message) =>
                 message.role === "assistant" ? (
                   <div key={message.id} className="chat-turn">
@@ -233,7 +243,6 @@ export const LinearIssueThreadChat = forwardRef<
             attachments={[]}
             onAddAttachments={noop}
             onRemoveAttachment={noop}
-            hideToolIndicators
             focusPlaceholder={threadId ? "Reply in this thread…" : "Send a message to start a thread…"}
           />
         </div>

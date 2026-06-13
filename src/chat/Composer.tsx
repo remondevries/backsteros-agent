@@ -9,7 +9,6 @@ import {
 import { ComposerTextarea } from "./ComposerTextarea";
 import { AttachmentChip } from "./AttachmentChip";
 import { filesFromClipboard } from "./attachments";
-import { ComposerToolIndicators } from "./ComposerToolIndicators";
 import type { ComposerInputModeControls } from "./composerInputMode";
 import { ComposerInputModeToggle } from "./ComposerInputModeToggle";
 import { ComposerModeToggle } from "./ComposerModeToggle";
@@ -18,7 +17,6 @@ import { DailyCaptureTimeTag, type DailyCaptureTimeTagHandle } from "./DailyCapt
 import { GroceryWeekTag, type GroceryWeekTagHandle } from "./GroceryWeekTag";
 import { composerModeDisplayName } from "./composerMode";
 import type { ComposerMode } from "./composerMode";
-import type { ToolPinSelection, ToolSelection } from "./tool-routing";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import {
   filterSlashCommands,
@@ -78,10 +76,6 @@ export const Composer = forwardRef<
     savingComposerMode?: boolean;
     inputModeControls?: ComposerInputModeControls;
     voiceMode?: boolean;
-    hideToolIndicators?: boolean;
-    toolIndicators?: ToolSelection;
-    toolPins?: ToolPinSelection;
-    onDismissTool?: (tool: keyof ToolSelection) => void;
     composerQuickAction?: {
       onClear: () => void;
     };
@@ -130,10 +124,6 @@ export const Composer = forwardRef<
     savingComposerMode,
     inputModeControls,
     voiceMode = false,
-    hideToolIndicators = false,
-    toolIndicators,
-    toolPins,
-    onDismissTool,
     composerQuickAction,
     composerAutomationFlow = null,
     dailyCaptureTime,
@@ -237,14 +227,6 @@ export const Composer = forwardRef<
     onEscapeBlur?.();
   }
 
-  const activeTools = toolIndicators ?? {
-    obsidian: false,
-    linear: false,
-    calendar: false,
-    whoop: false,
-  };
-  const showToolIndicators =
-    !hideToolIndicators && Object.values(activeTools).some(Boolean);
   const showFooter = Boolean(
     inputModeControls?.textVoice?.supported || (composerMode && onComposerModeChange),
   );
@@ -296,16 +278,6 @@ export const Composer = forwardRef<
               onSelect={onSlashCommandSelect}
               onHover={setSlashSelectedIndex}
             />
-          )}
-
-          {showToolIndicators && (
-            <div className="composer-floating-controls">
-              <ComposerToolIndicators
-                tools={activeTools}
-                pins={toolPins}
-                onDismiss={onDismissTool}
-              />
-            </div>
           )}
 
           <div
