@@ -4,27 +4,15 @@ import {
   type GroupVariant,
 } from "../../lib/groupVariantFromStatusKey";
 import type { StatusMoveTargetGroup } from "../../lib/linearIssueStatusMove";
-
-function GroupChevron({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      className={`workspace-status-group__chevron${expanded ? " workspace-status-group__chevron--expanded" : ""}`}
-      viewBox="0 0 24 24"
-      width="14"
-      height="14"
-      aria-hidden="true"
-    >
-      <path
-        d="M9 6l6 6-6 6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+import {
+  contentListGroupHeaderId,
+  contentListItemDataAttributes,
+} from "../../lib/contentListNavigation";
+import {
+  isContentListKeyboardFocused,
+  useContentListKeyboardFocusedId,
+} from "../../lib/contentListNavigationReact";
+import { GroupChevron } from "./GroupChevron";
 
 export function CollapsibleStatusSection({
   groupKey,
@@ -60,7 +48,10 @@ export function CollapsibleStatusSection({
   onGroupMouseEnter?: () => void;
   onGroupMouseUp?: () => void;
 }) {
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const headerListId = contentListGroupHeaderId(idPrefix, groupKey);
   const groupId = `${idPrefix}-${groupKey.replace(/\s+/g, "-").toLowerCase()}`;
+  const keyboardFocused = isContentListKeyboardFocused(keyboardFocusedId, headerListId);
   const hasIcon = icon != null;
   const hasHeaderAction = headerAction != null;
 
@@ -76,6 +67,7 @@ export function CollapsibleStatusSection({
   const headerClass = [
     "workspace-status-group__header",
     isDropTarget ? "workspace-status-group__header--drop-target" : null,
+    keyboardFocused ? "workspace-status-group__header--keyboard-focused" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -101,6 +93,7 @@ export function CollapsibleStatusSection({
     >
       <button
         type="button"
+        {...contentListItemDataAttributes(headerListId)}
         className={headerClass}
         onClick={onToggle}
         aria-expanded={!collapsed}

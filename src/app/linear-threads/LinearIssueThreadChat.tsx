@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
 import { ChatTurn } from "../../chat/ChatTurn";
 import { Composer, type ComposerHandle } from "../../chat/Composer";
 import { ComposerContextCard } from "../../chat/ComposerContextCard";
@@ -13,19 +13,29 @@ import { linearCommentToChatMessage } from "./linearThreadFormat";
 
 const noop = () => undefined;
 
-export function LinearIssueThreadChat({
-  issueId,
-  threadId,
-  composerContextItems = [],
-  onStartThread,
-  starting = false,
-}: {
-  issueId: string;
-  threadId: string | null;
-  composerContextItems?: ComposerContextItem[];
-  onStartThread?: (body: string) => Promise<boolean>;
-  starting?: boolean;
-}) {
+export type LinearIssueThreadChatHandle = {
+  focusComposer: () => void;
+};
+
+export const LinearIssueThreadChat = forwardRef<
+  LinearIssueThreadChatHandle,
+  {
+    issueId: string;
+    threadId: string | null;
+    composerContextItems?: ComposerContextItem[];
+    onStartThread?: (body: string) => Promise<boolean>;
+    starting?: boolean;
+  }
+>(function LinearIssueThreadChat(
+  {
+    issueId,
+    threadId,
+    composerContextItems = [],
+    onStartThread,
+    starting = false,
+  },
+  ref,
+) {
   const { requestLinearIssueRefresh } = useContentPanelNavigation();
   const awaitingAgentRef = useRef<{
     assistantIds: Set<string>;
@@ -48,6 +58,16 @@ export function LinearIssueThreadChat({
   const composerRef = useRef<ComposerHandle>(null);
   const hydratedMessageIdsRef = useRef<Set<string> | null>(null);
   const observedInitialLoadRef = useRef(false);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusComposer: () => {
+        composerRef.current?.focus();
+      },
+    }),
+    [],
+  );
 
   const messages = useMemo(
     () =>
@@ -220,4 +240,4 @@ export function LinearIssueThreadChat({
       </div>
     </div>
   );
-}
+});

@@ -4,6 +4,8 @@ import { linearWorkspaceSelectionId } from "./linearWorkspaceSelection";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
 import { useEnsureLinearWorkspaceVaultStructure } from "../hooks/useEnsureLinearWorkspaceVaultStructure";
 import { useLinearWorkspaceFocusSnapshot } from "../hooks/useLinearWorkspaceFocusSnapshot";
+import { registerLinearProjectViewNavigation } from "../lib/linearProjectViewNavigation";
+import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
 import { ProjectDocumentsPanel } from "./project-documents/ProjectDocumentsPanel";
 import { ProjectIssuesPanel } from "./project-issues/ProjectIssuesPanel";
 import { ProjectWatchersKanbanPanel } from "./project-issues/ProjectWatchersKanbanPanel";
@@ -160,6 +162,24 @@ export function LinearProjectContent({
   useEffect(() => {
     setLinearWorkspaceView(activeView);
   }, [activeView, setLinearWorkspaceView]);
+
+  useEffect(() => {
+    return registerContentPanelLocalBack(() => {
+      if (!issuesSettingsOpen) return false;
+      setIssuesSettingsOpen(false);
+      return true;
+    });
+  }, [issuesSettingsOpen]);
+
+  useEffect(() => {
+    return registerLinearProjectViewNavigation({
+      selectionKind: selection.kind,
+      onSelectView: (nextView) => {
+        setActiveView(nextView);
+        setIssuesSettingsOpen((open) => (nextView === "issues" ? open : false));
+      },
+    });
+  }, [selection.kind]);
 
   return (
     <div className="linear-workspace-content linear-project-content">

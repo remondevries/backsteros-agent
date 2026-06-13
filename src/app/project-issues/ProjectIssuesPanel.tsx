@@ -107,9 +107,11 @@ export function ProjectIssuesPanel({
       buildStatusGroupedNavItems({
         groups,
         collapsedGroups,
+        groupHeaderIdPrefix: "project-issues-group",
+        onToggleGroup: toggleGroup,
         onSelect: (issue) => openLinearIssue(issue),
       }),
-    [collapsedGroups, groups, openLinearIssue],
+    [collapsedGroups, groups, openLinearIssue, toggleGroup],
   );
 
   useContentListNavigationRegistration({

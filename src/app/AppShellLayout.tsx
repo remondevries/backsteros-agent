@@ -12,6 +12,7 @@ import { useSidePanelToggles } from "../hooks/useSidePanelToggles";
 import { CommandPalette } from "../command-palette/CommandPalette";
 import { CommandPaletteProvider, useCommandPalette } from "../command-palette/CommandPaletteContext";
 import { AppShellShortcuts } from "../shortcuts/AppShellShortcuts";
+import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
 import { showTrafficLights } from "../lib/traffic-lights";
 import { isTauriRuntime } from "../lib/tauriRuntime";
 
@@ -48,6 +49,7 @@ function AppMainShell({
   closeRightSidePanel,
   toggleRightSidePanel,
   toggleContentPanelSidebar,
+  openRightSidePanel,
 }: {
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
@@ -75,6 +77,7 @@ function AppMainShell({
   closeRightSidePanel: () => void;
   toggleRightSidePanel: () => void;
   toggleContentPanelSidebar: () => void;
+  openRightSidePanel: () => void;
 }) {
   const { activeLinearDocument, clearActiveVaultDocument, resetProjectsOverview } =
     useContentPanelNavigation();
@@ -200,6 +203,29 @@ function AppMainShell({
     };
   }, [closeRightSidePanel, showFloatingRightPanel]);
 
+  useEffect(() => {
+    return registerContentPanelLocalBack(() => {
+      if (showFloatingRightPanel && rightSidePanelOpen) {
+        closeRightSidePanel();
+        return true;
+      }
+      if (showFloatingLeftNavigation && leftNavigationOverlayOpen) {
+        setLeftNavigationOverlayOpen(false);
+        if (leftSidePanelOpen) closeLeftSidePanel();
+        return true;
+      }
+      return false;
+    });
+  }, [
+    closeLeftSidePanel,
+    closeRightSidePanel,
+    leftNavigationOverlayOpen,
+    leftSidePanelOpen,
+    rightSidePanelOpen,
+    showFloatingLeftNavigation,
+    showFloatingRightPanel,
+  ]);
+
   return (
     <div className="app-main-shell">
       <div className="app-window-chrome" aria-hidden="true">
@@ -323,6 +349,8 @@ function AppMainShell({
         onToggleLeftSidePanel={toggleLeftSidePanel}
         onToggleRightSidePanel={toggleRightSidePanel}
         onToggleContentPanelSidebar={toggleContentPanelSidebar}
+        onOpenRightSidePanel={openRightSidePanel}
+        rightSidePanelOpen={rightSidePanelOpen}
       />
     </div>
   );
@@ -369,6 +397,7 @@ export function AppShellLayout({
     contentPanelSidebarOpen,
     closeLeftSidePanel,
     closeRightSidePanel,
+    openRightSidePanel,
     toggleLeftSidePanel,
     toggleRightSidePanel,
     toggleContentPanelSidebar,
@@ -399,6 +428,7 @@ export function AppShellLayout({
         toggleLeftSidePanel={toggleLeftSidePanel}
         toggleRightSidePanel={toggleRightSidePanel}
         toggleContentPanelSidebar={toggleContentPanelSidebar}
+        openRightSidePanel={openRightSidePanel}
       >
         {children}
       </AppMainShell>

@@ -98,6 +98,8 @@ export function ProjectDocumentsPanel({
       buildStatusGroupedNavItems({
         groups,
         collapsedGroups,
+        groupHeaderIdPrefix: "project-documents-group",
+        onToggleGroup: toggleGroup,
         getItemId: (document) => document.linearDocumentId,
         onSelect: (document) =>
           setActiveLinearDocument({
@@ -106,7 +108,7 @@ export function ProjectDocumentsPanel({
             projectId: document.projectId,
           }),
       }),
-    [collapsedGroups, groups, setActiveLinearDocument],
+    [collapsedGroups, groups, setActiveLinearDocument, toggleGroup],
   );
 
   useContentListNavigationRegistration({

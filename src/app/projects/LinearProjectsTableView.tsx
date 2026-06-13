@@ -41,6 +41,8 @@ export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
       buildStatusGroupedNavItems({
         groups: statusGroups,
         collapsedGroups: collapsedGroups,
+        groupHeaderIdPrefix: "linear-projects-group",
+        onToggleGroup: toggleGroup,
         onSelect: (project) =>
           setLinearSelection({
             kind: "project",
@@ -48,7 +50,7 @@ export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
             name: project.name,
           }),
       }),
-    [collapsedGroups, setLinearSelection, statusGroups],
+    [collapsedGroups, setLinearSelection, statusGroups, toggleGroup],
   );
 
   const selectedListId =

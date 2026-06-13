@@ -1035,6 +1035,16 @@ textarea {
   outline-offset: -0.5px;
 }
 
+.vault-folder-explorer-week-header.vault-folder-explorer-entry-keyboard-focused {
+  color: var(--text-primary);
+}
+
+.linear-project-group-header.vault-folder-explorer-entry-keyboard-focused {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--text-primary) 24%, transparent);
+  outline-offset: -1px;
+}
+
 .sidebar-list-group-chevron {
   flex-shrink: 0;
   width: 12px;
@@ -2473,6 +2483,12 @@ textarea {
 
 .workspace-status-group__header:focus-visible {
   outline: 1px solid var(--border-hover);
+  outline-offset: -1px;
+}
+
+.workspace-status-group__header--keyboard-focused {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--text-primary) 24%, transparent);
   outline-offset: -1px;
 }
 
@@ -4340,7 +4356,7 @@ button.project-document-row--keyboard-focused {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   width: 100%;
   min-width: 0;
   padding: 0 18px;
@@ -4366,7 +4382,8 @@ button.project-document-row--keyboard-focused {
 .linear-issue-body-editor {
   box-sizing: border-box;
   width: 100%;
-  max-width: none;
+  max-width: 800px;
+  padding-left: 6px;
 }
 
 .linear-issue-header {

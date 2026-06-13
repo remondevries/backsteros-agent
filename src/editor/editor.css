@@ -2,12 +2,40 @@
   width: 100%;
 }
 
+.tiptap-editor-root--block-caret {
+  position: relative;
+}
+
+.tiptap-block-caret {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 3px;
+  border-radius: 1px;
+  background: #ff9600;
+  pointer-events: none;
+  z-index: 10000;
+  animation: tiptap-block-caret-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes tiptap-block-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.2;
+  }
+}
+
 .tiptap-editor-content {
   outline: none;
   min-height: 1.5em;
   color: var(--text-primary);
   font: inherit;
   line-height: inherit;
+  caret-color: transparent !important;
 }
 
 .tiptap-editor-content p {

@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   autoFocusActiveContentList,
   clearContentListKeyboardFocus,
+  cycleActiveContentList,
   resolveContentListPreferredRegion,
+  resolveNavigationOrderIds,
+  type ContentListNavItem,
   type ContentListRegistration,
   type ContentListRegion,
 } from "./contentListNavigation";
@@ -72,7 +75,7 @@ describe("autoFocusActiveContentList", () => {
     expect(focusedId).toBe("b");
   });
 
-  test("prefers the higher-priority registration when no preferred region is set", () => {
+  test("prefers the sidebar list when no preferred region is set", () => {
     const registrations = new Map<string, ContentListRegistration>([
       ["sidebar", createRegistration([{ id: "sidebar-item", select: () => {} }])],
       [
@@ -90,7 +93,7 @@ describe("autoFocusActiveContentList", () => {
       focusedId = id;
     });
 
-    expect(focusedId).toBe("main-item");
+    expect(focusedId).toBe("sidebar-item");
   });
 
   test("prefers the sidebar list when the layout prefers sidebar", () => {
@@ -165,6 +168,83 @@ describe("resolveContentListPreferredRegion", () => {
     expect(
       resolveContentListPreferredRegion({ settingsOpen: true, hideSidebar: false }),
     ).toBeNull();
+  });
+});
+
+describe("resolveNavigationOrderIds", () => {
+  test("falls back to item order when no matching elements exist", () => {
+    const items: ContentListNavItem[] = [
+      { id: "issue-1", select: () => {} },
+      { id: "issue-2", select: () => {} },
+    ];
+
+    expect(resolveNavigationOrderIds(items)).toEqual(["issue-1", "issue-2"]);
+  });
+});
+
+describe("cycleActiveContentList", () => {
+  test("cycles from sidebar to main and back", () => {
+    const registrations = new Map<string, ContentListRegistration>([
+      ["sidebar", createRegistration([{ id: "sidebar-item", select: () => {} }])],
+      [
+        "main",
+        createRegistration([{ id: "main-item", select: () => {} }], {
+          region: "main",
+          priority: 10,
+        }),
+      ],
+    ]);
+    const focusedIdRef = { current: "sidebar-item" as string | null };
+    const activeRegistrationIdRef = { current: "sidebar" as string | null };
+    let focusedId: string | null = "sidebar-item";
+
+    expect(
+      cycleActiveContentList(
+        registrations,
+        focusedIdRef,
+        (id) => {
+          focusedId = id;
+        },
+        activeRegistrationIdRef,
+        "next",
+      ),
+    ).toBe(true);
+
+    expect(activeRegistrationIdRef.current).toBe("main");
+    expect(focusedId).toBe("main-item");
+
+    expect(
+      cycleActiveContentList(
+        registrations,
+        focusedIdRef,
+        (id) => {
+          focusedId = id;
+        },
+        activeRegistrationIdRef,
+        "next",
+      ),
+    ).toBe(true);
+
+    expect(activeRegistrationIdRef.current).toBe("sidebar");
+    expect(focusedId).toBe("sidebar-item");
+  });
+
+  test("returns false when only one list is available", () => {
+    const registrations = new Map<string, ContentListRegistration>([
+      ["sidebar", createRegistration([{ id: "sidebar-item", select: () => {} }])],
+    ]);
+    const focusedIdRef = { current: null as string | null };
+    const activeRegistrationIdRef = { current: null as string | null };
+
+    expect(
+      cycleActiveContentList(
+        registrations,
+        focusedIdRef,
+        () => {},
+        activeRegistrationIdRef,
+        "next",
+      ),
+    ).toBe(false);
   });
 });
 

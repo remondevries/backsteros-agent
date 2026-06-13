@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLinearIssueComment } from "../../lib/api";
 import { useLinearIssueCommentThreads } from "../../hooks/useLinearIssueCommentThreads";
 import { composerContextItems as buildComposerContextItems } from "../../lib/chatFocusContext";
+import { registerRightPanelComposerFocus } from "../../lib/rightPanelChatFocus";
 import { useContentPanelNavigation, useFocusContent } from "../contentPanelNavigation";
-import { LinearIssueThreadChat } from "./LinearIssueThreadChat";
+import { LinearIssueThreadChat, type LinearIssueThreadChatHandle } from "./LinearIssueThreadChat";
 import { LinearIssueThreadList } from "./LinearIssueThreadList";
 import { RightPanelChatHeader } from "../RightPanelChatHeader";
 import { getRightPanelAgentLabel } from "../rightPanelAgents";
@@ -47,6 +48,20 @@ export function LinearIssueAgentPanel({
   );
   const [creatingThread, setCreatingThread] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const threadChatRef = useRef<LinearIssueThreadChatHandle>(null);
+
+  useEffect(() => {
+    return registerRightPanelComposerFocus({
+      focusComposer: () => {
+        setPanelMode("chat");
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            threadChatRef.current?.focusComposer();
+          });
+        });
+      },
+    });
+  }, []);
 
   useEffect(() => {
     setPanelMode("chat");
@@ -193,6 +208,7 @@ export function LinearIssueAgentPanel({
           />
         ) : activeThreadId ? (
           <LinearIssueThreadChat
+            ref={threadChatRef}
             issueId={issueId}
             threadId={activeThreadId}
             composerContextItems={composerContextItems}
@@ -203,6 +219,7 @@ export function LinearIssueAgentPanel({
           </div>
         ) : (
           <LinearIssueThreadChat
+            ref={threadChatRef}
             issueId={issueId}
             threadId={null}
             composerContextItems={composerContextItems}

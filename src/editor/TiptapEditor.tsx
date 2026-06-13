@@ -1,7 +1,12 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
+import { BlockCaretExtension } from "./BlockCaretExtension";
+import {
+  handleTiptapEditorFocusBlur,
+  registerTiptapEditorFocus,
+} from "../lib/tiptapEditorFocus";
 
 export type TiptapEditorProps = {
   value: string;
@@ -25,15 +30,17 @@ export function TiptapEditor({
   format = "plain",
 }: TiptapEditorProps) {
   const isMarkdown = format === "markdown";
+  const editorId = useId();
 
   const editor = useEditor({
-    extensions: [StarterKit, ...(isMarkdown ? [Markdown] : [])],
+    extensions: [StarterKit, BlockCaretExtension, ...(isMarkdown ? [Markdown] : [])],
     content: value,
     ...(isMarkdown ? { contentType: "markdown" as const } : {}),
     editable: !disabled,
     editorProps: {
       attributes: {
         class: ["tiptap-editor-content", className].filter(Boolean).join(" "),
+        style: "caret-color: transparent;",
         ...(placeholder ? { "data-placeholder": placeholder } : {}),
       },
     },
@@ -42,8 +49,24 @@ export function TiptapEditor({
       onChange(isMarkdown ? nextEditor.getMarkdown() : nextEditor.getText());
     },
     onFocus,
-    onBlur,
+    onBlur: () => {
+      handleTiptapEditorFocusBlur();
+      onBlur?.();
+    },
   });
+
+  useEffect(() => {
+    if (!editor || disabled) return undefined;
+    return registerTiptapEditorFocus({
+      id: editorId,
+      getDom: () => editor.view.dom,
+      focus: () => editor.chain().focus().run(),
+      isFocused: () => editor.isFocused,
+      blur: () => {
+        editor.commands.blur();
+      },
+    });
+  }, [disabled, editor, editorId]);
 
   useEffect(() => {
     if (!editor) return;

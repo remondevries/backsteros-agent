@@ -542,7 +542,7 @@ export const ChatView = forwardRef<
   }, []);
 
   const focusComposer = useCallback(() => {
-    if (composerFocusSuspendedRef.current) return;
+    composerFocusSuspendedRef.current = false;
     scheduleComposerFocus(() => {
       composerRef.current?.focus();
     });

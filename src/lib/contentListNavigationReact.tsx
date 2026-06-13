@@ -41,6 +41,7 @@ export function ContentListNavigationProvider({ children }: { children: ReactNod
   const registrationsRef = useRef(new Map<string, RegistrationRecord>());
   const focusedIdRef = useRef<string | null>(null);
   const preferredListRegionRef = useRef<ContentListRegion | null>(null);
+  const activeRegistrationIdRef = useRef<string | null>(null);
   const [keyboardFocusedId, setKeyboardFocusedId] = useState<string | null>(null);
 
   const register = useCallback((id: string, registration: RegistrationRecord) => {
@@ -72,6 +73,7 @@ export function ContentListNavigationProvider({ children }: { children: ReactNod
       focusedIdRef,
       setFocusedId,
       preferredListRegionRef,
+      activeRegistrationIdRef,
     );
   }, []);
 

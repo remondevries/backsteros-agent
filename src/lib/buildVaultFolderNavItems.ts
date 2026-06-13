@@ -1,6 +1,7 @@
 import type { LinearIssueEntity } from "../chat/types";
 import type { VaultDirectoryEntry } from "./api";
 import type { ContentListNavItem } from "./contentListNavigation";
+import { contentListGroupHeaderId } from "./contentListNavigation";
 import { formatVaultNoteDisplayName } from "./vaultNoteDisplayName";
 import { resolveEntryDueDateKey } from "./vaultDates";
 import type { VaultNavItemId } from "./vaultNavFolders";
@@ -8,12 +9,14 @@ import { formatWorkoutDayLabel } from "./workouts/workoutsBreadcrumb";
 import { workoutDateKeyFromPath } from "./workouts/workoutDays";
 
 export const WORKOUTS_DASHBOARD_LIST_ID = "workouts:dashboard";
+export const DAILY_WEEK_GROUP_HEADER_PREFIX = "daily-week";
 
 type VaultFolderNavHandlers = {
   clearDashboard: () => void;
   openDirectory: (path: string) => void;
   openFile: (path: string, title: string) => void;
   openLinearIssue: (issue: LinearIssueEntity) => void;
+  toggleWeekGroup: (groupKey: string) => void;
 };
 
 export function buildVaultFolderNavItems({
@@ -53,6 +56,10 @@ export function buildVaultFolderNavItems({
     }
 
     for (const group of groupedDailyEntries) {
+      items.push({
+        id: contentListGroupHeaderId(DAILY_WEEK_GROUP_HEADER_PREFIX, group.key),
+        select: () => handlers.toggleWeekGroup(group.key),
+      });
       if (collapsedWeekGroups.has(group.key)) continue;
       for (const entry of group.entries) {
         const displayName = formatVaultNoteDisplayName(entry.name);

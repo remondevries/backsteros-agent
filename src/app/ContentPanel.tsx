@@ -14,6 +14,7 @@ import {
 } from "./contentPanelNavigation";
 import { ContentPanelMainSlot } from "./ContentPanelMainSlot";
 import { ContentListNavigationProvider, ContentListNavigationLayoutSync } from "../lib/contentListNavigationReact";
+import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
 import { LinearStatusIcon } from "../chat/LinearStatusIcon";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
@@ -183,6 +184,14 @@ function ContentPanelFrame({
     setNarrowContentSidebar(false);
     setNarrowSidebarInitialSelectionKey(null);
   }, []);
+
+  useEffect(() => {
+    return registerContentPanelLocalBack(() => {
+      if (!narrowContentSidebar) return false;
+      closeNarrowContentSidebar();
+      return true;
+    });
+  }, [closeNarrowContentSidebar, narrowContentSidebar]);
 
   const captureSnapshot = useCallback((): ContentPanelTabSnapshot => {
     flushFocusContentSnapshot();

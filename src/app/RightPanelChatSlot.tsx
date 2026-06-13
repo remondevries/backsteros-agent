@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { ChatView } from "../chat/ChatView";
+import { useEffect, useMemo, useRef } from "react";
+import { ChatView, type ChatViewHandle } from "../chat/ChatView";
 import type { ChatMessage, RunViewModel } from "../chat/types";
 import type { IntegrationsStatus } from "../lib/api";
 import {
@@ -16,6 +16,7 @@ import {
   resolveRightPanelAgent,
   supportsLinearPanelAgent,
 } from "./rightPanelAgents";
+import { registerRightPanelComposerFocus } from "../lib/rightPanelChatFocus";
 
 type RightPanelSession = {
   sessionId: string;
@@ -44,6 +45,7 @@ export function RightPanelChatSlot({
     linearWorkspaceView,
   } = useContentPanelNavigation();
   const { focusContentSnapshot } = useFocusContent();
+  const chatRef = useRef<ChatViewHandle>(null);
 
   const focusContext = useMemo(
     () =>
@@ -96,6 +98,16 @@ export function RightPanelChatSlot({
   const isLinearIssueThreadMode =
     linearPanelAgentActive && focusContext?.kind === "linear_issue";
 
+  useEffect(() => {
+    if (isLinearIssueThreadMode) return undefined;
+
+    return registerRightPanelComposerFocus({
+      focusComposer: () => {
+        chatRef.current?.focusComposer();
+      },
+    });
+  }, [isLinearIssueThreadMode]);
+
   if (isLinearIssueThreadMode) {
     return (
       <LinearIssueAgentPanel issueId={focusContext.issueId} />
@@ -118,6 +130,7 @@ export function RightPanelChatSlot({
         />
         <div className="right-side-panel-chat-body">
           <ChatView
+            ref={chatRef}
             sessionId={session.sessionId}
             isActive
             layout="panel"

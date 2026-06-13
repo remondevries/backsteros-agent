@@ -2,6 +2,7 @@ import {
   linearWorkspaceViewsForKind,
   type LinearWorkspaceViewId,
 } from "./linearProjectViews";
+import { linearProjectViewShortcutHint } from "../shortcuts/linearProjectViewShortcutBindings";
 import {
   LinearProjectListBoardToggle,
   type LinearProjectCollectionMode,
@@ -35,8 +36,9 @@ export function LinearProjectViewTabs({
   return (
     <div className="linear-project-view-tabs">
       <div className="linear-project-view-tabs-list" role="tablist" aria-label="Team and project views">
-        {views.map((view) => {
+        {views.map((view, index) => {
           const active = activeView === view.id && !(issuesSettingsActive && view.id === "issues");
+          const shortcut = linearProjectViewShortcutHint(index);
           return (
             <button
               key={view.id}
@@ -44,6 +46,8 @@ export function LinearProjectViewTabs({
               role="tab"
               className={`linear-project-view-tab ${active ? "linear-project-view-tab-active" : ""}`}
               aria-selected={active}
+              aria-keyshortcuts={shortcut}
+              title={shortcut ? `${view.label} (${shortcut})` : view.label}
               onClick={() => onChange(view.id)}
             >
               {view.label}

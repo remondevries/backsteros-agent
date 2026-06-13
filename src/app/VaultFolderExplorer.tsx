@@ -15,15 +15,21 @@ import {
   useContentPanelSidebarBreadcrumbs,
 } from "./contentPanelNavigation";
 import { ProjectIssueRow } from "./project-issues/ProjectIssueRow";
+import { GroupChevron } from "./workspace-list/GroupChevron";
 import { requestLinearIssueViewMode } from "./project-issues/issueViewModeIntent";
 import { formatWorkoutDayLabel } from "../lib/workouts/workoutsBreadcrumb";
 import { workoutDateKeyFromPath } from "../lib/workouts/workoutDays";
 import {
   buildVaultFolderNavItems,
+  DAILY_WEEK_GROUP_HEADER_PREFIX,
   resolveVaultFolderSelectedListId,
   WORKOUTS_DASHBOARD_LIST_ID,
 } from "../lib/buildVaultFolderNavItems";
-import { contentListItemDataAttributes } from "../lib/contentListNavigation";
+import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
+import {
+  contentListGroupHeaderId,
+  contentListItemDataAttributes,
+} from "../lib/contentListNavigation";
 import {
   useContentListKeyboardFocusedId,
   useContentListNavigationRegistration,
@@ -118,6 +124,16 @@ export function VaultFolderExplorer({
     setSearchQuery("");
     setDebouncedSearchQuery("");
   }, [activeNavItem]);
+
+  useEffect(() => {
+    return registerContentPanelLocalBack(() => {
+      if (!enabled || activeVaultDocument) return false;
+      const segments = splitRelativePath(relativePath);
+      if (segments.length <= 1) return false;
+      setRelativePath(segments.slice(0, -1).join("/"));
+      return true;
+    });
+  }, [activeVaultDocument, enabled, relativePath]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -275,7 +291,7 @@ export function VaultFolderExplorer({
     [setActiveLinearIssue],
   );
 
-  const toggleWeekGroup = (groupKey: string) => {
+  const toggleWeekGroup = useCallback((groupKey: string) => {
     setCollapsedWeekGroups((current) => {
       const next = new Set(current);
       if (next.has(groupKey)) {
@@ -285,7 +301,7 @@ export function VaultFolderExplorer({
       }
       return next;
     });
-  };
+  }, []);
 
   useContentPanelSidebarBreadcrumbs(sidebarBreadcrumbs, enabled);
 
@@ -304,6 +320,7 @@ export function VaultFolderExplorer({
           openDirectory: (path) => setRelativePath(path),
           openFile: openVaultNote,
           openLinearIssue: (issue) => openLinearIssue(issue),
+          toggleWeekGroup,
         },
       }),
     [
@@ -317,6 +334,7 @@ export function VaultFolderExplorer({
       openLinearIssue,
       openVaultNote,
       showDailyWeekGroups,
+      toggleWeekGroup,
     ],
   );
 
@@ -412,24 +430,28 @@ export function VaultFolderExplorer({
 
                 {groupedDailyEntries.map((group) => {
                   const collapsed = collapsedWeekGroups.has(group.key);
+                  const weekHeaderId = contentListGroupHeaderId(
+                    DAILY_WEEK_GROUP_HEADER_PREFIX,
+                    group.key,
+                  );
                   return (
                     <li key={group.key} className="vault-folder-explorer-week-group">
                       <button
                         type="button"
-                        className="vault-folder-explorer-week-header"
+                        {...contentListItemDataAttributes(weekHeaderId)}
+                        className={[
+                          "vault-folder-explorer-week-header",
+                          keyboardFocusedId === weekHeaderId
+                            ? "vault-folder-explorer-entry-keyboard-focused"
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                         aria-expanded={!collapsed}
                         onClick={() => toggleWeekGroup(group.key)}
                       >
-                        <span
-                          className={[
-                            "sidebar-list-group-chevron",
-                            !collapsed ? "sidebar-list-group-chevron--expanded" : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          aria-hidden="true"
-                        >
-                          &gt;
+                        <span className="workspace-status-group__chevron-slot" aria-hidden="true">
+                          <GroupChevron expanded={!collapsed} />
                         </span>
                         <span className="sidebar-list-group-title">{group.label}</span>
                         <span className="sidebar-list-group-count">{group.entries.length}</span>

@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLinearProjects } from "../hooks/useLinearProjects";
 import { useLinearTeams } from "../hooks/useLinearTeams";
 import { groupLinearProjectsByStatus } from "../lib/linearProjectGroups";
-import { contentListItemDataAttributes } from "../lib/contentListNavigation";
+import {
+  contentListGroupHeaderId,
+  contentListItemDataAttributes,
+} from "../lib/contentListNavigation";
 import {
   useContentListKeyboardFocusedId,
   useContentListNavigationRegistration,
@@ -16,6 +19,8 @@ import {
 function matchesSearch(value: string, query: string) {
   return value.toLowerCase().includes(query);
 }
+
+const LINEAR_PROJECT_GROUP_HEADER_PREFIX = "linear-project-group";
 
 export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
   const { linearSelection, setLinearSelection } = useContentPanelNavigation();
@@ -63,7 +68,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
     [filteredProjects],
   );
 
-  const toggleProjectGroup = (groupKey: string) => {
+  const toggleProjectGroup = useCallback((groupKey: string) => {
     setCollapsedProjectGroups((current) => {
       const next = new Set(current);
       if (next.has(groupKey)) {
@@ -73,7 +78,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
       }
       return next;
     });
-  };
+  }, []);
 
   const listNavItems = useMemo(() => {
     if (!enabled) return [];
@@ -87,6 +92,10 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
     const items: Array<{ id: string; select: () => void }> = [];
     for (const group of groupedProjects) {
       const groupKey = group.status?.id ?? "no-status";
+      items.push({
+        id: contentListGroupHeaderId(LINEAR_PROJECT_GROUP_HEADER_PREFIX, groupKey),
+        select: () => toggleProjectGroup(groupKey),
+      });
       if (collapsedProjectGroups.has(groupKey)) continue;
       for (const project of group.projects) {
         items.push({
@@ -107,6 +116,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
     filteredTeams,
     groupedProjects,
     setLinearSelection,
+    toggleProjectGroup,
     view,
   ]);
 
@@ -215,6 +225,10 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                   {groupedProjects.map((group) => {
                     const groupKey = group.status?.id ?? "no-status";
                     const collapsed = collapsedProjectGroups.has(groupKey);
+                    const groupHeaderId = contentListGroupHeaderId(
+                      LINEAR_PROJECT_GROUP_HEADER_PREFIX,
+                      groupKey,
+                    );
                     return (
                     <section
                       key={groupKey}
@@ -224,7 +238,15 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                       <button
                         type="button"
                         id={`linear-project-group-${groupKey}`}
-                        className="linear-project-group-header"
+                        {...contentListItemDataAttributes(groupHeaderId)}
+                        className={[
+                          "linear-project-group-header",
+                          keyboardFocusedId === groupHeaderId
+                            ? "vault-folder-explorer-entry-keyboard-focused"
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                         aria-expanded={!collapsed}
                         onClick={() => toggleProjectGroup(groupKey)}
                       >

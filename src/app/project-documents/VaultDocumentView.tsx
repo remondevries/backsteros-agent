@@ -10,6 +10,7 @@ import { isDailyVaultNotePath } from "../../lib/vaultNotePaths";
 import { dailyDateFromPath } from "../../lib/vaultDates";
 import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
 import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
+import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
 import { ProjectIssueRow } from "../project-issues/ProjectIssueRow";
 import { requestLinearIssueViewMode } from "../project-issues/issueViewModeIntent";
 import { LinearIcon } from "../../chat/LinearIcon";
@@ -25,6 +26,7 @@ export function VaultDocumentView({ path }: { path: string }) {
     activeVaultDocument,
     updateActiveVaultDocument,
     setActiveLinearIssue,
+    activeLinearIssue,
   } = useContentPanelNavigation();
   const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
   const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
@@ -156,6 +158,33 @@ export function VaultDocumentView({ path }: { path: string }) {
     },
     [dailyDateHint, document?.title, path, setActiveLinearIssue, titleDraft],
   );
+
+  const dailyIssueListNavItems = useMemo(
+    () =>
+      groupedDueDateIssues.flatMap((group) =>
+        group.issues.map((issue) => ({
+          id: issue.id,
+          select: () => openLinearIssue(issue),
+        })),
+      ),
+    [groupedDueDateIssues, openLinearIssue],
+  );
+
+  const selectedDailyIssueId = useMemo(() => {
+    if (!activeLinearIssue) return null;
+    if (activeLinearIssue.sourceVaultDocumentPath !== path) return null;
+    return dueDateIssues.some((issue) => issue.id === activeLinearIssue.id)
+      ? activeLinearIssue.id
+      : null;
+  }, [activeLinearIssue, dueDateIssues, path]);
+
+  useContentListNavigationRegistration({
+    region: "main",
+    enabled: isDailyNote && !dueDateIssuesLoading && dailyIssueListNavItems.length > 0,
+    priority: 8,
+    items: dailyIssueListNavItems,
+    selectedId: selectedDailyIssueId,
+  });
 
   const persist = useCallback(
     async (title: string, body: string) => {

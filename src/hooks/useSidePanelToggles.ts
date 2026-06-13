@@ -67,6 +67,11 @@ export function useSidePanelToggles() {
     persistToggle(RIGHT_SIDE_PANEL_OPEN_KEY, false);
   }, []);
 
+  const openRightSidePanel = useCallback(() => {
+    setRightSidePanelOpen(true);
+    persistToggle(RIGHT_SIDE_PANEL_OPEN_KEY, true);
+  }, []);
+
   return {
     leftSidePanelOpen,
     rightSidePanelOpen,
@@ -76,5 +81,6 @@ export function useSidePanelToggles() {
     toggleContentPanelSidebar,
     closeLeftSidePanel,
     closeRightSidePanel,
+    openRightSidePanel,
   };
 }
