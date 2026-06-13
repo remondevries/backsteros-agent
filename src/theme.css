@@ -57,7 +57,7 @@
   --shadow-lg: rgba(0, 0, 0, 0.45);
   --content-workspace-radius: 10px;
   --content-workspace-inset: 10px;
-  --content-workspace-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.14);
+  --content-workspace-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
   --error-bg: #2a1717;
   --error-border: #5a3030;
   --error-surface: #3a2323;
@@ -133,11 +133,13 @@
   --linear-project-view-tab-bg: transparent;
   --linear-project-view-tab-border: #2e2e2f;
   --linear-project-view-tab-text: #949496;
+  --linear-project-view-tab-hover-bg: transparent;
   --linear-project-view-tab-hover-border: #353536;
   --linear-project-view-tab-hover-text: #ffffff;
   --linear-project-view-tab-active-bg: #202021;
   --linear-project-view-tab-active-border: #353536;
   --linear-project-view-tab-active-text: #ffffff;
+  --linear-project-view-tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
   --project-watchers-kanban-column-bg: #0c0c0d;
 
   --update-confirmation-check-color: #4ade80;
@@ -234,7 +236,7 @@
     --toggle-active-bg: #ffffff;
     --toggle-active-text: #1d1d1f;
     --shadow-lg: rgba(0, 0, 0, 0.12);
-    --content-workspace-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 3px 8px rgba(0, 0, 0, 0.06);
+    --content-workspace-shadow: 0 1px 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.05);
     --error-bg: #fff1f1;
     --error-border: #ffcaca;
     --error-surface: #ffe0e0;
@@ -307,19 +309,17 @@
     --searchable-dropdown-bg: var(--bg-elevated, var(--bg-surface));
     --searchable-dropdown-border: var(--border-subtle);
 
-    --linear-project-view-tab-bg: transparent;
-    --linear-project-view-tab-border: var(--chrome-border);
-    --linear-project-view-tab-text: var(--text-subtle);
-    --linear-project-view-tab-hover-border: var(--border-hover);
-    --linear-project-view-tab-hover-text: var(--text-muted);
-    --linear-project-view-tab-active-bg: var(--bg-surface-3);
-    --linear-project-view-tab-active-border: color-mix(
-      in srgb,
-      var(--bg-surface-3) 70%,
-      var(--border-hover)
-    );
-    --linear-project-view-tab-active-text: var(--text-primary);
-    --project-watchers-kanban-column-bg: var(--bg-surface-2);
+    --linear-project-view-tab-bg: #fcfcfd;
+    --linear-project-view-tab-border: #dbdbdb;
+    --linear-project-view-tab-text: #5d5d5f;
+    --linear-project-view-tab-hover-bg: #f3f3f4;
+    --linear-project-view-tab-hover-border: #d6d6d7;
+    --linear-project-view-tab-hover-text: #303032;
+    --linear-project-view-tab-active-bg: #efeff0;
+    --linear-project-view-tab-active-border: #d6d6d7;
+    --linear-project-view-tab-active-text: #1b1b1b;
+    --linear-project-view-tab-shadow: 0 1px 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.05);
+    --project-watchers-kanban-column-bg: #f8f8fa;
 
     --update-confirmation-check-color: #16a34a;
 

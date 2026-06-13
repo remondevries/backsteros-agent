@@ -76,6 +76,7 @@ export function WhoopMetricRing({
   title,
   className,
   valueClassName,
+  animateFill = true,
 }: {
   label: string;
   value: number | null | undefined;
@@ -86,6 +87,13 @@ export function WhoopMetricRing({
   title?: string;
   className?: string;
   valueClassName?: string;
+  /**
+   * When true (default) the ring fill animates between values via a CSS
+   * transition. Set to false when the caller already drives `value` with its
+   * own per-frame animation, so the ring tracks that value exactly instead of
+   * lagging behind it with a second, compounding transition.
+   */
+  animateFill?: boolean;
 }) {
   const dashLength = whoopValueToDash(value, max);
   const targetDashLength =
@@ -93,9 +101,12 @@ export function WhoopMetricRing({
   const [animate, setAnimate] = useState(false);
 
   useEffect(() => {
+    if (!animateFill) return;
     const id = requestAnimationFrame(() => setAnimate(true));
     return () => cancelAnimationFrame(id);
-  }, [value, targetValue, max]);
+  }, [value, targetValue, max, animateFill]);
+
+  const fillAnimate = animateFill && animate;
 
   return (
     <div className={`whoop-metric-ring-item${className ? ` ${className}` : ""}`} title={title}>
@@ -106,7 +117,7 @@ export function WhoopMetricRing({
         <WhoopMetricRingCircle
           dashLength={dashLength}
           targetDashLength={targetDashLength}
-          animate={animate}
+          animate={fillAnimate}
         />
         <span
           className={[

@@ -98,7 +98,7 @@ import {
   fetchLinearTeamDocuments,
   updateLinearDocument,
 } from "./vault/project-documents.ts";
-import { readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
+import { createVaultDocument, readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
 import { fetchLinearIssueDetail, updateLinearIssueDetail } from "./linear/issue-detail.ts";
 import {
   createLinearAgentThread,
@@ -1790,6 +1790,37 @@ app.get("/vault/documents", (c) => {
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load document";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/vault/documents", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const folder =
+    body && typeof body === "object" && "folder" in body && typeof body.folder === "string"
+      ? body.folder.trim()
+      : "";
+  if (!folder) {
+    return c.json({ error: "folder is required" }, 400);
+  }
+
+  const title =
+    body && typeof body === "object" && "title" in body && typeof body.title === "string"
+      ? body.title
+      : undefined;
+
+  try {
+    const document = createVaultDocument(notesPath, folder, { title });
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create document";
     return c.json({ error: message }, 400);
   }
 });

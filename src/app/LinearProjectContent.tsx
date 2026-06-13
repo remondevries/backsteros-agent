@@ -11,6 +11,8 @@ import { LinearIssueWatchersConfigPanel } from "./project-issues/LinearIssueWatc
 import { ProjectOverviewPanel } from "./project-overview/ProjectOverviewPanel";
 import { LinearProjectViewTabs } from "./LinearProjectViewTabs";
 import type { LinearProjectCollectionToggleOption } from "./LinearProjectListBoardToggle";
+import { useLinearProjectWatcherPollProgress } from "../hooks/useLinearProjectWatcherPollProgress";
+import { useIssuesWatcherBreadcrumbAction } from "../hooks/useIssuesWatcherBreadcrumbAction";
 import {
   defaultLinearWorkspaceViewId,
   isLinearWorkspaceViewIdForKind,
@@ -112,13 +114,38 @@ export function LinearProjectContent({
   useLinearWorkspaceFocusSnapshot();
 
   const showCollectionModeToggle = selection.kind === "project" && activeView === "issues";
-  const showIssuesSettingsButton = selection.kind === "project" && activeView === "issues";
+  const showWatcherAction = selection.kind === "project";
   const collectionMode = issuesPanelMode;
   const collectionToggleOptions: readonly LinearProjectCollectionToggleOption[] = [
     { mode: "list", label: "List" },
     { mode: "board", label: "Board" },
   ];
   const collectionToggleAriaLabel = "Issues view mode";
+
+  const { watcherActive, autoAssignActive, pollIntervalMs, animationKey } =
+    useLinearProjectWatcherPollProgress(selection.kind === "project" ? selection.id : null, {
+      settingsPanelOpen: issuesSettingsOpen,
+    });
+
+  useIssuesWatcherBreadcrumbAction(
+    showWatcherAction
+      ? {
+          watcherActive,
+          autoAssignActive,
+          pollIntervalMs,
+          animationKey,
+          settingsActive: activeView === "issues" && issuesSettingsOpen,
+          onToggle: () => {
+            if (activeView !== "issues") {
+              setActiveView("issues");
+              setIssuesSettingsOpen(true);
+              return;
+            }
+            setIssuesSettingsOpen((current) => !current);
+          },
+        }
+      : null,
+  );
 
   useEffect(() => {
     setActiveView(initialWorkspaceViewForSelection(selection, linearWorkspaceView));
@@ -162,12 +189,7 @@ export function LinearProjectContent({
         }}
         collectionToggleOptions={collectionToggleOptions}
         collectionToggleAriaLabel={collectionToggleAriaLabel}
-        showIssuesSettingsButton={showIssuesSettingsButton}
         issuesSettingsActive={issuesSettingsOpen}
-        issuesWatcherProjectId={selection.kind === "project" ? selection.id : null}
-        onIssuesSettingsClick={() => {
-          setIssuesSettingsOpen((current) => !current);
-        }}
       />
       <div
         className="linear-project-view-body"

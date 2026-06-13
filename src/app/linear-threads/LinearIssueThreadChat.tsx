@@ -19,11 +19,15 @@ export function LinearIssueThreadChat({
   threadId,
   composerContextItems = [],
   onNavigateToView,
+  onStartThread,
+  starting = false,
 }: {
   issueId: string;
-  threadId: string;
+  threadId: string | null;
   composerContextItems?: ComposerContextItem[];
   onNavigateToView?: (view: AppView) => void;
+  onStartThread?: (body: string) => Promise<boolean>;
+  starting?: boolean;
 }) {
   const { requestLinearIssueRefresh } = useContentPanelNavigation();
   const awaitingAgentRef = useRef<{
@@ -46,6 +50,7 @@ export function LinearIssueThreadChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<ComposerHandle>(null);
   const hydratedMessageIdsRef = useRef<Set<string> | null>(null);
+  const observedInitialLoadRef = useRef(false);
 
   const messages = useMemo(
     () =>
@@ -57,10 +62,15 @@ export function LinearIssueThreadChat({
 
   useEffect(() => {
     hydratedMessageIdsRef.current = null;
+    observedInitialLoadRef.current = false;
   }, [threadId]);
 
   useEffect(() => {
-    if (loading || hydratedMessageIdsRef.current !== null) return;
+    if (loading) {
+      observedInitialLoadRef.current = true;
+      return;
+    }
+    if (!observedInitialLoadRef.current || hydratedMessageIdsRef.current !== null) return;
     hydratedMessageIdsRef.current = new Set(messages.map((message) => message.id));
   }, [loading, messages]);
 
@@ -78,7 +88,19 @@ export function LinearIssueThreadChat({
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed) return;
+
+    if (!threadId) {
+      if (!onStartThread || starting) return;
+      const started = await onStartThread(trimmed);
+      if (started) {
+        setInput("");
+        composerRef.current?.focus();
+      }
+      return;
+    }
+
+    if (sending) return;
     awaitingAgentRef.current = {
       assistantIds: new Set(
         messages.filter((message) => message.role === "assistant").map((message) => message.id),
@@ -92,7 +114,9 @@ export function LinearIssueThreadChat({
       return;
     }
     awaitingAgentRef.current = null;
-  }, [input, messages, sendReply, sending]);
+  }, [input, messages, onStartThread, sendReply, sending, starting, threadId]);
+
+  const busy = threadId ? sending : starting;
 
   const maybeRefreshIssueFromAgentReply = useCallback(
     (message: ChatMessage) => {
@@ -177,8 +201,10 @@ export function LinearIssueThreadChat({
                   />
                 ),
               )}
-              {sending ? (
-                <p className="linear-thread-chat-pending">Sending…</p>
+              {busy ? (
+                <p className="linear-thread-chat-pending">
+                  {threadId ? "Sending…" : "Starting thread…"}
+                </p>
               ) : null}
             </div>
           </div>
@@ -197,13 +223,13 @@ export function LinearIssueThreadChat({
             value={input}
             onChange={setInput}
             onSend={() => void handleSubmit()}
-            running={sending}
-            disabled={sending}
+            running={busy}
+            disabled={busy}
             attachments={[]}
             onAddAttachments={noop}
             onRemoveAttachment={noop}
             hideToolIndicators
-            focusPlaceholder="Reply in this thread…"
+            focusPlaceholder={threadId ? "Reply in this thread…" : "Send a message to start a thread…"}
           />
         </div>
       </div>

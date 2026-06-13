@@ -110,6 +110,33 @@ export function LinearIssueAgentPanel({
     }
   }, [creatingThread, issueId, refresh]);
 
+  const handleStartThreadWithMessage = useCallback(
+    async (body: string) => {
+      const trimmed = body.trim();
+      if (!trimmed || creatingThread) return false;
+      setCreatingThread(true);
+      setActionError(null);
+      try {
+        const result = await createLinearIssueComment(issueId, { body: trimmed, newThread: true });
+        if (result.error || !result.comment) {
+          setActionError(result.error ?? "Failed to start a new thread.");
+          return false;
+        }
+
+        await refresh();
+        setActiveThreadId(result.comment.id);
+        setPanelMode("chat");
+        return true;
+      } catch {
+        setActionError("Failed to start a new thread.");
+        return false;
+      } finally {
+        setCreatingThread(false);
+      }
+    },
+    [creatingThread, issueId, refresh],
+  );
+
   const composerContextItems = useMemo(() => {
     if (!activeLinearIssue || activeLinearIssue.id !== issueId) return [];
     return buildComposerContextItems({
@@ -165,8 +192,6 @@ export function LinearIssueAgentPanel({
             loading={loading}
             error={error}
             onSelect={handleSelectThread}
-            onCreateThread={() => void handleCreateThread()}
-            creatingThread={creatingThread}
           />
         ) : activeThreadId ? (
           <LinearIssueThreadChat
@@ -175,14 +200,19 @@ export function LinearIssueAgentPanel({
             composerContextItems={composerContextItems}
             onNavigateToView={onNavigateToView}
           />
-        ) : (
+        ) : loading ? (
           <div className="linear-thread-empty-chat">
-            <p className="linear-thread-list-status">
-              {loading
-                ? "Loading threads…"
-                : "No threads yet. Start one with the plus button or open thread history."}
-            </p>
+            <p className="linear-thread-list-status">Loading threads…</p>
           </div>
+        ) : (
+          <LinearIssueThreadChat
+            issueId={issueId}
+            threadId={null}
+            composerContextItems={composerContextItems}
+            onNavigateToView={onNavigateToView}
+            onStartThread={handleStartThreadWithMessage}
+            starting={creatingThread}
+          />
         )}
       </div>
     </div>

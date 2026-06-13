@@ -14,7 +14,7 @@ function formatThreadTimestamp(value: string): string {
 }
 
 function summarizeThreadBody(body: string): string {
-  const normalized = body.replace(/\s+/g, " ").trim();
+  const normalized = stripLinearAgentPrefix(body).replace(/\s+/g, " ").trim();
   if (!normalized) return "Empty thread";
   if (normalized.length <= 120) return normalized;
   return `${normalized.slice(0, 117)}…`;

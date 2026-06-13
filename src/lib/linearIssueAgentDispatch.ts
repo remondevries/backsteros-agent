@@ -79,7 +79,7 @@ export function buildAutoDispatchShellCommand(_job: LinearIssueDispatchJob): str
     "Wait for it to finish, then briefly summarize the packet loss and average round-trip time.",
   ].join(" ");
   const escaped = prompt.replace(/'/g, `'\\''`);
-  return `cursor-agent --force -p '${escaped}'`;
+  return `cursor-agent --force '${escaped}'`;
 }
 
 const dispatchedKeys = new Set<string>();

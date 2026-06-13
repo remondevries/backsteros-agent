@@ -7,6 +7,13 @@ import {
   formatWhoopRingValue,
 } from "../../chat/whoopMetrics";
 
+/**
+ * Single knob for the daily-note Whoop header load animation. Both the ring
+ * fill and the counter inside it are driven by the same eased value over this
+ * duration, so they start and finish together.
+ */
+const WHOOP_HEADER_ANIMATION_MS = 460;
+
 function formatAnimatedMetricValue(
   value: number | null,
   max: number,
@@ -39,7 +46,7 @@ function useAnimatedMetricValue(
 
     let startTime: number | null = null;
     let frameId = 0;
-    const durationMs = 460;
+    const durationMs = WHOOP_HEADER_ANIMATION_MS;
     const target = Math.max(0, value);
 
     const step = (timestamp: number) => {
@@ -83,6 +90,7 @@ export function VaultDocumentWhoopHeader({ snapshot }: { snapshot: WhoopSnapshot
           value={sleep.value}
           max={WHOOP_METRIC_MAX.sleep}
           ringColor={WHOOP_METRIC_COLORS.sleep}
+          animateFill={false}
           displayValue={formatAnimatedMetricValue(sleep.value, WHOOP_METRIC_MAX.sleep)}
           valueClassName={!sleep.visible ? "whoop-metric-ring-value--hidden" : undefined}
           title={
@@ -96,6 +104,7 @@ export function VaultDocumentWhoopHeader({ snapshot }: { snapshot: WhoopSnapshot
           value={recovery.value}
           max={WHOOP_METRIC_MAX.recovery}
           ringColor={WHOOP_METRIC_COLORS.recovery}
+          animateFill={false}
           displayValue={formatAnimatedMetricValue(recovery.value, WHOOP_METRIC_MAX.recovery)}
           valueClassName={!recovery.visible ? "whoop-metric-ring-value--hidden" : undefined}
           title={
@@ -110,6 +119,7 @@ export function VaultDocumentWhoopHeader({ snapshot }: { snapshot: WhoopSnapshot
           targetValue={snapshot.strainTarget?.value}
           max={WHOOP_METRIC_MAX.strain}
           ringColor={WHOOP_METRIC_COLORS.strain}
+          animateFill={false}
           displayValue={formatAnimatedMetricValue(strain.value, WHOOP_METRIC_MAX.strain, 1)}
           valueClassName={!strain.visible ? "whoop-metric-ring-value--hidden" : undefined}
           title={

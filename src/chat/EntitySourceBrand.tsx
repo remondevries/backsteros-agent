@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export function EntitySourceBrand({
   icon,
   label,
-  uppercase = true,
+  uppercase = false,
 }: {
   icon: ReactNode;
   label: string;

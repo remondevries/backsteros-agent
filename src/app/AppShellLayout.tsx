@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ContentPanel } from "./ContentPanel";
 import { ContentPanelNavigationProvider, useContentPanelNavigation } from "./contentPanelNavigation";
 import { LeftSidePanel } from "./LeftSidePanel";
@@ -16,6 +16,7 @@ import { isTauriRuntime } from "../lib/tauriRuntime";
 
 const LEFT_SIDE_PANEL_WIDTH_KEY = "backsteros.layout.leftPanelWidth";
 const RIGHT_SIDE_PANEL_WIDTH_KEY = "backsteros.layout.rightPanelWidth";
+const NARROW_NAVIGATION_QUERY = "(max-width: 960px)";
 
 type RightPanelSession = {
   sessionId: string;
@@ -45,6 +46,8 @@ function AppMainShell({
   rightSidePanelOpen,
   contentPanelSidebarOpen,
   toggleLeftSidePanel,
+  closeLeftSidePanel,
+  closeRightSidePanel,
   toggleRightSidePanel,
   toggleContentPanelSidebar,
 }: {
@@ -73,13 +76,24 @@ function AppMainShell({
   rightSidePanelOpen: boolean;
   contentPanelSidebarOpen: boolean;
   toggleLeftSidePanel: () => void;
+  closeLeftSidePanel: () => void;
+  closeRightSidePanel: () => void;
   toggleRightSidePanel: () => void;
   toggleContentPanelSidebar: () => void;
 }) {
   const { activeLinearDocument, clearActiveVaultDocument, resetProjectsOverview } =
     useContentPanelNavigation();
+  const [leftNavigationOverlayOpen, setLeftNavigationOverlayOpen] = useState(false);
+  const [narrowNavigation, setNarrowNavigation] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia(NARROW_NAVIGATION_QUERY).matches,
+  );
+  const leftNavigationOverlayRef = useRef<HTMLDivElement | null>(null);
+  const rightPanelOverlayRef = useRef<HTMLDivElement | null>(null);
   const showContentPanelSidebar =
     contentPanelSidebarOpen && activeLinearDocument === null;
+  const showFloatingLeftNavigation =
+    narrowNavigation && (leftSidePanelOpen || leftNavigationOverlayOpen);
+  const showFloatingRightPanel = narrowNavigation && rightSidePanelOpen;
 
   const handleVaultNavItemChange = useCallback(
     (item: SidebarNavItemId | null) => {
@@ -96,12 +110,38 @@ function AppMainShell({
         // destination panes remount even though the nav id is unchanged.
         onVaultNavItemChange(null);
         window.requestAnimationFrame(() => onVaultNavItemChange(item));
+        setLeftNavigationOverlayOpen(false);
+        if (narrowNavigation) closeLeftSidePanel();
         return;
       }
       onVaultNavItemChange(item);
+      setLeftNavigationOverlayOpen(false);
+      if (narrowNavigation) closeLeftSidePanel();
     },
-    [activeVaultNavItem, clearActiveVaultDocument, onVaultNavItemChange, resetProjectsOverview],
+    [
+      activeVaultNavItem,
+      clearActiveVaultDocument,
+      closeLeftSidePanel,
+      narrowNavigation,
+      onVaultNavItemChange,
+      resetProjectsOverview,
+    ],
   );
+
+  const handleViewChange = useCallback(
+    (view: AppView) => {
+      onViewChange(view);
+      setLeftNavigationOverlayOpen(false);
+      if (narrowNavigation) closeLeftSidePanel();
+    },
+    [closeLeftSidePanel, narrowNavigation, onViewChange],
+  );
+
+  const handleOpenSettings = useCallback(() => {
+    onOpenSettings();
+    setLeftNavigationOverlayOpen(false);
+    if (narrowNavigation) closeLeftSidePanel();
+  }, [closeLeftSidePanel, narrowNavigation, onOpenSettings]);
 
   useSidePanelToggleShortcuts({
     enabled: !settingsOpen,
@@ -115,35 +155,124 @@ function AppMainShell({
     showTrafficLights();
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(NARROW_NAVIGATION_QUERY);
+    const handleChange = () => {
+      setNarrowNavigation(mediaQuery.matches);
+      setLeftNavigationOverlayOpen(false);
+    };
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!showFloatingLeftNavigation) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (
+        target instanceof Element &&
+        target.closest(".content-panel-navigation-toggle")
+      ) {
+        return;
+      }
+      if (target && leftNavigationOverlayRef.current?.contains(target)) return;
+      setLeftNavigationOverlayOpen(false);
+      if (leftSidePanelOpen) closeLeftSidePanel();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setLeftNavigationOverlayOpen(false);
+        if (leftSidePanelOpen) closeLeftSidePanel();
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeLeftSidePanel, leftSidePanelOpen, showFloatingLeftNavigation]);
+
+  useEffect(() => {
+    if (!showFloatingRightPanel) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && rightPanelOverlayRef.current?.contains(target)) return;
+      closeRightSidePanel();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeRightSidePanel();
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeRightSidePanel, showFloatingRightPanel]);
+
   return (
     <div className="app-main-shell">
       <div className="app-window-chrome" aria-hidden="true">
         <div className="app-window-traffic-safe" data-tauri-drag-region={false} />
         <div className="app-window-drag" data-tauri-drag-region />
       </div>
-      <ResizablePanel
-        side="left"
-        className="app-resizable-panel-outer"
-        storageKey={LEFT_SIDE_PANEL_WIDTH_KEY}
-        defaultWidth={232}
-        minWidth={200}
-        maxWidth={320}
-        ariaLabel="Left side panel"
-        collapsed={!leftSidePanelOpen}
-      >
-        <LeftSidePanel
-          activeView={activeView}
-          onChange={onViewChange}
-          settingsOpen={settingsOpen}
-          activeSettingsTab={activeSettingsTab}
-          onSettingsTabChange={onSettingsTabChange}
-          onOpenSettings={onOpenSettings}
-          onExitSettings={onExitSettings}
-          savedNotesPath={savedNotesPath}
-          activeVaultNavItem={activeVaultNavItem}
-          onVaultNavItemChange={handleVaultNavItemChange}
-        />
-      </ResizablePanel>
+      {!narrowNavigation ? (
+        <ResizablePanel
+          side="left"
+          className="app-resizable-panel-outer"
+          storageKey={LEFT_SIDE_PANEL_WIDTH_KEY}
+          defaultWidth={232}
+          minWidth={200}
+          maxWidth={320}
+          ariaLabel="Left side panel"
+          collapsed={!leftSidePanelOpen}
+        >
+          <LeftSidePanel
+            activeView={activeView}
+            onChange={handleViewChange}
+            settingsOpen={settingsOpen}
+            activeSettingsTab={activeSettingsTab}
+            onSettingsTabChange={onSettingsTabChange}
+            onOpenSettings={handleOpenSettings}
+            onExitSettings={onExitSettings}
+            savedNotesPath={savedNotesPath}
+            activeVaultNavItem={activeVaultNavItem}
+            onVaultNavItemChange={handleVaultNavItemChange}
+          />
+        </ResizablePanel>
+      ) : null}
+
+      {showFloatingLeftNavigation ? (
+        <div
+          ref={leftNavigationOverlayRef}
+          className="left-side-panel-floating"
+          role="dialog"
+          aria-label="Main navigation"
+        >
+          <LeftSidePanel
+            activeView={activeView}
+            onChange={handleViewChange}
+            settingsOpen={settingsOpen}
+            activeSettingsTab={activeSettingsTab}
+            onSettingsTabChange={onSettingsTabChange}
+            onOpenSettings={handleOpenSettings}
+            onExitSettings={onExitSettings}
+            savedNotesPath={savedNotesPath}
+            activeVaultNavItem={activeVaultNavItem}
+            onVaultNavItemChange={handleVaultNavItemChange}
+          />
+        </div>
+      ) : null}
 
       <div className="content-panel-slot">
         <ContentPanel
@@ -152,6 +281,14 @@ function AppMainShell({
           activeVaultNavItem={activeVaultNavItem}
           onVaultNavItemChange={handleVaultNavItemChange}
           vaultExplorerEnabled={vaultExplorerEnabled}
+          navigationCollapsed={!leftSidePanelOpen && !leftNavigationOverlayOpen}
+          onOpenNavigation={() => {
+            if (narrowNavigation) {
+              setLeftNavigationOverlayOpen((current) => !current);
+              return;
+            }
+            toggleLeftSidePanel();
+          }}
           settingsOpen={settingsOpen}
           activeSettingsTab={activeSettingsTab}
           activeView={activeView}
@@ -161,24 +298,43 @@ function AppMainShell({
         </ContentPanel>
       </div>
 
-      <ResizablePanel
-        side="right"
-        className="app-resizable-panel-outer"
-        storageKey={RIGHT_SIDE_PANEL_WIDTH_KEY}
-        defaultWidth={280}
-        minWidth={200}
-        maxWidth={480}
-        ariaLabel="Right side panel"
-        collapsed={!rightSidePanelOpen}
-      >
-        <RightSidePanel
-          chatEnabled={rightPanelChatEnabled}
-          session={rightPanelSession}
-          sessionLoading={rightPanelSessionLoading}
-          onNavigateToView={onViewChange}
-          onSaveSessionState={onSaveRightPanelSessionState}
-        />
-      </ResizablePanel>
+      {!narrowNavigation ? (
+        <ResizablePanel
+          side="right"
+          className="app-resizable-panel-outer"
+          storageKey={RIGHT_SIDE_PANEL_WIDTH_KEY}
+          defaultWidth={280}
+          minWidth={200}
+          maxWidth={480}
+          ariaLabel="Right side panel"
+          collapsed={!rightSidePanelOpen}
+        >
+          <RightSidePanel
+            chatEnabled={rightPanelChatEnabled}
+            session={rightPanelSession}
+            sessionLoading={rightPanelSessionLoading}
+            onNavigateToView={onViewChange}
+            onSaveSessionState={onSaveRightPanelSessionState}
+          />
+        </ResizablePanel>
+      ) : null}
+
+      {showFloatingRightPanel ? (
+        <div
+          ref={rightPanelOverlayRef}
+          className="right-side-panel-floating"
+          role="dialog"
+          aria-label="Right side panel"
+        >
+          <RightSidePanel
+            chatEnabled={rightPanelChatEnabled}
+            session={rightPanelSession}
+            sessionLoading={rightPanelSessionLoading}
+            onNavigateToView={onViewChange}
+            onSaveSessionState={onSaveRightPanelSessionState}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -228,6 +384,8 @@ export function AppShellLayout({
     leftSidePanelOpen,
     rightSidePanelOpen,
     contentPanelSidebarOpen,
+    closeLeftSidePanel,
+    closeRightSidePanel,
     toggleLeftSidePanel,
     toggleRightSidePanel,
     toggleContentPanelSidebar,
@@ -255,6 +413,8 @@ export function AppShellLayout({
         leftSidePanelOpen={leftSidePanelOpen}
         rightSidePanelOpen={rightSidePanelOpen}
         contentPanelSidebarOpen={contentPanelSidebarOpen}
+        closeLeftSidePanel={closeLeftSidePanel}
+        closeRightSidePanel={closeRightSidePanel}
         toggleLeftSidePanel={toggleLeftSidePanel}
         toggleRightSidePanel={toggleRightSidePanel}
         toggleContentPanelSidebar={toggleContentPanelSidebar}

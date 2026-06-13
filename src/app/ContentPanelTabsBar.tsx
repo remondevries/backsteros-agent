@@ -27,11 +27,15 @@ export function ContentPanelTabsBar({
   activeTabId,
   onSelectTab,
   onAddTab,
+  navigationCollapsed = false,
+  onOpenNavigation,
 }: {
   tabs: ContentPanelTab[];
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onAddTab: () => void;
+  navigationCollapsed?: boolean;
+  onOpenNavigation?: () => void;
 }) {
   const { contentPanelBarState } = useContentPanelNavigation();
   const refreshing = contentPanelBarState?.refreshing ?? false;
@@ -41,6 +45,25 @@ export function ContentPanelTabsBar({
 
   return (
     <header className="content-panel-tabs-bar">
+      {navigationCollapsed && onOpenNavigation ? (
+        <button
+          type="button"
+          className="content-panel-navigation-toggle"
+          aria-label="Open navigation"
+          title="Open navigation"
+          onClick={onOpenNavigation}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              fillRule="evenodd"
+              clipRule="evenodd"
+              d="M4.25 2C2.45508 2 1 3.45508 1 5.25V10.75C1 12.5449 2.45508 14 4.25 14H11.75C13.5449 14 15 12.5449 15 10.75V5.25C15 3.45508 13.5449 2 11.75 2H4.25ZM2.5 5.5C2.5 4.39543 3.39543 3.5 4.5 3.5H11.5C12.6046 3.5 13.5 4.39543 13.5 5.5V10.5C13.5 11.6046 12.6046 12.5 11.5 12.5H4.5C3.39543 12.5 2.5 11.6046 2.5 10.5V5.5Z"
+              fill="currentColor"
+            />
+            <rect x="4" y="5" width="1.5" height="6" rx="0.75" fill="currentColor" />
+          </svg>
+        </button>
+      ) : null}
       <div className="content-panel-tabs-list" role="tablist" aria-label="Content tabs">
         {tabs.map((tab) => {
           const active = tab.id === activeTabId;

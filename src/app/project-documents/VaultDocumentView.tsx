@@ -27,8 +27,12 @@ function dailyDateFromPath(path: string): string | null {
 export function VaultDocumentView({ path }: { path: string }) {
   const isDailyNote = isDailyVaultNotePath(path);
   const dailyDateHint = isDailyNote ? dailyDateFromPath(path) : null;
-  const { updateActiveVaultDocument, setFocusContentSnapshot, setActiveLinearIssue } =
-    useContentPanelNavigation();
+  const {
+    activeVaultDocument,
+    updateActiveVaultDocument,
+    setFocusContentSnapshot,
+    setActiveLinearIssue,
+  } = useContentPanelNavigation();
   const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
   const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
   const { snapshot: whoopSnapshot, loading: whoopLoading } = useVaultDocumentWhoopSnapshot(
@@ -47,6 +51,10 @@ export function VaultDocumentView({ path }: { path: string }) {
   const titleRef = useRef(titleDraft);
   const bodyRef = useRef(bodyDraft);
   const userEditedRef = useRef(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const focusHandledRef = useRef(false);
+  const focusTitleRequested =
+    activeVaultDocument?.focusTitle === true && activeVaultDocument.path === path;
   const dueDate = document?.date?.trim() || dailyDateHint || null;
   titleRef.current = titleDraft;
   bodyRef.current = bodyDraft;
@@ -68,6 +76,7 @@ export function VaultDocumentView({ path }: { path: string }) {
     setDirty(false);
     setSaveError(null);
     userEditedRef.current = false;
+    focusHandledRef.current = false;
   }, [path]);
 
   useEffect(() => {
@@ -76,6 +85,18 @@ export function VaultDocumentView({ path }: { path: string }) {
     setTitleDraft(document.title);
     setBodyDraft(document.body);
   }, [dirty, document, path]);
+
+  useEffect(() => {
+    if (!focusTitleRequested || focusHandledRef.current) return;
+    if (!document || document.path !== path) return;
+    focusHandledRef.current = true;
+    const input = titleInputRef.current;
+    if (input) {
+      input.focus();
+      input.select();
+    }
+    updateActiveVaultDocument({ focusTitle: false });
+  }, [document, focusTitleRequested, path, updateActiveVaultDocument]);
 
   useEffect(() => {
     if (!document || document.path !== path) return;
@@ -235,6 +256,7 @@ export function VaultDocumentView({ path }: { path: string }) {
             </div>
           ) : null}
           <input
+            ref={titleInputRef}
             type="text"
             className="vault-document-title"
             value={titleDraft}

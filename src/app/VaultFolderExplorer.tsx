@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
-import { fetchLinearIssuesByDueDates } from "../lib/api";
+import { createVaultDocument, fetchLinearIssuesByDueDates } from "../lib/api";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
@@ -18,6 +18,28 @@ const RESERVED_WORKOUT_FILES = new Set([
   "exercise-catalog.md",
   "personal-records.csv",
 ]);
+
+const NOTE_CREATION_NAV_ITEMS = new Set<VaultNavItemId>([
+  "inbox",
+  "meetings",
+  "knowledge-base",
+  "letters",
+  "contacts",
+]);
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M8 3.25v9.5M3.25 8h9.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 function splitRelativePath(path: string): string[] {
   return path.split("/").filter(Boolean);
@@ -88,12 +110,33 @@ export function VaultFolderExplorer({
     activeNavItem === "letters" ||
     activeNavItem === "contacts" ||
     activeNavItem === "organizations";
-  const { entries, loading, error } = useVaultDirectory(relativePath, enabled, {
+  const { entries, loading, error, refresh } = useVaultDirectory(relativePath, enabled, {
     flattenFiles: flattenFolders,
   });
   const navLabel = vaultNavItemLabel(activeNavItem);
   const searchPlaceholder = `Search ${navLabel.toLocaleLowerCase()}…`;
   const searchAriaLabel = `Search ${navLabel.toLocaleLowerCase()} notes`;
+  const canCreateNote = NOTE_CREATION_NAV_ITEMS.has(activeNavItem);
+  const [creatingNote, setCreatingNote] = useState(false);
+
+  const handleCreateNote = async () => {
+    if (!enabled || creatingNote) return;
+    setCreatingNote(true);
+    try {
+      const result = await createVaultDocument(relativePath);
+      if (result.error || !result.document) return;
+      await refresh();
+      setActiveVaultDocument({
+        path: result.document.path,
+        title: result.document.title,
+        focusTitle: true,
+      });
+    } catch {
+      // Surfacing handled by the folder error state on next refresh.
+    } finally {
+      setCreatingNote(false);
+    }
+  };
 
   useEffect(() => {
     setRelativePath(vaultNavItemLabel(activeNavItem));
@@ -252,6 +295,18 @@ export function VaultFolderExplorer({
           placeholder={searchPlaceholder}
           aria-label={searchAriaLabel}
         />
+        {canCreateNote ? (
+          <button
+            type="button"
+            className="vault-folder-explorer-add"
+            onClick={() => void handleCreateNote()}
+            disabled={creatingNote}
+            aria-label={`New note in ${navLabel}`}
+            title={`New note in ${navLabel}`}
+          >
+            <PlusIcon />
+          </button>
+        ) : null}
       </div>
       {loading ? <p className="vault-folder-explorer-status">Loading…</p> : null}
       {error ? (

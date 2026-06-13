@@ -5,6 +5,7 @@ import { resolveLatestKnowledgeBaseDocument } from "../lib/resolveLatestKnowledg
 import { resolveLatestMeetingDocument } from "../lib/resolveLatestMeetingDocument";
 import { SIDEBAR_VAULT_NAV_ITEM_IDS, isSidebarPrimaryNavItem } from "./sidebarNavConfig";
 import { LinearWorkspacePanel } from "./LinearWorkspacePanel";
+import { OrganizationTeamsList } from "./OrganizationTeamsList";
 import { VaultFolderExplorer } from "./VaultFolderExplorer";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
 
@@ -109,10 +110,16 @@ export function ContentPanelSidebar({
             className="content-panel-sidebar-pane"
             hidden={activeVaultNavItem !== itemId}
           >
-            <VaultFolderExplorer
-              activeNavItem={itemId}
-              enabled={vaultExplorerEnabled && activeVaultNavItem === itemId}
-            />
+            {itemId === "organizations" ? (
+              <OrganizationTeamsList
+                enabled={vaultExplorerEnabled && activeVaultNavItem === itemId}
+              />
+            ) : (
+              <VaultFolderExplorer
+                activeNavItem={itemId}
+                enabled={vaultExplorerEnabled && activeVaultNavItem === itemId}
+              />
+            )}
           </div>
         ))}
 

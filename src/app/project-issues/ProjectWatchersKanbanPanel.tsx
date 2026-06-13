@@ -8,6 +8,7 @@ import {
   type DragEvent,
   type MouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { LinearAssigneeAvatar } from "../../chat/LinearAssigneeAvatar";
 import { DotScrollLoader } from "../../chat/DotScrollLoader";
 import { getPriorityLabel } from "../../chat/linearPriority";
@@ -73,6 +74,13 @@ type BoardIssueOverride = {
 type DropIndicator = {
   stateId: string;
   beforeIssueId: string | null;
+};
+
+type DragPreview = {
+  issue: LinearIssueEntity;
+  width: number;
+  x: number;
+  y: number;
 };
 
 function canonicalStatusKey(status: string): string {
@@ -389,8 +397,11 @@ export function ProjectWatchersKanbanPanel({
   const [draggingIssueId, setDraggingIssueId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, BoardIssueOverride>>({});
+  const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const draggingIssueIdRef = useRef<string | null>(null);
   const pointerDragModeRef = useRef(false);
+  const pointerOffsetRef = useRef({ x: 0, y: 0 });
+  const dragPreviewRef = useRef<HTMLUListElement | null>(null);
 
   useEffect(() => {
     draggingIssueIdRef.current = draggingIssueId;
@@ -524,10 +535,16 @@ export function ProjectWatchersKanbanPanel({
   const handlePointerDragStart = useCallback(
     (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => {
       if (event.button !== 0) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      pointerOffsetRef.current = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
       pointerDragModeRef.current = true;
       setDraggingIssueId(issue.id);
       setDropIndicator(null);
       setMoveError(null);
+      setDragPreview({ issue, width: rect.width, x: rect.left, y: rect.top });
     },
     [],
   );
@@ -661,11 +678,27 @@ export function ProjectWatchersKanbanPanel({
       setDraggingIssueId(null);
       setDropIndicator(null);
     };
+    const handleWindowMouseMove = (event: globalThis.MouseEvent) => {
+      if (!pointerDragModeRef.current) return;
+      const node = dragPreviewRef.current;
+      if (!node) return;
+      const x = event.clientX - pointerOffsetRef.current.x;
+      const y = event.clientY - pointerOffsetRef.current.y;
+      node.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    };
     window.addEventListener("mouseup", handleWindowMouseUp);
+    window.addEventListener("mousemove", handleWindowMouseMove);
     return () => {
       window.removeEventListener("mouseup", handleWindowMouseUp);
+      window.removeEventListener("mousemove", handleWindowMouseMove);
     };
   }, []);
+
+  useEffect(() => {
+    if (draggingIssueId === null) {
+      setDragPreview(null);
+    }
+  }, [draggingIssueId]);
 
   if (loading && issues.length === 0) {
     return (
@@ -690,6 +723,28 @@ export function ProjectWatchersKanbanPanel({
 
   return (
     <div className="project-watchers-kanban-scroll">
+      {dragPreview
+        ? createPortal(
+            <ul
+              ref={dragPreviewRef}
+              className="project-watchers-kanban-card-drag-preview"
+              style={{
+                width: `${dragPreview.width}px`,
+                transform: `translate3d(${dragPreview.x}px, ${dragPreview.y}px, 0)`,
+              }}
+              aria-hidden="true"
+            >
+              <ProjectWatchersIssueCard
+                issue={dragPreview.issue}
+                onOpen={() => {}}
+                onOpenTerminal={() => {}}
+                onPointerDragStart={() => {}}
+                dragging={false}
+              />
+            </ul>,
+            document.body,
+          )
+        : null}
       <div className="project-watchers-kanban" aria-label="Issue board by status">
         {groups.map((group, index) => (
           <section
@@ -737,6 +792,9 @@ export function ProjectWatchersKanbanPanel({
               </span>
               <span className="project-watchers-kanban-column-count">{group.issues.length}</span>
             </header>
+            {dropIndicator?.stateId === group.stateId && group.issues.length > 0 ? (
+              <div className="project-watchers-kanban-column-drop-overlay" aria-hidden="true" />
+            ) : null}
             {group.issues.length > 0 ? (
               <ol className="project-watchers-kanban-column-list">
                 {group.issues.map((issue) => (

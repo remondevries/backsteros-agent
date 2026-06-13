@@ -3,10 +3,6 @@ import type { LinearIssueDetail } from "../../lib/api";
 import { CursorIcon } from "../../chat/CursorIcon";
 import { copyTextToClipboard, openLinearIssueInCursor } from "../../lib/linearIssueActions";
 import { openExternalUrl } from "../../lib/openExternalUrl";
-import {
-  LinearIssueViewModeToggle,
-  type LinearIssueViewMode,
-} from "./LinearIssueViewModeToggle";
 
 function ActionButton({
   label,
@@ -78,23 +74,7 @@ function BranchIcon() {
   );
 }
 
-export function LinearIssueActionBar({
-  issue,
-  watcherActive = false,
-  viewMode = "issue",
-  onViewModeChange,
-  terminalSessionActive = false,
-  terminalAgentWorking = false,
-  terminalAgentWaiting = false,
-}: {
-  issue: LinearIssueDetail;
-  watcherActive?: boolean;
-  viewMode?: LinearIssueViewMode;
-  onViewModeChange?: (mode: LinearIssueViewMode) => void;
-  terminalSessionActive?: boolean;
-  terminalAgentWorking?: boolean;
-  terminalAgentWaiting?: boolean;
-}) {
+export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
   const [copiedField, setCopiedField] = useState<"id" | "branch" | null>(null);
 
   const flashCopied = useCallback((field: "id" | "branch") => {
@@ -124,24 +104,7 @@ export function LinearIssueActionBar({
   }, [issue.branchName, issue.url]);
 
   return (
-    <div
-      className={[
-        "linear-issue-action-bar",
-        watcherActive ? "linear-issue-action-bar--with-watcher" : null,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      aria-label="Issue actions"
-    >
-      {watcherActive && onViewModeChange ? (
-        <LinearIssueViewModeToggle
-          mode={viewMode}
-          onChange={onViewModeChange}
-          terminalSessionActive={terminalSessionActive}
-          terminalAgentWorking={terminalAgentWorking}
-          terminalAgentWaiting={terminalAgentWaiting}
-        />
-      ) : null}
+    <div className="linear-issue-action-bar" aria-label="Issue actions">
       <div className="linear-issue-action-bar__actions">
         <ActionButton label="Open in Linear" title="Open Linear URL" onClick={handleOpenUrl}>
           <LinkIcon />

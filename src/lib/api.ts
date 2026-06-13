@@ -568,6 +568,13 @@ export async function updateVaultDocument(
   });
 }
 
+export async function createVaultDocument(folder: string, title?: string) {
+  return request<{ document: VaultDocumentContent; error?: string }>("/vault/documents", {
+    method: "POST",
+    body: JSON.stringify({ folder, ...(title ? { title } : {}) }),
+  });
+}
+
 export type WorkoutSetWire = {
   date: string;
   exercise: string;

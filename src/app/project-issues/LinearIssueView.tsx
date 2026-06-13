@@ -16,6 +16,7 @@ import {
   registerTerminalAgentLogContext,
 } from "../../lib/terminalAgentActivityLog";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
+import { useIssueViewModeBreadcrumbAction } from "../../hooks/useIssueViewModeBreadcrumbAction";
 import { ResizablePanel } from "../ResizablePanel";
 import { LinearIssueActionBar } from "./LinearIssueActionBar";
 import { LinearIssueDetailsPanel } from "./LinearIssueDetailsPanel";
@@ -44,6 +45,18 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   const terminalAgentWorking = useLeafAgentWorking(terminalLeafId);
   const terminalAgentWaiting = useLeafAgentWaiting(terminalLeafId);
   const loadedIssueId = issue?.id ?? null;
+
+  useIssueViewModeBreadcrumbAction(
+    watcherActive
+      ? {
+          mode: contentMode,
+          onChange: setContentMode,
+          terminalSessionActive,
+          terminalAgentWorking,
+          terminalAgentWaiting,
+        }
+      : null,
+  );
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [descriptionDirty, setDescriptionDirty] = useState(false);
   const [descriptionSaving, setDescriptionSaving] = useState(false);
@@ -369,15 +382,7 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
           ariaLabel="Issue details"
         >
           <div className="linear-issue-details-shell">
-            <LinearIssueActionBar
-              issue={issue}
-              watcherActive={watcherActive}
-              viewMode={contentMode}
-              onViewModeChange={setContentMode}
-              terminalSessionActive={terminalSessionActive}
-              terminalAgentWorking={terminalAgentWorking}
-              terminalAgentWaiting={terminalAgentWaiting}
-            />
+            <LinearIssueActionBar issue={issue} />
             <div className="linear-issue-details-scroll">
               <LinearIssueDetailsPanel
                 issue={issue}

@@ -57,6 +57,16 @@ export function useSidePanelToggles() {
     });
   }, []);
 
+  const closeLeftSidePanel = useCallback(() => {
+    setLeftSidePanelOpen(false);
+    persistToggle(LEFT_SIDE_PANEL_OPEN_KEY, false);
+  }, []);
+
+  const closeRightSidePanel = useCallback(() => {
+    setRightSidePanelOpen(false);
+    persistToggle(RIGHT_SIDE_PANEL_OPEN_KEY, false);
+  }, []);
+
   return {
     leftSidePanelOpen,
     rightSidePanelOpen,
@@ -64,5 +74,7 @@ export function useSidePanelToggles() {
     toggleLeftSidePanel,
     toggleRightSidePanel,
     toggleContentPanelSidebar,
+    closeLeftSidePanel,
+    closeRightSidePanel,
   };
 }

@@ -7,8 +7,6 @@ import {
   type LinearProjectCollectionMode,
   type LinearProjectCollectionToggleOption,
 } from "./LinearProjectListBoardToggle";
-import { WatcherPollProgressRing } from "./project-issues/WatcherPollProgressRing";
-import { useLinearProjectWatcherPollProgress } from "../hooks/useLinearProjectWatcherPollProgress";
 
 export function LinearProjectViewTabs({
   selectionKind,
@@ -19,10 +17,7 @@ export function LinearProjectViewTabs({
   onCollectionModeChange,
   collectionToggleOptions,
   collectionToggleAriaLabel,
-  showIssuesSettingsButton = false,
   issuesSettingsActive = false,
-  onIssuesSettingsClick,
-  issuesWatcherProjectId = null,
 }: {
   selectionKind: "team" | "project";
   activeView: LinearWorkspaceViewId;
@@ -32,17 +27,10 @@ export function LinearProjectViewTabs({
   onCollectionModeChange?: (mode: LinearProjectCollectionMode) => void;
   collectionToggleOptions?: readonly LinearProjectCollectionToggleOption[];
   collectionToggleAriaLabel?: string;
-  showIssuesSettingsButton?: boolean;
   issuesSettingsActive?: boolean;
-  onIssuesSettingsClick?: () => void;
-  issuesWatcherProjectId?: string | null;
 }) {
   const views = linearWorkspaceViewsForKind(selectionKind);
-  const showRightControls = showCollectionModeToggle || showIssuesSettingsButton;
-  const { watcherActive, autoAssignActive, pollIntervalMs, animationKey } =
-    useLinearProjectWatcherPollProgress(issuesWatcherProjectId, {
-      settingsPanelOpen: issuesSettingsActive,
-    });
+  const showRightControls = showCollectionModeToggle;
 
   return (
     <div className="linear-project-view-tabs">
@@ -73,28 +61,6 @@ export function LinearProjectViewTabs({
               ariaLabel={collectionToggleAriaLabel}
               neutral={issuesSettingsActive}
             />
-          ) : null}
-          {showIssuesSettingsButton ? (
-            <button
-              type="button"
-              className={`linear-project-view-settings-button ${issuesSettingsActive ? "linear-project-view-settings-button-active" : ""}`}
-              aria-label={
-                watcherActive
-                  ? autoAssignActive
-                    ? "Issue watcher active, auto assign on"
-                    : "Issue watcher active"
-                  : "Issue settings"
-              }
-              aria-pressed={issuesSettingsActive}
-              onClick={() => onIssuesSettingsClick?.()}
-            >
-              <WatcherPollProgressRing
-                pollIntervalMs={pollIntervalMs}
-                animationKey={animationKey}
-                active={watcherActive}
-                autoAssignActive={autoAssignActive}
-              />
-            </button>
           ) : null}
         </div>
       ) : null}

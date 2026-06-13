@@ -127,6 +127,8 @@ export type ContentPanelBreadcrumbSegment = {
 export type ActiveVaultDocument = {
   path: string;
   title: string;
+  /** When true, the document view focuses the title input on open (e.g. a freshly created note). */
+  focusTitle?: boolean;
 };
 
 export type ActiveLinearIssue = {
@@ -173,6 +175,23 @@ export type ContentPanelBarState = {
   onRefresh: (() => void) | null;
 };
 
+export type IssuesWatcherBreadcrumbAction = {
+  watcherActive: boolean;
+  autoAssignActive: boolean;
+  pollIntervalMs: number;
+  animationKey: number;
+  settingsActive: boolean;
+  onToggle: () => void;
+};
+
+export type IssueViewModeBreadcrumbAction = {
+  mode: "issue" | "terminal";
+  onChange: (mode: "issue" | "terminal") => void;
+  terminalSessionActive: boolean;
+  terminalAgentWorking: boolean;
+  terminalAgentWaiting: boolean;
+};
+
 export type ContentPanelTabSnapshot = {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
   linearSelection: LinearWorkspaceSelection | null;
@@ -217,6 +236,10 @@ type ContentPanelNavigationContextValue = {
   setWatchersPanelMode: (mode: LinearProjectCollectionMode) => void;
   contentPanelBarState: ContentPanelBarState | null;
   setContentPanelBarState: (state: ContentPanelBarState | null) => void;
+  issuesWatcherAction: IssuesWatcherBreadcrumbAction | null;
+  setIssuesWatcherAction: (action: IssuesWatcherBreadcrumbAction | null) => void;
+  issueViewModeAction: IssueViewModeBreadcrumbAction | null;
+  setIssueViewModeAction: (action: IssueViewModeBreadcrumbAction | null) => void;
   restoreContentPanelTabSnapshot: (snapshot: ContentPanelTabSnapshot) => void;
   linearIssueRefreshNonce: number;
   requestLinearIssueRefresh: () => void;
@@ -263,6 +286,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
   const [contentPanelBarState, setContentPanelBarStateState] = useState<ContentPanelBarState | null>(
     null,
   );
+  const [issuesWatcherAction, setIssuesWatcherActionState] =
+    useState<IssuesWatcherBreadcrumbAction | null>(null);
+  const [issueViewModeAction, setIssueViewModeActionState] =
+    useState<IssueViewModeBreadcrumbAction | null>(null);
   const [linearIssueRefreshNonce, setLinearIssueRefreshNonce] = useState(0);
   const skipSelectionResetRef = useRef(false);
 
@@ -288,6 +315,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setIssuesPanelModeState("list");
     setWatchersPanelModeState("board");
     setContentPanelBarStateState(null);
+    setIssuesWatcherActionState(null);
+    setIssueViewModeActionState(null);
   }, [linearSelectionKey]);
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
@@ -381,6 +410,14 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setContentPanelBarStateState(state);
   }, []);
 
+  const setIssuesWatcherAction = useCallback((action: IssuesWatcherBreadcrumbAction | null) => {
+    setIssuesWatcherActionState(action);
+  }, []);
+
+  const setIssueViewModeAction = useCallback((action: IssueViewModeBreadcrumbAction | null) => {
+    setIssueViewModeActionState(action);
+  }, []);
+
   const restoreContentPanelTabSnapshot = useCallback((snapshot: ContentPanelTabSnapshot) => {
     const currentSelectionKey = linearSelection
       ? `${linearSelection.kind}:${linearSelection.id}`
@@ -399,6 +436,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setIssuesPanelModeState(snapshot.issuesPanelMode);
     setWatchersPanelModeState(snapshot.watchersPanelMode);
     setContentPanelBarStateState(null);
+    setIssuesWatcherActionState(null);
+    setIssueViewModeActionState(null);
   }, [linearSelection]);
 
   const requestLinearIssueRefresh = useCallback(() => {
@@ -420,6 +459,8 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
     setIssuesPanelModeState("list");
     setWatchersPanelModeState("board");
     setContentPanelBarStateState(null);
+    setIssuesWatcherActionState(null);
+    setIssueViewModeActionState(null);
   }, []);
 
   useEffect(() => {
@@ -468,6 +509,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       setWatchersPanelMode,
       contentPanelBarState,
       setContentPanelBarState,
+      issuesWatcherAction,
+      setIssuesWatcherAction,
+      issueViewModeAction,
+      setIssueViewModeAction,
       restoreContentPanelTabSnapshot,
       linearIssueRefreshNonce,
       requestLinearIssueRefresh,
@@ -481,6 +526,10 @@ export function ContentPanelNavigationProvider({ children }: { children: ReactNo
       clearActiveLinearIssue,
       clearActiveVaultDocument,
       contentPanelBarState,
+      issuesWatcherAction,
+      setIssuesWatcherAction,
+      issueViewModeAction,
+      setIssueViewModeAction,
       focusContentSnapshot,
       linearIssueRefreshNonce,
       linearSelection,

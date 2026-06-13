@@ -105,6 +105,8 @@ function ContentPanelFrame({
   onVaultNavItemChange,
   vaultExplorerEnabled,
   breadcrumbSegments,
+  navigationCollapsed = false,
+  onOpenNavigation,
   children,
 }: {
   sidebarOpen: boolean;
@@ -113,6 +115,8 @@ function ContentPanelFrame({
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   vaultExplorerEnabled: boolean;
   breadcrumbSegments: ReturnType<typeof buildContentPanelBreadcrumbSegments>;
+  navigationCollapsed?: boolean;
+  onOpenNavigation?: () => void;
   children: ReactNode;
 }) {
   const {
@@ -299,6 +303,8 @@ function ContentPanelFrame({
         activeTabId={activeTabId}
         onSelectTab={handleSelectTab}
         onAddTab={handleAddTab}
+        navigationCollapsed={navigationCollapsed}
+        onOpenNavigation={onOpenNavigation}
       />
       <div className="content-panel">
         <ContentPanelBreadcrumbBar segments={breadcrumbSegments} />
@@ -333,6 +339,8 @@ function ContentPanelWithBreadcrumbs({
   activeVaultNavItem,
   onVaultNavItemChange,
   vaultExplorerEnabled,
+  navigationCollapsed = false,
+  onOpenNavigation,
   settingsOpen,
   activeSettingsTab,
   activeView,
@@ -344,6 +352,8 @@ function ContentPanelWithBreadcrumbs({
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   vaultExplorerEnabled: boolean;
+  navigationCollapsed?: boolean;
+  onOpenNavigation?: () => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
   activeView: AppView;
@@ -418,6 +428,8 @@ function ContentPanelWithBreadcrumbs({
       onVaultNavItemChange={onVaultNavItemChange}
       vaultExplorerEnabled={vaultExplorerEnabled}
       breadcrumbSegments={breadcrumbSegments}
+      navigationCollapsed={navigationCollapsed}
+      onOpenNavigation={onOpenNavigation}
     >
       {children}
     </ContentPanelFrame>
@@ -430,6 +442,8 @@ export function ContentPanel({
   activeVaultNavItem,
   onVaultNavItemChange,
   vaultExplorerEnabled,
+  navigationCollapsed = false,
+  onOpenNavigation,
   settingsOpen,
   activeSettingsTab,
   activeView,
@@ -441,6 +455,8 @@ export function ContentPanel({
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   vaultExplorerEnabled: boolean;
+  navigationCollapsed?: boolean;
+  onOpenNavigation?: () => void;
   settingsOpen: boolean;
   activeSettingsTab: SettingsTabId;
   activeView: AppView;
@@ -454,6 +470,8 @@ export function ContentPanel({
       activeVaultNavItem={activeVaultNavItem}
       onVaultNavItemChange={onVaultNavItemChange}
       vaultExplorerEnabled={vaultExplorerEnabled}
+      navigationCollapsed={navigationCollapsed}
+      onOpenNavigation={onOpenNavigation}
       settingsOpen={settingsOpen}
       activeSettingsTab={activeSettingsTab}
       activeView={activeView}

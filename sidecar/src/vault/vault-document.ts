@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { loadUserTimezone } from "../context/profile.ts";
 import { formatDateInTimezone, joinFrontmatterAndBody, readDailyNoteStats, splitFrontmatter } from "../daily-note.ts";
@@ -93,6 +93,45 @@ export function readVaultDocument(notesPath: string, relativePath: string): Vaul
     date,
     whoop,
   };
+}
+
+function sanitizeNoteFileBase(title: string): string {
+  const cleaned = title
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "Untitled";
+}
+
+export function createVaultDocument(
+  notesPath: string,
+  folderRelativePath: string,
+  options?: { title?: string },
+): VaultDocumentContent {
+  const folder = normalizeVaultRelativePath(folderRelativePath);
+  const absFolder = join(notesPath, folder);
+  if (!existsSync(absFolder)) {
+    mkdirSync(absFolder, { recursive: true });
+  } else if (!statSync(absFolder).isDirectory()) {
+    throw new Error("Target path is not a folder");
+  }
+
+  const title = options?.title?.trim() || "Untitled";
+  const fileBase = sanitizeNoteFileBase(title);
+  let fileName = `${fileBase}.md`;
+  let counter = 2;
+  while (existsSync(join(absFolder, fileName))) {
+    fileName = `${fileBase} ${counter}.md`;
+    counter += 1;
+  }
+
+  const relativePath = folder ? `${folder}/${fileName}` : fileName;
+  const date = formatDateInTimezone(loadUserTimezone());
+  const frontmatter = ensureDocumentDateFrontmatter(null, date);
+  const content = joinFrontmatterAndBody(frontmatter, bodyWithTitle(title, ""));
+  writeFileSync(join(absFolder, fileName), content, "utf8");
+
+  return readVaultDocument(notesPath, relativePath);
 }
 
 export async function updateVaultDocument(
