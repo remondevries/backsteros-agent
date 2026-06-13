@@ -10,10 +10,12 @@ let pendingFocus = false;
 let focusAttemptId = 0;
 
 function isRightPanelChatMounted(): boolean {
+  if (typeof document === "undefined") return false;
   return document.querySelector(".right-side-panel-chat") instanceof HTMLElement;
 }
 
 function isRightPanelChatVisible(): boolean {
+  if (typeof document === "undefined") return false;
   const chat = document.querySelector(".right-side-panel-chat");
   if (!(chat instanceof HTMLElement)) return false;
 
@@ -24,6 +26,7 @@ function isRightPanelChatVisible(): boolean {
 }
 
 function focusRightPanelComposerElement(): boolean {
+  if (typeof document === "undefined") return false;
   if (!isRightPanelChatVisible()) return false;
 
   const textarea = document.querySelector(RIGHT_PANEL_COMPOSER_SELECTOR);
@@ -34,14 +37,23 @@ function focusRightPanelComposerElement(): boolean {
 }
 
 function tryFocusRightPanelComposer(): boolean {
-  registration?.focusComposer();
+  let handled = false;
+
+  if (registration) {
+    registration.focusComposer();
+    handled = true;
+  }
+
+  if (typeof document === "undefined") {
+    return handled;
+  }
 
   if (focusRightPanelComposerElement()) {
     return true;
   }
 
   const active = document.activeElement;
-  return Boolean(active?.closest(".right-side-panel-chat .composer"));
+  return handled && Boolean(active?.closest(".right-side-panel-chat .composer"));
 }
 
 function runPendingFocusAttempts(attemptId: number, attempt = 0): void {
@@ -49,6 +61,10 @@ function runPendingFocusAttempts(attemptId: number, attempt = 0): void {
 
   if (tryFocusRightPanelComposer()) {
     pendingFocus = false;
+    return;
+  }
+
+  if (typeof window === "undefined") {
     return;
   }
 
