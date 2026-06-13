@@ -107,7 +107,12 @@
   --gemini-logo-primary: #ffffff;
   --gemini-logo-secondary: #000000;
 
-  --cursor-logo-primary: #edecec;
+  --cursor-logo-primary: #d8d8d8;
+  --linear-logo-primary: #f7f8f8;
+
+  --watcher-status-item-border: #262629;
+  --watcher-status-checkbox-bg: #0f0f10;
+  --watcher-status-checkbox-border: #262629;
 
   --linear-issue-details-card-bg: #171718;
   --linear-issue-details-card-border: #262629;
@@ -120,6 +125,7 @@
   --notification-close-hover: var(--text-primary);
   --notification-shadow: 0 12px 32px var(--shadow-lg);
   --watcher-accent: #5f6acc;
+  --watcher-poll-track: #000000;
 
   --searchable-dropdown-bg: #171718;
   --searchable-dropdown-border: #1e1e20;
@@ -279,6 +285,13 @@
     --gemini-logo-secondary: #ffffff;
 
     --cursor-logo-primary: #26251e;
+    --linear-logo-primary: #222326;
+
+    --watcher-status-item-border: var(--border-subtle);
+    --watcher-status-checkbox-bg: var(--bg-surface);
+    --watcher-status-checkbox-border: var(--border-subtle);
+
+    --watcher-poll-track: var(--border-subtle);
 
     --linear-issue-details-card-bg: var(--bg-surface-2);
     --linear-issue-details-card-border: var(--border-subtle);

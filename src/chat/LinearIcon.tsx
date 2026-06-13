@@ -17,7 +17,7 @@ export function LinearIcon({
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <path d={LINEAR_LOGO_PATH} fill="currentColor" />
+      <path d={LINEAR_LOGO_PATH} fill="var(--linear-logo-primary)" />
     </svg>
   );
 }

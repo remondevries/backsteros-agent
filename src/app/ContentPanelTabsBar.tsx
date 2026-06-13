@@ -36,6 +36,8 @@ export function ContentPanelTabsBar({
   const { contentPanelBarState } = useContentPanelNavigation();
   const refreshing = contentPanelBarState?.refreshing ?? false;
   const onRefresh = contentPanelBarState?.onRefresh ?? null;
+  const message = contentPanelBarState?.message ?? null;
+  const tone = contentPanelBarState?.tone ?? "default";
 
   return (
     <header className="content-panel-tabs-bar">
@@ -77,6 +79,20 @@ export function ContentPanelTabsBar({
         >
           +
         </button>
+        {message ? (
+          <span
+            className={[
+              "content-panel-tabs-status",
+              tone === "error" ? "content-panel-tabs-status--error" : null,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            role={tone === "error" ? "alert" : "status"}
+            title={message}
+          >
+            {message}
+          </span>
+        ) : null}
         <button
           type="button"
           className="content-panel-tab-refresh"

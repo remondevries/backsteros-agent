@@ -73,14 +73,13 @@ export function shouldDispatchAgentForWatcherChange(
   return !statusMatchesDispatchList(event.previousStatus, dispatchStatuses);
 }
 
-export function buildAutoDispatchShellCommand(job: LinearIssueDispatchJob): string {
+export function buildAutoDispatchShellCommand(_job: LinearIssueDispatchJob): string {
   const prompt = [
-    `You are working on Linear issue ${job.identifier}: ${job.title}.`,
-    "Write a file DISPATCH_OK.md in the current directory with the issue identifier, title, and ISO timestamp.",
-    "Do not modify anything else. Stop when done.",
+    "Ping google.com for about one minute by running `ping -c 60 google.com`.",
+    "Wait for it to finish, then briefly summarize the packet loss and average round-trip time.",
   ].join(" ");
   const escaped = prompt.replace(/'/g, `'\\''`);
-  return `cursor agent -p '${escaped}'`;
+  return `cursor-agent --force -p '${escaped}'`;
 }
 
 const dispatchedKeys = new Set<string>();

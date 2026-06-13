@@ -5,6 +5,7 @@ export function useContentPanelBarState(options: {
   saving?: boolean;
   dirty?: boolean;
   error?: string | null;
+  savedMessage?: string | null;
   loading?: boolean;
   loadingMessage?: string;
   refreshing?: boolean;
@@ -17,10 +18,18 @@ export function useContentPanelBarState(options: {
   const message = useMemo(() => {
     if (options.error) return options.error;
     if (options.saving) return "Saving…";
+    if (options.savedMessage) return options.savedMessage;
     if (options.dirty) return "Unsaved changes";
     if (options.loading) return options.loadingMessage ?? "Loading…";
     return null;
-  }, [options.dirty, options.error, options.loading, options.loadingMessage, options.saving]);
+  }, [
+    options.dirty,
+    options.error,
+    options.loading,
+    options.loadingMessage,
+    options.savedMessage,
+    options.saving,
+  ]);
 
   const tone = options.error ? "error" : "default";
   const refreshing = Boolean(options.refreshing || options.loading);

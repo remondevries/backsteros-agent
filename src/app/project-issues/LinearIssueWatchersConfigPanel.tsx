@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   fetchLinearProjectWatcherConfig,
   updateLinearProjectWatcherConfig,
   type LinearProjectWatcherConfig,
 } from "../../lib/api";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
+import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import {
   getLinearWatcherActivityLogEntries,
   subscribeToLinearWatcherActivityLog,
@@ -14,6 +15,7 @@ import { CursorIcon } from "../../chat/CursorIcon";
 import { LinearIcon } from "../../chat/LinearIcon";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { canonicalWatcherStatusKey } from "../../lib/linearIssueAgentDispatch";
+import { publishWatcherConfigSync } from "../../lib/linearWatcherConfigSync";
 import { ResizablePanel } from "../ResizablePanel";
 
 const LINEAR_WATCHER_SETTINGS_WIDTH_KEY = "backsteros.layout.linearWatcherSettingsWidth";
@@ -152,23 +154,221 @@ function WatcherLogList({ entries }: { entries: LinearWatcherActivityLogEntry[] 
   );
 }
 
+const AUTO_ASSIGN_INFO_TOOLTIP = "Requires a configured projects folder in Settings.";
+const AUTO_ASSIGN_STATUS_TOOLTIP = "Select at least one status before enabling auto assign.";
+const AUTO_ASSIGN_WATCHER_TOOLTIP = "Turn the watcher on before enabling auto assign.";
+
+function getAutoAssignInfoTooltip(watcherEnabled: boolean, dispatchStatusCount: number): string {
+  if (dispatchStatusCount === 0) {
+    return AUTO_ASSIGN_STATUS_TOOLTIP;
+  }
+  if (!watcherEnabled) {
+    return AUTO_ASSIGN_WATCHER_TOOLTIP;
+  }
+  return AUTO_ASSIGN_INFO_TOOLTIP;
+}
+
+function WatcherInfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="backster-info-tooltip-wrap">
+      <button
+        type="button"
+        className="backster-info-tooltip-trigger"
+        aria-label="More information"
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.25" />
+          <path
+            d="M8 7.1v4.2M8 5.4h.01"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
+      <span role="tooltip" className="backster-info-tooltip backster-info-tooltip--info">
+        {text}
+      </span>
+    </span>
+  );
+}
+
+function WatcherToggleCard({
+  enabled,
+  disabled,
+  label,
+  ariaLabel,
+  onChange,
+  variant = "watcher",
+  infoTooltip,
+}: {
+  enabled: boolean;
+  disabled?: boolean;
+  label: string;
+  ariaLabel: string;
+  onChange: (enabled: boolean) => void;
+  variant?: "watcher" | "dispatch";
+  infoTooltip?: string;
+}) {
+  const isDispatch = variant === "dispatch";
+  const cardClassName = [
+    "linear-issue-details-section",
+    isDispatch ? "linear-issue-watchers-dispatch-card" : "linear-issue-watchers-enable-card",
+    infoTooltip ? "linear-issue-watchers-toggle-card--with-info" : null,
+    enabled
+      ? isDispatch
+        ? "linear-issue-watchers-dispatch-card--on"
+        : "linear-issue-watchers-enable-card--on"
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const labelClassName = [
+    "linear-issue-watchers-enable-label",
+    enabled
+      ? isDispatch
+        ? "linear-issue-watchers-enable-label--dispatch-on"
+        : "linear-issue-watchers-enable-label--on"
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const toggleClassName = [
+    "watcher-ios-toggle",
+    enabled
+      ? isDispatch
+        ? "watcher-ios-toggle--dispatch-on"
+        : "watcher-ios-toggle--on"
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const handleToggle = () => {
+    if (disabled) return;
+    onChange(!enabled);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (disabled) return;
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      onChange(!enabled);
+    }
+  };
+
+  if (infoTooltip) {
+    return (
+      <div
+        role="switch"
+        aria-checked={enabled}
+        aria-label={ariaLabel}
+        aria-disabled={disabled || undefined}
+        tabIndex={disabled ? -1 : 0}
+        className={cardClassName}
+        onClick={handleToggle}
+        onKeyDown={handleKeyDown}
+      >
+        <span className={labelClassName}>{label}</span>
+        <WatcherInfoTooltip text={infoTooltip} />
+        <span className={toggleClassName} aria-hidden="true">
+          <span className="watcher-ios-toggle__thumb" />
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={ariaLabel}
+      className={cardClassName}
+      disabled={disabled}
+      onClick={handleToggle}
+    >
+      <span className={labelClassName}>{label}</span>
+      <span className={toggleClassName} aria-hidden="true">
+        <span className="watcher-ios-toggle__thumb" />
+      </span>
+    </button>
+  );
+}
+
+function WatcherEnableToggle({
+  enabled,
+  disabled,
+  onChange,
+}: {
+  enabled: boolean;
+  disabled?: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <WatcherToggleCard
+      enabled={enabled}
+      disabled={disabled}
+      label={enabled ? "On" : "Off"}
+      ariaLabel={`Watcher ${enabled ? "on" : "off"}`}
+      onChange={onChange}
+    />
+  );
+}
+
+function WatcherAutoDispatchToggle({
+  enabled,
+  disabled,
+  watcherEnabled,
+  dispatchStatusCount,
+  onChange,
+}: {
+  enabled: boolean;
+  disabled?: boolean;
+  watcherEnabled: boolean;
+  dispatchStatusCount: number;
+  onChange: (enabled: boolean) => void;
+}) {
+  const infoTooltip = getAutoAssignInfoTooltip(watcherEnabled, dispatchStatusCount);
+
+  return (
+    <WatcherToggleCard
+      enabled={enabled}
+      disabled={disabled}
+      label="Auto assign"
+      ariaLabel={`Auto assign ${enabled ? "on" : "off"}`}
+      onChange={onChange}
+      variant="dispatch"
+      infoTooltip={infoTooltip}
+    />
+  );
+}
+
 function WatcherConfigSection({
   title,
   children,
 }: {
-  title: string;
+  title?: string;
   children: ReactNode;
 }) {
   return (
     <section className="linear-issue-details-section">
-      <header className="linear-issue-details-section-header">
-        <span className="linear-issue-details-section-heading">
-          <span className="linear-issue-details-section-chevron" aria-hidden="true">
-            ▾
+      {title ? (
+        <header className="linear-issue-details-section-header">
+          <span className="linear-issue-details-section-heading">
+            <span className="linear-issue-details-section-chevron" aria-hidden="true">
+              ▾
+            </span>
+            <h3 className="linear-issue-details-section-title">{title}</h3>
           </span>
-          <h3 className="linear-issue-details-section-title">{title}</h3>
-        </span>
-      </header>
+        </header>
+      ) : null}
       <div className="linear-issue-details-section-body">{children}</div>
     </section>
   );
@@ -178,14 +378,12 @@ function WatcherConfigSettingsPanel({
   config,
   saving,
   error,
-  savedMessage,
   workflowStates,
   onUpdate,
 }: {
   config: LinearProjectWatcherConfig;
   saving: boolean;
   error: string | null;
-  savedMessage: string | null;
   workflowStates: Array<{ id: string; name: string; type: string; color?: string }>;
   onUpdate: (patch: Partial<LinearProjectWatcherConfig>) => void;
 }) {
@@ -203,41 +401,44 @@ function WatcherConfigSettingsPanel({
     const next = dispatchStatusKeys.has(key)
       ? current.filter((status) => canonicalWatcherStatusKey(status) !== key)
       : [...current, statusName.trim()];
-    onUpdate({ dispatchStatuses: next });
+    const patch: Partial<LinearProjectWatcherConfig> = { dispatchStatuses: next };
+    if (next.length === 0 && config.autoDispatchAgents) {
+      patch.autoDispatchAgents = false;
+    }
+    onUpdate(patch);
   };
 
-  const agentsReady =
-    config.enabled &&
-    config.autoDispatchAgents &&
-    (config.dispatchStatuses?.length ?? 0) > 0;
+  const dispatchStatusCount = config.dispatchStatuses?.length ?? 0;
+  const canEnableWatcher =
+    !config.autoDispatchAgents || dispatchStatusCount > 0;
 
   return (
     <div className="linear-issue-details-panel linear-issue-watchers-config-panel">
-      {error ? <p className="linear-issue-watchers-config__error">{error}</p> : null}
-      {savedMessage ? (
-        <p className="linear-issue-watchers-config__saved">{savedMessage}</p>
+      <WatcherEnableToggle
+        enabled={config.enabled}
+        disabled={saving || (!config.enabled && !canEnableWatcher)}
+        onChange={(enabled) => onUpdate({ enabled })}
+      />
+      <WatcherAutoDispatchToggle
+        enabled={config.autoDispatchAgents ?? false}
+        disabled={saving || !config.enabled || dispatchStatusCount === 0}
+        watcherEnabled={config.enabled}
+        dispatchStatusCount={dispatchStatusCount}
+        onChange={(autoDispatchAgents) => onUpdate({ autoDispatchAgents })}
+      />
+      {config.autoDispatchAgents && !config.enabled ? (
+        <p className="linear-issue-watchers-config__hint linear-issue-watchers-config__hint--toggle-followup">
+          Turn the watcher on to start dispatching agents.
+        </p>
+      ) : null}
+      {!canEnableWatcher ? (
+        <p className="linear-issue-watchers-config__hint linear-issue-watchers-config__hint--enable">
+          Select at least one dispatch status before enabling the watcher with
+          auto assign on.
+        </p>
       ) : null}
 
-      <WatcherConfigSection title="Watcher">
-        <p className="linear-issue-watchers-config__hint">
-          Runs in the background even when you are not on this project.
-        </p>
-        <button
-          type="button"
-          className={[
-            "linear-issue-watchers-config__enable-button",
-            "linear-issue-watchers-config__enable-button--full",
-            config.enabled ? "linear-issue-watchers-config__enable-button--active" : null,
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          disabled={saving}
-          aria-pressed={config.enabled}
-          onClick={() => onUpdate({ enabled: !config.enabled })}
-        >
-          {config.enabled ? "Disable watcher" : "Enable watcher"}
-        </button>
-      </WatcherConfigSection>
+      {error ? <p className="linear-issue-watchers-config__error">{error}</p> : null}
 
       <WatcherConfigSection title="Polling">
         <label className="linear-issue-watchers-config__field">
@@ -257,72 +458,47 @@ function WatcherConfigSettingsPanel({
         </label>
       </WatcherConfigSection>
 
-      <WatcherConfigSection title="Agent dispatch">
+      <WatcherConfigSection title="Status">
         <p className="linear-issue-watchers-config__hint">
-          When an issue enters a selected status, Backster opens an issue terminal and
-          starts the Cursor agent automatically.
+          Trigger agents when an issue enters a selected status.
         </p>
-        <label className="linear-issue-watchers-config__field linear-issue-watchers-config__field--toggle">
-          <span>
-            <span className="linear-issue-details-row-label">Auto-dispatch agents</span>
-            <span className="linear-issue-watchers-config__hint">
-              Requires the watcher and a configured projects folder in Settings.
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            className="linear-issue-watchers-config__checkbox"
-            checked={config.autoDispatchAgents ?? false}
-            disabled={saving || !config.enabled}
-            onChange={(event) => onUpdate({ autoDispatchAgents: event.target.checked })}
-          />
-        </label>
-        {config.autoDispatchAgents ? (
-          <>
-            <p className="linear-issue-watchers-config__hint linear-issue-watchers-config__hint--spaced">
-              Dispatch when an issue enters one of these statuses:
-            </p>
-            {workflowStates.length > 0 ? (
-              <ul className="linear-issue-watchers-config__status-list">
-                {workflowStates.map((state) => {
-                  const checked = dispatchStatusKeys.has(canonicalWatcherStatusKey(state.name));
-                  return (
-                    <li key={state.id} className="linear-issue-watchers-config__status-item">
-                      <label className="linear-issue-watchers-config__status-label">
-                        <input
-                          type="checkbox"
-                          className="linear-issue-watchers-config__checkbox"
-                          checked={checked}
-                          disabled={saving || !config.enabled}
-                          onChange={() => toggleDispatchStatus(state.name)}
-                        />
-                        <LinearStatusIcon
-                          status={state.name}
-                          stateType={state.type}
-                          title={state.name}
-                        />
-                        <span>{state.name}</span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="linear-issue-watchers-config__status">
-                Load project issues to pick workflow statuses.
-              </p>
-            )}
-            {agentsReady ? (
-              <p className="linear-issue-watchers-config__saved">
-                Agent dispatch is armed for this project.
-              </p>
-            ) : (
-              <p className="linear-issue-watchers-config__hint">
-                Select at least one status to arm agent dispatch.
-              </p>
-            )}
-          </>
-        ) : null}
+        {workflowStates.length > 0 ? (
+          <ul className="linear-issue-watchers-config__status-list">
+            {workflowStates.map((state) => {
+              const checked = dispatchStatusKeys.has(canonicalWatcherStatusKey(state.name));
+              return (
+                <li key={state.id} className="linear-issue-watchers-config__status-item">
+                  <label
+                    className={[
+                      "linear-issue-watchers-config__status-label",
+                      checked ? "linear-issue-watchers-config__status-label--checked" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <input
+                      type="checkbox"
+                      className="linear-issue-watchers-config__status-checkbox"
+                      checked={checked}
+                      disabled={saving}
+                      onChange={() => toggleDispatchStatus(state.name)}
+                    />
+                    <LinearStatusIcon
+                      status={state.name}
+                      stateType={state.type}
+                      title={state.name}
+                    />
+                    <span>{state.name}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="linear-issue-watchers-config__status">
+            Load project issues to pick workflow statuses.
+          </p>
+        )}
       </WatcherConfigSection>
 
       <WatcherConfigSection title="Notifications">
@@ -416,6 +592,24 @@ export function LinearIssueWatchersConfigPanel({
     void loadConfig();
   }, [loadConfig]);
 
+  useEffect(() => {
+    if (!savedMessage) return;
+    const timeoutId = window.setTimeout(() => setSavedMessage(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [savedMessage]);
+
+  useContentPanelBarState({
+    saving,
+    error,
+    savedMessage,
+    loading,
+    loadingMessage: "Loading watcher settings…",
+    refreshing: saving || loading,
+    onRefresh: () => {
+      void loadConfig();
+    },
+  });
+
   const persistConfig = useCallback(
     async (next: LinearProjectWatcherConfig) => {
       setSaving(true);
@@ -431,6 +625,11 @@ export function LinearIssueWatchersConfigPanel({
           return;
         }
         setConfig(result.config);
+        publishWatcherConfigSync(projectId, {
+          enabled: result.config.enabled,
+          pollIntervalMs: result.config.pollIntervalMs,
+          autoDispatchAgents: result.config.autoDispatchAgents ?? false,
+        });
         setSavedMessage("Watcher settings saved");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to save watcher settings");
@@ -507,7 +706,6 @@ export function LinearIssueWatchersConfigPanel({
                 config={config}
                 saving={saving}
                 error={error}
-                savedMessage={savedMessage}
                 workflowStates={workflowStates}
                 onUpdate={updateConfig}
               />

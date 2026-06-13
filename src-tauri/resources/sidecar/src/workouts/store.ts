@@ -1,30 +1,30 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { indexOfHeaders, parseCsv } from "../csv/csvParse.ts";
-import { serializeCsv } from "../csv/csvSerialize.ts";
-import { catalogEntriesFromMarkdown } from "./exerciseCatalogMarkdown.ts";
-import { DEFAULT_EXERCISE_CATALOG_ENTRIES } from "./exerciseCatalogDefault.ts";
-import { setExerciseCatalogEntries } from "./exerciseCatalogRuntime.ts";
-import { muscleGroupForExercise } from "./exerciseCatalog.ts";
+import { indexOfHeaders, parseCsv } from "./csv/csvParse.ts";
+import { serializeCsv } from "./csv/csvSerialize.ts";
+import { catalogEntriesFromMarkdown } from "./lib/exerciseCatalogMarkdown.ts";
+import { DEFAULT_EXERCISE_CATALOG_ENTRIES } from "./lib/exerciseCatalogDefault.ts";
+import { setExerciseCatalogEntries } from "./lib/exerciseCatalogRuntime.ts";
+import { muscleGroupForExercise } from "./lib/exerciseCatalog.ts";
 import {
   EXERCISE_CATALOG_PATH,
   WORKOUTS_COLUMNS,
   WORKOUTS_FOLDER,
-} from "./paths.ts";
+} from "./lib/paths.ts";
 import {
   nextSetNumber,
   rowFromWorkoutSet,
   sortWorkoutSets,
   workoutSetFromRow,
-} from "./setsCsv.ts";
+} from "./lib/setsCsv.ts";
 import {
   groupWorkoutSetsByDate,
   listAllWorkoutDateKeysFromFileNames,
   parseWorkoutDateKey,
   workoutsDayPath,
   WORKOUTS_DATE_KEY,
-} from "./workoutDays.ts";
-import type { ExerciseCatalogEntry, WorkoutSet } from "./types.ts";
+} from "./lib/workoutDays.ts";
+import type { ExerciseCatalogEntry, WorkoutSet } from "./lib/types.ts";
 
 export type WorkoutSetLocator = {
   date: string;

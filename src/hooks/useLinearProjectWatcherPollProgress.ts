@@ -4,6 +4,7 @@ import {
   addLinearWatcherStreamListener,
   isLinearWatcherPollEvent,
 } from "../lib/linearWatcherEvents";
+import { subscribeWatcherConfigSync } from "../lib/linearWatcherConfigSync";
 
 function normalizePollIntervalMs(value: number): 15_000 | 30_000 | 60_000 {
   if (value <= 15_000) return 15_000;
@@ -18,6 +19,7 @@ export function useLinearProjectWatcherPollProgress(
   options?: { settingsPanelOpen?: boolean },
 ) {
   const [enabled, setEnabled] = useState(false);
+  const [autoDispatchAgents, setAutoDispatchAgents] = useState(false);
   const [pollIntervalMs, setPollIntervalMs] = useState<15_000 | 30_000 | 60_000>(30_000);
   const [animationKey, setAnimationKey] = useState(0);
   const previousSettingsOpenRef = useRef(options?.settingsPanelOpen ?? false);
@@ -25,6 +27,7 @@ export function useLinearProjectWatcherPollProgress(
   const loadConfig = useCallback(async () => {
     if (!projectId) {
       setEnabled(false);
+      setAutoDispatchAgents(false);
       return;
     }
 
@@ -32,16 +35,19 @@ export function useLinearProjectWatcherPollProgress(
       const result = await fetchLinearProjectWatcherConfig(projectId);
       if (result.error || !result.config) {
         setEnabled(false);
+        setAutoDispatchAgents(false);
         return;
       }
 
       setEnabled(result.config.enabled);
+      setAutoDispatchAgents(result.config.autoDispatchAgents ?? false);
       setPollIntervalMs(normalizePollIntervalMs(result.config.pollIntervalMs));
       if (result.config.enabled) {
         setAnimationKey((current) => current + 1);
       }
     } catch {
       setEnabled(false);
+      setAutoDispatchAgents(false);
     }
   }, [projectId]);
 
@@ -60,6 +66,20 @@ export function useLinearProjectWatcherPollProgress(
   useEffect(() => {
     if (!projectId) return;
 
+    return subscribeWatcherConfigSync((syncProjectId, config) => {
+      if (syncProjectId !== projectId) return;
+      setEnabled(config.enabled);
+      setAutoDispatchAgents(config.autoDispatchAgents);
+      setPollIntervalMs(normalizePollIntervalMs(config.pollIntervalMs));
+      if (config.enabled) {
+        setAnimationKey((current) => current + 1);
+      }
+    });
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
     return addLinearWatcherStreamListener((event) => {
       if (!isLinearWatcherPollEvent(event) || event.projectId !== projectId) {
         return;
@@ -72,6 +92,7 @@ export function useLinearProjectWatcherPollProgress(
 
   return {
     watcherActive: enabled,
+    autoAssignActive: enabled && autoDispatchAgents,
     pollIntervalMs,
     animationKey,
   };
