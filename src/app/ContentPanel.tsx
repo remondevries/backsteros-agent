@@ -361,6 +361,17 @@ function ContentPanelWithBreadcrumbs({
     clearActiveLinearIssue,
     linearWorkspaceView,
   } = useContentPanelNavigation();
+  const handleActivateNavItemBreadcrumb = useCallback(
+    (item: SidebarNavItemId) => {
+      if (activeVaultNavItem === item) {
+        onVaultNavItemChange(null);
+        window.requestAnimationFrame(() => onVaultNavItemChange(item));
+        return;
+      }
+      onVaultNavItemChange(item);
+    },
+    [activeVaultNavItem, onVaultNavItemChange],
+  );
   const breadcrumbSegments = useMemo(
     () =>
       buildContentPanelBreadcrumbSegments({
@@ -377,6 +388,7 @@ function ContentPanelWithBreadcrumbs({
         onClearActiveVaultDocument: clearActiveVaultDocument,
         onClearActiveLinearDocument: clearActiveLinearDocument,
         onClearActiveLinearIssue: clearActiveLinearIssue,
+        onActivateNavItem: handleActivateNavItemBreadcrumb,
         linearWorkspaceView,
       }),
     [
@@ -390,6 +402,7 @@ function ContentPanelWithBreadcrumbs({
       clearActiveLinearDocument,
       clearActiveLinearIssue,
       clearActiveVaultDocument,
+      handleActivateNavItemBreadcrumb,
       linearSelection,
       linearWorkspaceView,
       settingsOpen,

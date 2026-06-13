@@ -15,6 +15,8 @@ import {
   isAgentActivePty,
   isAgentWaitingPty,
   isAgentWorkingPty,
+  markAgentPtyExited,
+  subscribeAgentActivity,
 } from "./agentActivity";
 import {
   acquireSlot,
@@ -80,13 +82,18 @@ export function isLeafSessionActive(leafId: number): boolean {
 
 const leafSessionActiveListeners = new Set<() => void>();
 let leafSessionActiveTick: ReturnType<typeof setInterval> | null = null;
+let detachAgentActivitySubscription: (() => void) | null = null;
+
+function notifyLeafSessionActiveListeners(): void {
+  for (const listener of leafSessionActiveListeners) {
+    listener();
+  }
+}
 
 function startLeafSessionActiveTick(): void {
   if (leafSessionActiveTick !== null) return;
   leafSessionActiveTick = setInterval(() => {
-    for (const listener of leafSessionActiveListeners) {
-      listener();
-    }
+    notifyLeafSessionActiveListeners();
   }, 700);
 }
 
@@ -98,10 +105,17 @@ function stopLeafSessionActiveTick(): void {
 
 function subscribeLeafSessionActive(listener: () => void): () => void {
   leafSessionActiveListeners.add(listener);
+  if (!detachAgentActivitySubscription) {
+    detachAgentActivitySubscription = subscribeAgentActivity(
+      notifyLeafSessionActiveListeners,
+    );
+  }
   startLeafSessionActiveTick();
   return () => {
     leafSessionActiveListeners.delete(listener);
     if (leafSessionActiveListeners.size === 0) {
+      detachAgentActivitySubscription?.();
+      detachAgentActivitySubscription = null;
       stopLeafSessionActiveTick();
     }
   };
@@ -132,19 +146,12 @@ export function useLeafAgentActive(leafId: number): boolean {
 export function isLeafAgentWorking(leafId: number): boolean {
   const session = sessions.get(leafId);
   if (!session || session.disposed || !session.pty) return false;
-  const ptyId = session.pty.id;
-  // An explicit attention/finished marker means the agent is idle/awaiting
-  // input. It must win over the commandRunning proxy below, because an
-  // interactive agent CLI is one long-lived foreground command that keeps
-  // commandRunning=true for its entire lifetime.
-  if (isAgentWaitingPty(ptyId)) {
-    return false;
-  }
-  if (isAgentWorkingPty(ptyId)) {
-    return true;
-  }
-  // Fallback for marker-less agents: a running foreground command implies work.
-  return session.commandRunning && isAgentActivePty(ptyId);
+  // Working is driven purely by the agent's own lifecycle markers
+  // (started/working set membership). The CLI process being alive
+  // (commandRunning) is NOT used as a proxy: an interactive agent keeps a
+  // single long-lived foreground command running even while idle, so it would
+  // otherwise never reach the "not doing anything" (green) state.
+  return isAgentWorkingPty(session.pty.id);
 }
 
 export function useLeafAgentWorking(leafId: number): boolean {
@@ -454,9 +461,13 @@ async function openPtyForSession(
     {
       onData: (bytes) => deliverPtyBytes(leafId, bytes),
       onExit: (code) => {
+        const exitedPtyId = s.pty?.id ?? null;
         s.shellExited = true;
         s.pty = null;
         s.commandRunning = false;
+        if (exitedPtyId !== null) {
+          markAgentPtyExited(exitedPtyId, "pty_exit");
+        }
         const slot = getSlotForLeaf(leafId);
         if (slot) slot.term.options.disableStdin = true;
         scheduleHiddenRelease(leafId, s);
@@ -573,6 +584,10 @@ export async function respawnSession(
 ): Promise<void> {
   const s = sessions.get(leafId);
   if (!s || s.disposed) return;
+  const previousPtyId = s.pty?.id ?? null;
+  if (previousPtyId !== null) {
+    markAgentPtyExited(previousPtyId, "pty_respawn");
+  }
   s.pty?.close();
   s.pty = null;
   s.snapshot = null;
@@ -613,6 +628,10 @@ export async function respawnSession(
 export function disposeSession(leafId: number): void {
   const s = sessions.get(leafId);
   if (!s) return;
+  const ptyId = s.pty?.id ?? null;
+  if (ptyId !== null) {
+    markAgentPtyExited(ptyId, "pty_dispose");
+  }
   s.disposed = true;
   cancelHiddenRelease(s);
   disposeLeafSlot(leafId);

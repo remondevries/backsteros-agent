@@ -28,7 +28,7 @@ describe("contentPanelBreadcrumbModel", () => {
     });
 
     expect(segments).toEqual([
-      { id: "nav-inbox", label: "Inbox" },
+      { id: "nav-inbox", label: "Inbox", navItemId: "inbox" },
       { id: "vault-Inbox/Reports", label: "Reports" },
       { id: "view-chat", label: "Backster" },
       { id: "session-chat-Morning review", label: "Morning review" },
@@ -45,8 +45,29 @@ describe("contentPanelBreadcrumbModel", () => {
         sidebarSegments: [{ id: "linear-view-teams", label: "Teams" }],
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", navItemId: "projects" },
       { id: "linear-view-teams", label: "Teams" },
+    ]);
+  });
+
+  test("root breadcrumb can activate the active nav item", () => {
+    const onActivateNavItem = () => {};
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "projects",
+        activeView: "chat",
+        sidebarSegments: [],
+        onActivateNavItem,
+      }),
+    ).toEqual([
+      {
+        id: "nav-projects",
+        label: "Projects",
+        navItemId: "projects",
+        onActivate: expect.any(Function),
+      },
     ]);
   });
 
@@ -61,7 +82,7 @@ describe("contentPanelBreadcrumbModel", () => {
         linearSelection: { kind: "team", id: "team-1", name: "Engineering" },
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", navItemId: "projects" },
       { id: "linear-view-teams", label: "Teams" },
       { id: "team-team-1", label: "Engineering" },
     ]);
@@ -82,7 +103,7 @@ describe("contentPanelBreadcrumbModel", () => {
         onClearActiveLinearDocument: onClear,
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", navItemId: "projects" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS", onActivate: onClear },
       { id: "linear-tab-project-documents", label: "Documents", onActivate: onClear },
@@ -102,7 +123,7 @@ describe("contentPanelBreadcrumbModel", () => {
         linearWorkspaceView: "issues",
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", navItemId: "projects" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS" },
       { id: "linear-tab-project-issues", label: "Issues" },
@@ -121,7 +142,7 @@ describe("contentPanelBreadcrumbModel", () => {
         linearWorkspaceView: "overview",
       }),
     ).toEqual([
-      { id: "nav-projects", label: "Projects", kind: "linear-logo" },
+      { id: "nav-projects", label: "Projects", navItemId: "projects" },
       { id: "linear-view-projects", label: "Projects" },
       { id: "project-proj-1", label: "Backster OS" },
     ]);
@@ -139,9 +160,33 @@ describe("contentPanelBreadcrumbModel", () => {
         linearSelection: { kind: "team", id: "team-1", name: "Engineering" },
       }),
     ).toEqual([
-      { id: "nav-inbox", label: "Inbox" },
+      { id: "nav-inbox", label: "Inbox", navItemId: "inbox" },
       { id: "vault-Inbox/Reports", label: "Reports" },
       { id: "team-team-1", label: "Engineering" },
+    ]);
+  });
+
+  test("includes source daily note breadcrumb when opening a linear issue from daily", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "daily",
+        activeView: "chat",
+        sidebarSegments: [],
+        activeLinearIssue: {
+          id: "issue-1",
+          identifier: "BOS-70",
+          title: "Define Linear rules for agent issue operations",
+          sourceVaultDocumentPath: "Daily/2026-06-13.md",
+          sourceVaultDocumentTitle: "2026-06-13",
+        },
+      }),
+    ).toEqual([
+      { id: "nav-daily", label: "Daily", navItemId: "daily" },
+      { id: "view-chat", label: "Backster" },
+      { id: "vault-doc-Daily/2026-06-13.md", label: "2026-06-13" },
+      { id: "linear-issue-issue-1", label: "BOS-70 Define Linear rules for agent issue operations" },
     ]);
   });
 });

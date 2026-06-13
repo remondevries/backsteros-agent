@@ -75,6 +75,7 @@ export function WhoopMetricRing({
   displayValue,
   title,
   className,
+  valueClassName,
 }: {
   label: string;
   value: number | null | undefined;
@@ -84,6 +85,7 @@ export function WhoopMetricRing({
   displayValue: string;
   title?: string;
   className?: string;
+  valueClassName?: string;
 }) {
   const dashLength = whoopValueToDash(value, max);
   const targetDashLength =
@@ -106,7 +108,16 @@ export function WhoopMetricRing({
           targetDashLength={targetDashLength}
           animate={animate}
         />
-        <span className="whoop-metric-ring-value">{displayValue}</span>
+        <span
+          className={[
+            "whoop-metric-ring-value",
+            valueClassName ?? null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {displayValue}
+        </span>
       </div>
       <span className="whoop-metric-ring-label">{label}</span>
     </div>

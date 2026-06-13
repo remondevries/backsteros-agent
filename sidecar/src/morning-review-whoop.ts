@@ -14,6 +14,7 @@ export async function fetchWhoopTodaySnapshot(options: {
   timezone?: string;
   now?: Date;
   includeStrainDeepDive?: boolean;
+  date?: string;
 } = {}): Promise<WhoopSnapshotEntity | null> {
   if (!isWhoopAuthenticated()) {
     throw new Error("Whoop is not authenticated");
@@ -35,7 +36,11 @@ export async function fetchWhoopTodaySnapshot(options: {
   const { projectStrain } = await import("@briangaoo/totem/dist/projections/strain.js");
   const { projectWorkoutsList } = await import("@briangaoo/totem/dist/projections/workouts.js");
 
-  const info = resolveTodayDailyNoteInfo(options.timezone, options.now);
+  const resolved = resolveTodayDailyNoteInfo(options.timezone, options.now);
+  const info = {
+    ...resolved,
+    date: options.date ?? resolved.date,
+  };
   const tokenManager = new TokenManager({
     email,
     accessToken,

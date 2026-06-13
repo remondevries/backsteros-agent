@@ -278,6 +278,22 @@ export async function fetchWhoopToday(options?: { force?: boolean }) {
   );
 }
 
+export async function fetchWhoopDay(date: string, options?: { force?: boolean }) {
+  const normalizedDate = date.trim();
+  const query = new URLSearchParams({ date: normalizedDate });
+  const key = `whoop-day:${normalizedDate}`;
+  return cachedRequest(
+    key,
+    () =>
+      request<{
+        authenticated: boolean;
+        snapshot: WhoopSnapshotEntity | null;
+        error?: string;
+      }>(`/whoop/day?${query.toString()}`),
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
+}
+
 export async function fetchLinearToday(options?: { force?: boolean }) {
   return cachedRequest(
     REQUEST_CACHE_KEYS.linearToday,
@@ -289,6 +305,16 @@ export async function fetchLinearToday(options?: { force?: boolean }) {
         error?: string;
       }>("/linear/today"),
     { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
+}
+
+export async function fetchLinearIssuesByDueDates(dueDates: string[]) {
+  return request<{ issuesByDueDate: Record<string, LinearIssueEntity[]>; error?: string }>(
+    "/linear/issues/by-due-dates",
+    {
+      method: "POST",
+      body: JSON.stringify({ dueDates }),
+    },
   );
 }
 
@@ -434,6 +460,9 @@ type HealthResponse = {
   hasGoogleCalendarAuth: boolean;
   hasWhoopConfigured: boolean;
   hasWhoopAuth: boolean;
+  sidecarRuntimeId?: string | null;
+  sidecarVersion?: string | null;
+  sidecarBuildId?: string | null;
 };
 
 async function fetchHealth(timeoutMs = HEALTH_REQUEST_TIMEOUT_MS): Promise<HealthResponse> {

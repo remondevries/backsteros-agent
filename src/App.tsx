@@ -41,6 +41,7 @@ import { connectGoogleCalendarAndWait } from "./lib/googleCalendarConnect";
 import { getCalendarStartupWarning } from "./lib/integrationWarnings";
 import { isTauriRuntime } from "./lib/tauriRuntime";
 import { setLinearIssueLinkMode } from "./lib/linear/linearLink";
+import { pushNotification } from "./lib/notifications";
 import { openExternalUrl } from "./lib/openExternalUrl";
 
 type DashboardView = Extract<AppView, "whoop" | "linear" | "obsidian">;
@@ -115,6 +116,8 @@ export default function App() {
   const [commandPanelOpen, setCommandPanelOpen] = useState(false);
   const activeChatRef = useRef<ChatViewHandle>(null);
   const activeLookupRef = useRef<LookupViewHandle>(null);
+  const sidecarBuildSignatureRef = useRef<string | null>(null);
+  const sidecarBuildSignatureInitializedRef = useRef(false);
 
   const focusActiveComposer = useCallback(() => {
     activeChatRef.current?.focusComposer();
@@ -358,6 +361,56 @@ export default function App() {
   useEffect(() => {
     if (!ready) return;
     return subscribeToLinearWatcherEvents();
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready || import.meta.env.DEV || !isTauriRuntime()) return;
+
+    let active = true;
+    const checkForHotUpdate = async () => {
+      try {
+        const health = await getHealth({ force: true, timeoutMs: 4_000 });
+        if (!active) return;
+
+        const signature =
+          health.sidecarBuildId?.trim() || health.sidecarVersion?.trim() || null;
+
+        if (!sidecarBuildSignatureInitializedRef.current) {
+          sidecarBuildSignatureRef.current = signature;
+          sidecarBuildSignatureInitializedRef.current = true;
+          return;
+        }
+
+        if (!signature || sidecarBuildSignatureRef.current === signature) {
+          return;
+        }
+
+        sidecarBuildSignatureRef.current = signature;
+        pushNotification({
+          id: `app-hot-update-${signature}`,
+          kind: "info",
+          title: "Update ready",
+          message: "A newer BacksterOS build is available. Reload to apply the latest updates.",
+          durationMs: 10_000,
+          action: {
+            label: "Reload",
+            onClick: () => window.location.reload(),
+          },
+        });
+      } catch {
+        // Ignore transient health check failures.
+      }
+    };
+
+    void checkForHotUpdate();
+    const intervalId = window.setInterval(() => {
+      void checkForHotUpdate();
+    }, 30_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
   }, [ready]);
 
   const handleCloseActiveTab = useCallback(async () => {

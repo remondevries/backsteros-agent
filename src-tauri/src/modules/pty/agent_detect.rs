@@ -37,19 +37,76 @@ pub enum Transition {
 pub struct AgentSignal {
     pub id: u32,
     pub kind: &'static str,
+    pub run_id: u64,
+    pub seq: u64,
+    pub ts_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
 }
 
 impl Transition {
-    pub fn into_signal(self, id: u32) -> AgentSignal {
+    fn reason(&self) -> &'static str {
+        match self {
+            Transition::Started { .. } => "agent_started",
+            Transition::Working => "agent_working",
+            Transition::Attention => "agent_attention",
+            Transition::Finished => "agent_finished",
+            Transition::Exited => "agent_exited",
+        }
+    }
+
+    pub fn into_signal(self, id: u32, run_id: u64, seq: u64, ts_ms: u64) -> AgentSignal {
+        let reason = self.reason();
         match self {
             Transition::Started { agent } => {
-                AgentSignal { id, kind: "started", agent: Some(agent) }
+                AgentSignal {
+                    id,
+                    kind: "started",
+                    run_id,
+                    seq,
+                    ts_ms,
+                    agent: Some(agent),
+                    reason: Some(reason),
+                }
             }
-            Transition::Working => AgentSignal { id, kind: "working", agent: None },
-            Transition::Attention => AgentSignal { id, kind: "attention", agent: None },
-            Transition::Finished => AgentSignal { id, kind: "finished", agent: None },
-            Transition::Exited => AgentSignal { id, kind: "exited", agent: None },
+            Transition::Working => AgentSignal {
+                id,
+                kind: "working",
+                run_id,
+                seq,
+                ts_ms,
+                agent: None,
+                reason: Some(reason),
+            },
+            Transition::Attention => AgentSignal {
+                id,
+                kind: "attention",
+                run_id,
+                seq,
+                ts_ms,
+                agent: None,
+                reason: Some(reason),
+            },
+            Transition::Finished => AgentSignal {
+                id,
+                kind: "finished",
+                run_id,
+                seq,
+                ts_ms,
+                agent: None,
+                reason: Some(reason),
+            },
+            Transition::Exited => AgentSignal {
+                id,
+                kind: "exited",
+                run_id,
+                seq,
+                ts_ms,
+                agent: None,
+                reason: Some(reason),
+            },
         }
     }
 }

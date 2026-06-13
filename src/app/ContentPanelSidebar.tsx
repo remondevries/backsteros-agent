@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { resolveTodayDailyNoteDocument } from "../lib/resolveTodayDailyNoteDocument";
+import { resolveLatestKnowledgeBaseDocument } from "../lib/resolveLatestKnowledgeBaseDocument";
+import { resolveLatestMeetingDocument } from "../lib/resolveLatestMeetingDocument";
 import { SIDEBAR_VAULT_NAV_ITEM_IDS, isSidebarPrimaryNavItem } from "./sidebarNavConfig";
 import { LinearWorkspacePanel } from "./LinearWorkspacePanel";
 import { VaultFolderExplorer } from "./VaultFolderExplorer";
@@ -37,6 +39,46 @@ export function ContentPanelSidebar({
         if (cancelled || !document) return;
         setActiveVaultDocument(document);
       });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (activeVaultNavItem === "meetings") {
+      let cancelled = false;
+      void resolveLatestMeetingDocument()
+        .then((document) => {
+          if (cancelled) return;
+          if (document) {
+            setActiveVaultDocument(document);
+            return;
+          }
+          clearActiveVaultDocument();
+        })
+        .catch(() => {
+          if (cancelled) return;
+          clearActiveVaultDocument();
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (activeVaultNavItem === "knowledge-base") {
+      let cancelled = false;
+      void resolveLatestKnowledgeBaseDocument()
+        .then((document) => {
+          if (cancelled) return;
+          if (document) {
+            setActiveVaultDocument(document);
+            return;
+          }
+          clearActiveVaultDocument();
+        })
+        .catch(() => {
+          if (cancelled) return;
+          clearActiveVaultDocument();
+        });
       return () => {
         cancelled = true;
       };

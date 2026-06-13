@@ -11,6 +11,10 @@ import {
   useLeafAgentWorking,
   useLeafSessionActive,
 } from "../../modules/terminal/lib/useTerminalSession";
+import {
+  ensureTerminalAgentActivityLogBridge,
+  registerTerminalAgentLogContext,
+} from "../../lib/terminalAgentActivityLog";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { ResizablePanel } from "../ResizablePanel";
 import { LinearIssueActionBar } from "./LinearIssueActionBar";
@@ -64,6 +68,22 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     if (linearIssueRefreshNonce === 0) return;
     void refresh({ silent: true });
   }, [linearIssueRefreshNonce, refresh]);
+
+  useEffect(() => {
+    if (!issue) return;
+    const issueProjectId = issue.projectId?.trim();
+    if (!issueProjectId) return;
+    registerTerminalAgentLogContext(terminalLeafId, {
+      issueId: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      projectId: issueProjectId,
+      projectName: issue.projectName?.trim() || "Project",
+      issueStatus: issue.status,
+      issueStateType: issue.stateType,
+    });
+    ensureTerminalAgentActivityLogBridge();
+  }, [issue, terminalLeafId]);
 
   useEffect(() => {
     setDescriptionDraft("");
@@ -357,7 +377,6 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
               terminalSessionActive={terminalSessionActive}
               terminalAgentWorking={terminalAgentWorking}
               terminalAgentWaiting={terminalAgentWaiting}
-              terminalDebugLabel={terminalDebugLabel}
             />
             <div className="linear-issue-details-scroll">
               <LinearIssueDetailsPanel

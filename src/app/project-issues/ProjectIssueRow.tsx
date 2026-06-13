@@ -1,5 +1,6 @@
 import { useMemo, type MouseEvent } from "react";
 import { DotScrollLoader } from "../../chat/DotScrollLoader";
+import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearIssueEntity } from "../../chat/types";
@@ -36,6 +37,11 @@ export function ProjectIssueRow({
   issue,
   grouped = true,
   dragging = false,
+  leadingIcon = "priority",
+  showPrimaryLabel = true,
+  showProjectLabel = false,
+  showDueMeta = true,
+  showEstimateMeta = true,
   onClick,
   onTerminalIndicatorClick,
   onPointerDragStart,
@@ -43,6 +49,11 @@ export function ProjectIssueRow({
   issue: LinearIssueEntity;
   grouped?: boolean;
   dragging?: boolean;
+  leadingIcon?: "priority" | "status";
+  showPrimaryLabel?: boolean;
+  showProjectLabel?: boolean;
+  showDueMeta?: boolean;
+  showEstimateMeta?: boolean;
   onClick: () => void;
   onTerminalIndicatorClick?: () => void;
   onPointerDragStart?: (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => void;
@@ -53,10 +64,11 @@ export function ProjectIssueRow({
   const terminalAgentWaiting = useLeafAgentWaiting(terminalLeafId);
   const labels = issue.labels ?? [];
   const primaryLabel = labels[0];
-  const dueLabel = formatIssueDueMetaLabel(issue.dueDate);
+  const dueLabel = showDueMeta ? formatIssueDueMetaLabel(issue.dueDate) : null;
   const hasEstimate = issue.estimate != null;
   const priorityLabel =
     issue.priorityLabel || getPriorityLabel(issue.priority);
+  const leadingTitle = leadingIcon === "status" ? (issue.status?.trim() || "Unknown") : priorityLabel;
 
   const rowClass = [
     "project-issue-row",
@@ -95,8 +107,12 @@ export function ProjectIssueRow({
           onClick();
         }}
       >
-        <span className="project-issue-row__priority" title={priorityLabel}>
-          <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
+        <span className="project-issue-row__leading" title={leadingTitle}>
+          {leadingIcon === "status" ? (
+            <LinearStatusIcon status={issue.status} stateType={issue.stateType} title={leadingTitle} />
+          ) : (
+            <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
+          )}
         </span>
         <span className="project-issue-row__id" title={issue.identifier}>
           {issue.identifier}
@@ -128,7 +144,7 @@ export function ProjectIssueRow({
             />
           ) : null}
         </span>
-        {primaryLabel ? (
+        {showPrimaryLabel && primaryLabel ? (
           <span className="project-issue-row__pill" title={labelTitle}>
             <span
               className="project-issue-row__pill-dot"
@@ -138,13 +154,18 @@ export function ProjectIssueRow({
             <span className="project-issue-row__pill-label">{primaryLabel.name}</span>
           </span>
         ) : null}
+        {showProjectLabel && issue.projectName ? (
+          <span className="project-issue-row__pill project-issue-row__pill--project" title={issue.projectName}>
+            <span className="project-issue-row__pill-label">{issue.projectName}</span>
+          </span>
+        ) : null}
         {dueLabel ? (
           <span className="project-issue-row__pill project-issue-row__pill--due">
             <CalendarIcon />
             <span className="project-issue-row__pill-label">{dueLabel}</span>
           </span>
         ) : null}
-        {!dueLabel && hasEstimate ? (
+        {showEstimateMeta && !dueLabel && hasEstimate ? (
           <span className="project-issue-row__pill project-issue-row__pill--estimate">
             <span className="project-issue-row__pill-icon" aria-hidden="true">
               <LinearIssueEstimateIcon />

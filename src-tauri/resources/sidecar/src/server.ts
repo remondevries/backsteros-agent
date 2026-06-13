@@ -82,6 +82,7 @@ import {
 import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
 import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
 import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
+import { fetchLinearIssuesByDueDates } from "./linear/issues-by-due-date.ts";
 import {
   getLinearProjectWatcherConfig,
   getLinearProjectWatchersMap,
@@ -1237,6 +1238,38 @@ app.get("/linear/today", async (c) => {
   }
 });
 
+app.post("/linear/issues/by-due-dates", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        issuesByDueDate: {},
+      },
+      400,
+    );
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { dueDates?: unknown };
+  if (!Array.isArray(body.dueDates)) {
+    return c.json({ error: "dueDates must be an array", issuesByDueDate: {} }, 400);
+  }
+
+  const dueDates = body.dueDates
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+  if (dueDates.length > 120) {
+    return c.json({ error: "dueDates cannot contain more than 120 values", issuesByDueDate: {} }, 400);
+  }
+
+  try {
+    const issuesByDueDate = await fetchLinearIssuesByDueDates(dueDates);
+    return c.json({ issuesByDueDate });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear issues";
+    return c.json({ error: message, issuesByDueDate: {} }, 500);
+  }
+});
+
 app.get("/vault/daily-note/today", async (c) => {
   const notesPath = resolveNotesPath();
 
@@ -1762,10 +1795,11 @@ function sanitizeWorkspaceFolderPart(input: string): string {
     .replace(/^[-.]+|[-.]+$/g, "");
 }
 
-function buildIssueWorkspaceFolderName(projectName: string, issueIdentifier: string): string {
+function buildIssueWorkspaceRelativePath(projectName: string, issueIdentifier: string): string {
   const safeProject = sanitizeWorkspaceFolderPart(projectName) || "project";
   const safeIssue = sanitizeWorkspaceFolderPart(issueIdentifier) || "issue";
-  return `${safeProject}-${safeIssue}`;
+  // Nested layout: <projects>/<project-name>/<issue-id>.
+  return join(safeProject, safeIssue);
 }
 
 function listRecentDailyNotes(notesPath: string, limit = 7): MarkdownFileEntity[] {
@@ -2861,7 +2895,7 @@ app.post("/workspace/issue-terminal-directory", async (c) => {
     );
   }
 
-  const folderName = buildIssueWorkspaceFolderName(projectName, issueIdentifier);
+  const folderName = buildIssueWorkspaceRelativePath(projectName, issueIdentifier);
   const path = join(projectsPath, folderName);
 
   try {

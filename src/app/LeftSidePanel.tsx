@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { APP_VIEWS, type AppView } from "./appViews";
 import {
   SIDEBAR_PRIMARY_ITEMS,
@@ -14,21 +14,23 @@ function LeftSidePanelNavItem({
   label,
   icon,
   active,
+  className,
   onClick,
 }: {
   label: string;
   icon: ReactNode;
   active?: boolean;
+  className?: string;
   onClick: () => void;
 }) {
-  const className = ["left-side-panel-item", active ? "left-side-panel-item-active" : null]
+  const itemClassName = ["left-side-panel-item", active ? "left-side-panel-item-active" : null, className]
     .filter(Boolean)
     .join(" ");
 
   return (
     <button
       type="button"
-      className={className}
+      className={itemClassName}
       aria-current={active ? "page" : undefined}
       onClick={onClick}
     >
@@ -92,6 +94,8 @@ export function LeftSidePanel({
     workspace: true,
     people: true,
   });
+  const [systemsMenuOpen, setSystemsMenuOpen] = useState(false);
+  const systemsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections((current) => ({
@@ -99,6 +103,31 @@ export function LeftSidePanel({
       [sectionId]: !current[sectionId],
     }));
   };
+
+  useEffect(() => {
+    if (!systemsMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!systemsMenuRef.current || (target && systemsMenuRef.current.contains(target))) {
+        return;
+      }
+      setSystemsMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSystemsMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [systemsMenuOpen]);
 
   if (settingsOpen) {
     return (
@@ -115,11 +144,76 @@ export function LeftSidePanel({
     <nav className="left-side-panel" aria-label="Main navigation">
       <div className="left-side-panel-scroll">
         <div className="left-side-panel-inner">
-          <header className="left-side-panel-profile">
-            <span className="left-side-panel-profile-logo">
-              <BacksterIcon size={16} />
-            </span>
-            <span className="left-side-panel-profile-name">Backster OS</span>
+          <header className="left-side-panel-profile" ref={systemsMenuRef}>
+            <button
+              type="button"
+              className={[
+                "left-side-panel-profile-trigger",
+                systemsMenuOpen ? "left-side-panel-profile-trigger-open" : null,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-haspopup="menu"
+              aria-expanded={systemsMenuOpen}
+              aria-label="Open systems menu"
+              onClick={() => setSystemsMenuOpen((current) => !current)}
+            >
+              <span className="left-side-panel-profile-logo">
+                <BacksterIcon size={16} />
+              </span>
+              <span className="left-side-panel-profile-name">Backster OS</span>
+              <svg
+                className={[
+                  "left-side-panel-profile-trigger-chevron",
+                  systemsMenuOpen ? "left-side-panel-profile-trigger-chevron-open" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <polyline
+                  points="6 9 12 15 18 9"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+
+            {systemsMenuOpen ? (
+              <div className="left-side-panel-profile-menu" role="menu" aria-label="Systems menu">
+                <LeftSidePanelNavItem
+                  label="Settings"
+                  icon={<SidebarSettingsIcon />}
+                  className="left-side-panel-profile-menu-item"
+                  onClick={() => {
+                    setSystemsMenuOpen(false);
+                    onOpenSettings();
+                  }}
+                />
+                <div className="left-side-panel-profile-menu-divider" />
+                <div className="left-side-panel-profile-menu-section">
+                  {APP_VIEWS.map((view) => (
+                    <LeftSidePanelNavItem
+                      key={view.id}
+                      label={view.label}
+                      icon={view.icon}
+                      active={activeView === view.id}
+                      className="left-side-panel-profile-menu-item"
+                      onClick={() => {
+                        onVaultNavItemChange(null);
+                        onChange(view.id);
+                        setSystemsMenuOpen(false);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </header>
 
           <div className="left-side-panel-list">
@@ -154,32 +248,6 @@ export function LeftSidePanel({
           </div>
         </div>
       </div>
-
-      <footer className="left-side-panel-systems" aria-label="Systems">
-        <div className="left-side-panel-section-toggle left-side-panel-systems-heading" aria-hidden>
-          <span className="left-side-panel-section-label">Systems</span>
-        </div>
-        <div className="left-side-panel-systems-list">
-          {APP_VIEWS.map((view) => (
-            <LeftSidePanelNavItem
-              key={view.id}
-              label={view.label}
-              icon={view.icon}
-              active={activeView === view.id}
-              onClick={() => {
-                onVaultNavItemChange(null);
-                onChange(view.id);
-              }}
-            />
-          ))}
-          <LeftSidePanelNavItem
-            label="Settings"
-            icon={<SidebarSettingsIcon />}
-            active={false}
-            onClick={onOpenSettings}
-          />
-        </div>
-      </footer>
     </nav>
   );
 }

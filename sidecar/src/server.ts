@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { cors } from "hono/cors";
 import { bearerAuth } from "hono/bearer-auth";
 import { HTTPException } from "hono/http-exception";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -82,6 +82,7 @@ import {
 import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
 import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
 import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
+import { fetchLinearIssuesByDueDates } from "./linear/issues-by-due-date.ts";
 import {
   getLinearProjectWatcherConfig,
   getLinearProjectWatchersMap,
@@ -227,6 +228,32 @@ import { loadTtsModule, loadSttModule } from "./speech-modules.ts";
 
 const token = getSidecarToken();
 const port = getSidecarPort();
+const SIDECAR_RUNTIME_ID = `${Date.now()}-${process.pid}`;
+
+function readSidecarVersion(): string | null {
+  try {
+    const raw = readFileSync(join(import.meta.dir, "..", "package.json"), "utf8");
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    const version =
+      typeof parsed.version === "string" ? parsed.version.trim() : "";
+    return version.length > 0 ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+function readSidecarBuildId(): string {
+  try {
+    const serverFilePath = join(import.meta.dir, "server.ts");
+    const mtimeMs = statSync(serverFilePath).mtimeMs;
+    return String(Math.floor(mtimeMs));
+  } catch {
+    return "unknown";
+  }
+}
+
+const SIDECAR_VERSION = readSidecarVersion();
+const SIDECAR_BUILD_ID = readSidecarBuildId();
 
 function isBenignSdkStreamError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -394,6 +421,9 @@ app.get("/healthz", (c) => {
     hasGoogleCalendarAuth: isGoogleCalendarAuthenticated(),
     hasWhoopConfigured: isWhoopConfigured(),
     hasWhoopAuth: isWhoopAuthenticated(),
+    sidecarRuntimeId: SIDECAR_RUNTIME_ID,
+    sidecarVersion: SIDECAR_VERSION,
+    sidecarBuildId: SIDECAR_BUILD_ID,
   });
 });
 
@@ -1203,6 +1233,28 @@ app.get("/whoop/today", async (c) => {
   }
 });
 
+app.get("/whoop/day", async (c) => {
+  if (!isWhoopAuthenticated()) {
+    return c.json({ authenticated: false, snapshot: null });
+  }
+
+  const date = c.req.query("date")?.trim() ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ error: "date must be YYYY-MM-DD" }, 400);
+  }
+
+  try {
+    const snapshot = await fetchWhoopTodaySnapshot({
+      includeStrainDeepDive: true,
+      date,
+    });
+    return c.json({ authenticated: true, snapshot });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Whoop data";
+    return c.json({ authenticated: true, snapshot: null, error: message }, 500);
+  }
+});
+
 app.get("/linear/today", async (c) => {
   const configured = Boolean(getLinearApiKey());
   const dueDate = resolveMorningReviewDueDate();
@@ -1234,6 +1286,38 @@ app.get("/linear/today", async (c) => {
       },
       500,
     );
+  }
+});
+
+app.post("/linear/issues/by-due-dates", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        issuesByDueDate: {},
+      },
+      400,
+    );
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { dueDates?: unknown };
+  if (!Array.isArray(body.dueDates)) {
+    return c.json({ error: "dueDates must be an array", issuesByDueDate: {} }, 400);
+  }
+
+  const dueDates = body.dueDates
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+  if (dueDates.length > 120) {
+    return c.json({ error: "dueDates cannot contain more than 120 values", issuesByDueDate: {} }, 400);
+  }
+
+  try {
+    const issuesByDueDate = await fetchLinearIssuesByDueDates(dueDates);
+    return c.json({ issuesByDueDate });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear issues";
+    return c.json({ error: message, issuesByDueDate: {} }, 500);
   }
 });
 
@@ -1762,10 +1846,11 @@ function sanitizeWorkspaceFolderPart(input: string): string {
     .replace(/^[-.]+|[-.]+$/g, "");
 }
 
-function buildIssueWorkspaceFolderName(projectName: string, issueIdentifier: string): string {
+function buildIssueWorkspaceRelativePath(projectName: string, issueIdentifier: string): string {
   const safeProject = sanitizeWorkspaceFolderPart(projectName) || "project";
   const safeIssue = sanitizeWorkspaceFolderPart(issueIdentifier) || "issue";
-  return `${safeProject}-${safeIssue}`;
+  // Nested layout: <projects>/<project-name>/<issue-id>.
+  return join(safeProject, safeIssue);
 }
 
 function listRecentDailyNotes(notesPath: string, limit = 7): MarkdownFileEntity[] {
@@ -2861,7 +2946,7 @@ app.post("/workspace/issue-terminal-directory", async (c) => {
     );
   }
 
-  const folderName = buildIssueWorkspaceFolderName(projectName, issueIdentifier);
+  const folderName = buildIssueWorkspaceRelativePath(projectName, issueIdentifier);
   const path = join(projectsPath, folderName);
 
   try {

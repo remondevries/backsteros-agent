@@ -2,13 +2,13 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use portable_pty::{native_pty_system, ChildKiller, MasterPty, PtySize};
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Emitter};
 
-use super::agent_detect::AgentDetector;
+use super::agent_detect::{AgentDetector, Transition};
 use super::da_filter::DaFilter;
 use super::shell_init;
 
@@ -29,6 +29,13 @@ const MAX_PENDING: usize = 4 * 1024 * 1024;
 // we're forced to discard backlog.
 const OVERFLOW_NOTICE: &[u8] =
     b"\x1bc\x1b[2m[backsteros: dropped output due to backpressure]\x1b[0m\r\n";
+
+fn unix_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 pub struct Session {
     // Field drop order is intentional. Rust drops fields top-to-bottom:
@@ -176,6 +183,8 @@ pub fn spawn(
             let mut filtered: Vec<u8> = Vec::with_capacity(READ_BUF);
             let mut da_filter = DaFilter::new();
             let mut agent_detect = AgentDetector::new();
+            let mut agent_seq: u64 = 0;
+            let mut agent_run_id: u64 = 0;
             let mut dropped_bytes: u64 = 0;
             loop {
                 match reader.read(&mut buf) {
@@ -186,7 +195,18 @@ pub fn spawn(
                             log::debug!("pty first byte after {}ms", spawn_at.elapsed().as_millis());
                         }
                         agent_detect.process(&buf[..n], |t| {
-                            let _ = app_reader.emit(AGENT_EVENT, t.into_signal(id));
+                            agent_seq = agent_seq.saturating_add(1);
+                            if matches!(t, Transition::Started { .. }) {
+                                agent_run_id = agent_run_id.saturating_add(1);
+                            } else if agent_run_id == 0 {
+                                // Fallback for unusual marker ordering where the
+                                // first signal is not a detected start command.
+                                agent_run_id = 1;
+                            }
+                            let _ = app_reader.emit(
+                                AGENT_EVENT,
+                                t.into_signal(id, agent_run_id, agent_seq, unix_time_ms()),
+                            );
                         });
                         filtered.clear();
                         da_filter.process(&buf[..n], &mut filtered, |reply| {
@@ -214,7 +234,14 @@ pub fn spawn(
                 }
             }
             agent_detect.finish(|t| {
-                let _ = app_reader.emit(AGENT_EVENT, t.into_signal(id));
+                agent_seq = agent_seq.saturating_add(1);
+                if agent_run_id == 0 {
+                    agent_run_id = 1;
+                }
+                let _ = app_reader.emit(
+                    AGENT_EVENT,
+                    t.into_signal(id, agent_run_id, agent_seq, unix_time_ms()),
+                );
             });
             pending_r.1.notify_one();
             if dropped_bytes > 0 {

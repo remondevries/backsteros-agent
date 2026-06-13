@@ -29,6 +29,7 @@ export function buildContentPanelBreadcrumbSegments(options: {
   onClearActiveVaultDocument?: () => void;
   onClearActiveLinearDocument?: () => void;
   onClearActiveLinearIssue?: () => void;
+  onActivateNavItem?: (item: SidebarNavItemId) => void;
   linearWorkspaceView?: LinearWorkspaceViewId | null;
 }): ContentPanelBreadcrumbSegment[] {
   const {
@@ -45,6 +46,7 @@ export function buildContentPanelBreadcrumbSegments(options: {
     onClearActiveVaultDocument,
     onClearActiveLinearDocument,
     onClearActiveLinearIssue,
+    onActivateNavItem,
     linearWorkspaceView,
   } = options;
 
@@ -57,9 +59,14 @@ export function buildContentPanelBreadcrumbSegments(options: {
   }
 
   const rootSegments: ContentPanelBreadcrumbSegment[] = activeVaultNavItem
-    ? activeVaultNavItem === "projects"
-      ? [{ id: "nav-projects", label: "Projects", kind: "linear-logo" }]
-      : [{ id: `nav-${activeVaultNavItem}`, label: sidebarNavItemLabel(activeVaultNavItem) }]
+    ? [
+        {
+          id: `nav-${activeVaultNavItem}`,
+          label: sidebarNavItemLabel(activeVaultNavItem),
+          navItemId: activeVaultNavItem,
+          ...(onActivateNavItem ? { onActivate: () => onActivateNavItem(activeVaultNavItem) } : {}),
+        },
+      ]
     : [{ id: "explorer", label: "Explorer" }];
 
   const viewDefinition = APP_VIEWS.find((view) => view.id === activeView);
@@ -119,6 +126,13 @@ export function buildContentPanelBreadcrumbSegments(options: {
   }
 
   if (activeLinearIssue) {
+    if (activeLinearIssue.sourceVaultDocumentPath && activeLinearIssue.sourceVaultDocumentTitle) {
+      contentSegments.push({
+        id: `vault-doc-${activeLinearIssue.sourceVaultDocumentPath}`,
+        label: activeLinearIssue.sourceVaultDocumentTitle,
+      });
+    }
+
     contentSegments.push({
       id: `linear-issue-${activeLinearIssue.id}`,
       label: `${activeLinearIssue.identifier} ${activeLinearIssue.title}`,

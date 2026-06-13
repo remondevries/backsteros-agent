@@ -1,33 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import type { WhoopSnapshotEntity } from "../chat/types";
-import { fetchVaultDailyNoteToday, fetchWhoopToday, type VaultDocumentContent } from "../lib/api";
-import { whoopSnapshotFromStats } from "../lib/whoopSnapshotFromStats";
+import { fetchWhoopDay, type VaultDocumentContent } from "../lib/api";
 
 export function useVaultDocumentWhoopSnapshot(
   document: VaultDocumentContent | null,
-  options?: { refreshKey?: number; expectedPath?: string },
+  options?: { refreshKey?: number; expectedPath?: string; expectedDate?: string | null },
 ) {
   const [liveSnapshot, setLiveSnapshot] = useState<WhoopSnapshotEntity | null>(null);
   const [loadingLive, setLoadingLive] = useState(false);
   const expectedPath = options?.expectedPath ?? null;
+  const expectedDate = options?.expectedDate?.trim() || null;
   const documentPath = document?.path ?? null;
-  const documentDate = document?.date ?? null;
+  const frontmatterDate = document?.date?.trim() || null;
   const pathMatches = !expectedPath || expectedPath === documentPath;
-
-  const frontmatterSnapshot = useMemo(() => {
-    if (!pathMatches || !document?.date || !document.whoop) return null;
-    return whoopSnapshotFromStats(document.date, document.whoop);
-  }, [documentDate, document?.whoop, pathMatches]);
+  const fetchDate = pathMatches ? frontmatterDate : null;
+  const displayDate = fetchDate ?? expectedDate;
   const datedFallbackSnapshot = useMemo<WhoopSnapshotEntity | null>(() => {
-    if (!pathMatches || !documentDate) return null;
+    if (!displayDate) return null;
     return {
-      id: `whoop-${documentDate}`,
-      date: documentDate,
+      id: `whoop-${displayDate}`,
+      date: displayDate,
       sleepPerformance: null,
       recoveryScore: null,
       strainScore: null,
     };
-  }, [documentDate, pathMatches]);
+  }, [displayDate]);
 
   useEffect(() => {
     if (!pathMatches) {
@@ -36,7 +33,7 @@ export function useVaultDocumentWhoopSnapshot(
       return;
     }
 
-    if (frontmatterSnapshot || !documentDate) {
+    if (!fetchDate) {
       setLiveSnapshot(null);
       setLoadingLive(false);
       return;
@@ -49,16 +46,12 @@ export function useVaultDocumentWhoopSnapshot(
 
     void (async () => {
       try {
-        const today = await fetchVaultDailyNoteToday();
-        if (cancelled || today.note.date !== documentDate) {
-          return;
-        }
-
-        const whoop = await fetchWhoopToday(
+        const whoop = await fetchWhoopDay(
+          fetchDate,
           options?.refreshKey ? { force: true } : undefined,
         );
         if (!cancelled) {
-          setLiveSnapshot(whoop.snapshot);
+          setLiveSnapshot(whoop.snapshot ?? null);
         }
       } finally {
         if (!cancelled) {
@@ -70,10 +63,10 @@ export function useVaultDocumentWhoopSnapshot(
     return () => {
       cancelled = true;
     };
-  }, [documentDate, documentPath, frontmatterSnapshot, options?.refreshKey, pathMatches]);
+  }, [documentPath, fetchDate, options?.refreshKey, pathMatches]);
 
   return {
-    snapshot: pathMatches ? frontmatterSnapshot ?? liveSnapshot ?? datedFallbackSnapshot : null,
-    loading: pathMatches ? loadingLive && !frontmatterSnapshot : false,
+    snapshot: pathMatches ? liveSnapshot ?? datedFallbackSnapshot : datedFallbackSnapshot,
+    loading: pathMatches ? loadingLive : false,
   };
 }

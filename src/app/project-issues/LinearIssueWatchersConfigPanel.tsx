@@ -9,6 +9,9 @@ import {
   subscribeToLinearWatcherActivityLog,
   type LinearWatcherActivityLogEntry,
 } from "../../lib/linearWatcherActivityLog";
+import { CursorIcon } from "../../chat/CursorIcon";
+import { LinearIcon } from "../../chat/LinearIcon";
+import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { ResizablePanel } from "../ResizablePanel";
 
 const LINEAR_WATCHER_SETTINGS_WIDTH_KEY = "backsteros.layout.linearWatcherSettingsWidth";
@@ -38,23 +41,107 @@ function formatWatcherLogTimestamp(value: string): string {
   return date.toLocaleString();
 }
 
+function normalizeStatusLabel(status?: string): string | null {
+  const value = status?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
+function statusAtDetection(entry: LinearWatcherActivityLogEntry): string | null {
+  return (
+    normalizeStatusLabel(entry.currentStatus) ??
+    normalizeStatusLabel(entry.issueStatus) ??
+    normalizeStatusLabel(entry.previousStatus)
+  );
+}
+
+function isStatusTransitionEntry(entry: LinearWatcherActivityLogEntry): boolean {
+  return (
+    entry.source === "watcher" &&
+    entry.changeKind === "status_changed" &&
+    Boolean(normalizeStatusLabel(entry.previousStatus) || normalizeStatusLabel(entry.currentStatus))
+  );
+}
+
+function StatusToken({
+  status,
+  stateType,
+}: {
+  status?: string | null;
+  stateType?: string;
+}) {
+  const statusLabel = normalizeStatusLabel(status ?? undefined);
+  if (!statusLabel) return null;
+  return (
+    <span className="linear-issue-watchers-log-status-token" title={statusLabel}>
+      <LinearStatusIcon status={statusLabel} stateType={stateType} title={statusLabel} />
+    </span>
+  );
+}
+
 function WatcherLogList({ entries }: { entries: LinearWatcherActivityLogEntry[] }) {
   return (
     <ol className="linear-issue-watchers-log-list" aria-live="polite">
       {entries.map((entry) => (
-        <li key={entry.id} className="linear-issue-watchers-log-item">
-          <div className="linear-issue-watchers-log-item-header">
-            <span className="linear-issue-watchers-log-item-identifier">{entry.identifier}</span>
-            <time
-              className="linear-issue-watchers-log-item-time"
-              dateTime={entry.detectedAt}
-              title={entry.detectedAt}
-            >
-              {formatWatcherLogTimestamp(entry.detectedAt)}
-            </time>
+        <li
+          key={entry.id}
+          className={[
+            "linear-issue-watchers-log-item",
+            entry.source === "agent" ? "linear-issue-watchers-log-item--agent" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <time
+            className="linear-issue-watchers-log-item-time"
+            dateTime={entry.detectedAt}
+            title={entry.detectedAt}
+          >
+            {formatWatcherLogTimestamp(entry.detectedAt)}
+          </time>
+          <div className="linear-issue-watchers-log-item-content">
+            <div className="linear-issue-watchers-log-item-flow">
+              <span className="linear-issue-watchers-log-source-icon-shell" aria-hidden="true">
+                {entry.source === "agent" ? (
+                  <CursorIcon className="linear-issue-watchers-log-source-icon" size={14} />
+                ) : (
+                  <LinearIcon className="linear-issue-watchers-log-source-icon" size={14} />
+                )}
+              </span>
+              {isStatusTransitionEntry(entry) ? (
+                <>
+                  <StatusToken status={entry.previousStatus ?? null} />
+                  <span className="linear-issue-watchers-log-arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <StatusToken
+                    status={entry.currentStatus ?? statusAtDetection(entry)}
+                    stateType={entry.issueStateType}
+                  />
+                </>
+              ) : (
+                <>
+                  <span className="linear-issue-watchers-log-arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <StatusToken
+                    status={statusAtDetection(entry)}
+                    stateType={entry.issueStateType}
+                  />
+                </>
+              )}
+              <span className="linear-issue-watchers-log-item-identifier">{entry.identifier}</span>
+              <span className="linear-issue-watchers-log-item-title">{entry.title}</span>
+            </div>
+            {entry.summary.trim().length > 0 &&
+            !(
+              (isStatusTransitionEntry(entry) ||
+                Boolean(statusAtDetection(entry)) ||
+                entry.source === "agent") &&
+              entry.changeKind !== "updated"
+            ) ? (
+              <p className="linear-issue-watchers-log-item-summary">{entry.summary}</p>
+            ) : null}
           </div>
-          <p className="linear-issue-watchers-log-item-summary">{entry.summary}</p>
-          <p className="linear-issue-watchers-log-item-title">{entry.title}</p>
         </li>
       ))}
     </ol>
@@ -276,7 +363,8 @@ export function LinearIssueWatchersConfigPanel({
             {logEntries.length > 0 ? (
               <>
                 <p className="linear-issue-watchers-log-count">
-                  Showing {visibleLogEntries.length} of {logEntries.length} recent watcher events.
+                  Showing {visibleLogEntries.length} of {logEntries.length} recent watcher and agent
+                  events.
                 </p>
                 <WatcherLogList entries={visibleLogEntries} />
                 {canLoadMoreLogs ? (
@@ -297,7 +385,7 @@ export function LinearIssueWatchersConfigPanel({
               </>
             ) : (
               <div className="linear-issue-watchers-log-empty" aria-live="polite">
-                <p>Watcher activity will appear here.</p>
+                <p>Watcher and agent activity will appear here.</p>
               </div>
             )}
           </div>

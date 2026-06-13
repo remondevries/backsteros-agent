@@ -83,11 +83,20 @@ function AppMainShell({
 
   const handleVaultNavItemChange = useCallback(
     (item: SidebarNavItemId | null) => {
-      const switchingNavItem = item !== activeVaultNavItem;
-      if (switchingNavItem) {
-        // Always reset focused content when moving between nav destinations.
+      const reclickingCurrent = item !== null && item === activeVaultNavItem;
+      if (item !== activeVaultNavItem || reclickingCurrent) {
+        // Reset focused content when moving between nav destinations, and also
+        // when re-selecting the current one, so the area opens at its start.
         clearActiveVaultDocument();
         resetProjectsOverview();
+      }
+      if (reclickingCurrent) {
+        // Re-clicking the active nav item sends the user all the way back to the
+        // start of that area (e.g. Projects). Toggle through null so the
+        // destination panes remount even though the nav id is unchanged.
+        onVaultNavItemChange(null);
+        window.requestAnimationFrame(() => onVaultNavItemChange(item));
+        return;
       }
       onVaultNavItemChange(item);
     },

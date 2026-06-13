@@ -3,18 +3,30 @@ import type { LinearWatcherChangeEvent, LinearWatcherChangeKind } from "./notifi
 const WATCHER_ACTIVITY_LOG_STORAGE_KEY = "backsteros.linear-watcher.activity-log.v1";
 export const WATCHER_ACTIVITY_LOG_MAX_ENTRIES = 2500;
 
+export type LinearActivityLogSource = "watcher" | "agent";
+
+export type TerminalAgentLogState =
+  | "working"
+  | "approval"
+  | "finished"
+  | "exited";
+
 export type LinearWatcherActivityLogEntry = {
   id: string;
+  source: LinearActivityLogSource;
   projectId: string;
   projectName: string;
   issueId: string;
   identifier: string;
   title: string;
   summary: string;
-  changeKind: LinearWatcherChangeKind;
+  changeKind?: LinearWatcherChangeKind;
+  agentState?: TerminalAgentLogState;
   detectedAt: string;
   previousStatus?: string;
   currentStatus?: string;
+  issueStatus?: string;
+  issueStateType?: string;
 };
 
 const logListeners = new Set<(entry: LinearWatcherActivityLogEntry) => void>();
@@ -42,23 +54,31 @@ function normalizeLogEntry(value: unknown): LinearWatcherActivityLogEntry | null
     typeof entry.identifier !== "string" ||
     typeof entry.title !== "string" ||
     typeof entry.summary !== "string" ||
-    typeof entry.changeKind !== "string" ||
     typeof entry.detectedAt !== "string"
   ) {
     return null;
   }
+  const source: LinearActivityLogSource = entry.source === "agent" ? "agent" : "watcher";
   return {
     id: entry.id,
+    source,
     projectId: entry.projectId,
     projectName: entry.projectName,
     issueId: entry.issueId,
     identifier: entry.identifier,
     title: entry.title,
     summary: entry.summary,
-    changeKind: entry.changeKind as LinearWatcherChangeKind,
     detectedAt: entry.detectedAt,
+    ...(typeof entry.changeKind === "string"
+      ? { changeKind: entry.changeKind as LinearWatcherChangeKind }
+      : {}),
+    ...(typeof entry.agentState === "string"
+      ? { agentState: entry.agentState as TerminalAgentLogState }
+      : {}),
     ...(typeof entry.previousStatus === "string" ? { previousStatus: entry.previousStatus } : {}),
     ...(typeof entry.currentStatus === "string" ? { currentStatus: entry.currentStatus } : {}),
+    ...(typeof entry.issueStatus === "string" ? { issueStatus: entry.issueStatus } : {}),
+    ...(typeof entry.issueStateType === "string" ? { issueStateType: entry.issueStateType } : {}),
   };
 }
 
@@ -125,6 +145,7 @@ export function appendLinearWatcherActivityLog(
 
   const nextEntry: LinearWatcherActivityLogEntry = {
     id,
+    source: "watcher",
     projectId: event.projectId,
     projectName: event.projectName,
     issueId: event.issueId,
@@ -135,6 +156,54 @@ export function appendLinearWatcherActivityLog(
     detectedAt: event.detectedAt,
     ...(event.previousStatus ? { previousStatus: event.previousStatus } : {}),
     ...(event.currentStatus ? { currentStatus: event.currentStatus } : {}),
+    ...(event.currentStatus ? { issueStatus: event.currentStatus } : {}),
+  };
+
+  entries.push(nextEntry);
+  if (entries.length > WATCHER_ACTIVITY_LOG_MAX_ENTRIES) {
+    entries.splice(0, entries.length - WATCHER_ACTIVITY_LOG_MAX_ENTRIES);
+  }
+  persistEntries(entries);
+  emitLogEntry(nextEntry);
+  return nextEntry;
+}
+
+export type TerminalAgentActivityLogInput = {
+  projectId: string;
+  projectName: string;
+  issueId: string;
+  identifier: string;
+  title: string;
+  summary: string;
+  agentState: TerminalAgentLogState;
+  detectedAt: string;
+  issueStatus?: string;
+  issueStateType?: string;
+};
+
+export function appendTerminalAgentActivityLog(
+  input: TerminalAgentActivityLogInput,
+): LinearWatcherActivityLogEntry {
+  const entries = ensureEntriesLoaded();
+  const id = `agent:${input.issueId}:${input.agentState}:${input.detectedAt}`;
+  const duplicate = entries.find((entry) => entry.id === id);
+  if (duplicate) {
+    return duplicate;
+  }
+
+  const nextEntry: LinearWatcherActivityLogEntry = {
+    id,
+    source: "agent",
+    projectId: input.projectId,
+    projectName: input.projectName,
+    issueId: input.issueId,
+    identifier: input.identifier,
+    title: input.title,
+    summary: input.summary,
+    agentState: input.agentState,
+    detectedAt: input.detectedAt,
+    ...(input.issueStatus ? { issueStatus: input.issueStatus } : {}),
+    ...(input.issueStateType ? { issueStateType: input.issueStateType } : {}),
   };
 
   entries.push(nextEntry);

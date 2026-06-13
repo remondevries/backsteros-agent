@@ -1,5 +1,6 @@
 import type { ContentPanelBreadcrumbSegment } from "./contentPanelNavigation";
 import { LinearIcon } from "../chat/LinearIcon";
+import { sidebarNavItemIcon } from "./sidebarNavConfig";
 
 function BreadcrumbSegmentContent({
   segment,
@@ -9,7 +10,7 @@ function BreadcrumbSegmentContent({
   isLast: boolean;
 }) {
   if (segment.kind === "linear-logo") {
-    return (
+    const content = (
       <span className="content-panel-breadcrumb-logo" title={segment.label}>
         <span className="content-panel-breadcrumb-icon">
           <LinearIcon size={14} />
@@ -22,18 +23,56 @@ function BreadcrumbSegmentContent({
         </span>
       </span>
     );
+
+    if (segment.onActivate && !isLast) {
+      return (
+        <button
+          type="button"
+          className="content-panel-breadcrumb-button"
+          onClick={segment.onActivate}
+        >
+          {content}
+        </button>
+      );
+    }
+
+    return (
+      content
+    );
   }
 
-  if (segment.onActivate && !isLast) {
+  const breadcrumbLabelClass = isLast
+    ? "content-panel-breadcrumb-current"
+    : "content-panel-breadcrumb-logo-label";
+  const content = (
+    <span className="content-panel-breadcrumb-logo" title={segment.label}>
+      {segment.navItemId ? (
+        <span className="content-panel-breadcrumb-icon" aria-hidden="true">
+          {sidebarNavItemIcon(segment.navItemId)}
+        </span>
+      ) : null}
+      <span className={breadcrumbLabelClass} aria-current={isLast ? "page" : undefined}>
+        {segment.label}
+      </span>
+    </span>
+  );
+
+  const allowRootNavActivate = Boolean(segment.navItemId);
+
+  if (segment.onActivate && (!isLast || allowRootNavActivate)) {
     return (
       <button
         type="button"
         className="content-panel-breadcrumb-button"
         onClick={segment.onActivate}
       >
-        {segment.label}
+        {content}
       </button>
     );
+  }
+
+  if (segment.navItemId) {
+    return content;
   }
 
   return (

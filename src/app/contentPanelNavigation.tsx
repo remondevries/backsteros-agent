@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { isLinearWorkspaceViewIdForKind, type LinearWorkspaceViewId } from "./linearProjectViews";
 
@@ -46,6 +47,14 @@ function parsePersistedLinearIssue(value: unknown): ActiveLinearIssue | undefine
     title,
     status: typeof candidate.status === "string" ? candidate.status : undefined,
     stateType: typeof candidate.stateType === "string" ? candidate.stateType : undefined,
+    sourceVaultDocumentPath:
+      typeof candidate.sourceVaultDocumentPath === "string"
+        ? candidate.sourceVaultDocumentPath
+        : undefined,
+    sourceVaultDocumentTitle:
+      typeof candidate.sourceVaultDocumentTitle === "string"
+        ? candidate.sourceVaultDocumentTitle
+        : undefined,
   };
 }
 
@@ -111,6 +120,7 @@ export type ContentPanelBreadcrumbSegment = {
   id: string;
   label: string;
   kind?: "linear-logo";
+  navItemId?: SidebarNavItemId;
   onActivate?: () => void;
 };
 
@@ -125,6 +135,8 @@ export type ActiveLinearIssue = {
   title: string;
   status?: string;
   stateType?: string;
+  sourceVaultDocumentPath?: string;
+  sourceVaultDocumentTitle?: string;
 };
 
 export type ActiveLinearDocument = {

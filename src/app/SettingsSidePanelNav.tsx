@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
   isSettingsTabConnected,
@@ -6,6 +7,13 @@ import {
 import { SettingsConnectionDot } from "../settings/SettingsConnectionDot";
 import { useIntegrationsStatus } from "../settings/useIntegrationsStatus";
 import { SidebarChevronIcon } from "./SidebarNavIcons";
+
+type SettingsNavSectionId = "general" | "integration";
+
+const SETTINGS_NAV_SECTION_LABEL: Record<SettingsNavSectionId, string> = {
+  general: "General",
+  integration: "Integrations",
+};
 
 function SettingsNavItem({
   label,
@@ -41,6 +49,33 @@ function SettingsNavItem({
   );
 }
 
+function SettingsNavSection({
+  label,
+  expanded,
+  onToggle,
+  children,
+}: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="left-side-panel-section">
+      <button
+        type="button"
+        className="left-side-panel-section-toggle"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        <span className="left-side-panel-section-label">{label}</span>
+        <SidebarChevronIcon className="left-side-panel-section-chevron" expanded={expanded} />
+      </button>
+      {expanded ? <div className="left-side-panel-section-items">{children}</div> : null}
+    </div>
+  );
+}
+
 export function SettingsSidePanelNav({
   activeTab,
   onTabChange,
@@ -53,9 +88,17 @@ export function SettingsSidePanelNav({
   savedNotesPath: string | null;
 }) {
   const { status: integrationsStatus } = useIntegrationsStatus(true);
+  const [expandedSections, setExpandedSections] = useState<Record<SettingsNavSectionId, boolean>>({
+    general: true,
+    integration: true,
+  });
   const connectionContext = {
     integrationsStatus,
     savedNotesPath,
+  };
+  const settingsTabsBySection: Record<SettingsNavSectionId, typeof SETTINGS_TABS> = {
+    general: SETTINGS_TABS.filter((tab) => tab.group === "general"),
+    integration: SETTINGS_TABS.filter((tab) => tab.group === "integration"),
   };
 
   return (
@@ -77,21 +120,35 @@ export function SettingsSidePanelNav({
           </header>
 
           <div className="left-side-panel-list">
-            {SETTINGS_TABS.map((tab) => {
-              const showConnectionDot =
-                tabShowsConnectionIndicator(tab.id) &&
-                isSettingsTabConnected(tab.id, connectionContext);
+            {(Object.keys(settingsTabsBySection) as SettingsNavSectionId[]).map((sectionId) => (
+              <SettingsNavSection
+                key={sectionId}
+                label={SETTINGS_NAV_SECTION_LABEL[sectionId]}
+                expanded={expandedSections[sectionId]}
+                onToggle={() => {
+                  setExpandedSections((current) => ({
+                    ...current,
+                    [sectionId]: !current[sectionId],
+                  }));
+                }}
+              >
+                {settingsTabsBySection[sectionId].map((tab) => {
+                  const showConnectionDot =
+                    tabShowsConnectionIndicator(tab.id) &&
+                    isSettingsTabConnected(tab.id, connectionContext);
 
-              return (
-                <SettingsNavItem
-                  key={tab.id}
-                  label={tab.label}
-                  active={activeTab === tab.id}
-                  showConnectionDot={showConnectionDot}
-                  onClick={() => onTabChange(tab.id)}
-                />
-              );
-            })}
+                  return (
+                    <SettingsNavItem
+                      key={tab.id}
+                      label={tab.label}
+                      active={activeTab === tab.id}
+                      showConnectionDot={showConnectionDot}
+                      onClick={() => onTabChange(tab.id)}
+                    />
+                  );
+                })}
+              </SettingsNavSection>
+            ))}
           </div>
         </div>
       </div>

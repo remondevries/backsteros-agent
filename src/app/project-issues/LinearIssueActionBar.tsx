@@ -86,7 +86,6 @@ export function LinearIssueActionBar({
   terminalSessionActive = false,
   terminalAgentWorking = false,
   terminalAgentWaiting = false,
-  terminalDebugLabel = "",
 }: {
   issue: LinearIssueDetail;
   watcherActive?: boolean;
@@ -95,7 +94,6 @@ export function LinearIssueActionBar({
   terminalSessionActive?: boolean;
   terminalAgentWorking?: boolean;
   terminalAgentWaiting?: boolean;
-  terminalDebugLabel?: string;
 }) {
   const [copiedField, setCopiedField] = useState<"id" | "branch" | null>(null);
 
@@ -142,7 +140,6 @@ export function LinearIssueActionBar({
           terminalSessionActive={terminalSessionActive}
           terminalAgentWorking={terminalAgentWorking}
           terminalAgentWaiting={terminalAgentWaiting}
-          terminalDebugLabel={terminalDebugLabel}
         />
       ) : null}
       <div className="linear-issue-action-bar__actions">
