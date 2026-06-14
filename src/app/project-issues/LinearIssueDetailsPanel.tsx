@@ -1,24 +1,29 @@
 import type { LinearIssueDetail } from "../../lib/api";
 import {
   formatLinearEstimateLabel,
-  formatLinearIssueDueDate,
 } from "../../chat/linearIssue";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { LinearProjectIcon } from "../../chat/LinearProjectIcon";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { registerLinearIssuePropertyShortcuts } from "../../lib/linearIssuePropertyShortcuts";
 import {
+  buildLinearAssigneeDropdownOptions,
   buildLinearEstimateDropdownOptions,
   buildLinearPriorityDropdownOptions,
   isLinearNoEstimateValue,
+  LINEAR_UNASSIGNED_ASSIGNEE_VALUE,
+  linearAssigneeDropdownValue,
   linearEstimateDropdownValue,
   linearPriorityDropdownValue,
 } from "../../lib/linearIssueDetailDropdowns";
-import { useMemo, type ReactNode } from "react";
+import { abbreviateGithubLabelName, githubLabelHoverTitle } from "../../lib/linearLabelDisplay";
 import { searchableDropdownShortcut } from "../ui/searchableDropdownShortcuts";
 import { SearchableDropdown, type SearchableDropdownOption } from "../ui/SearchableDropdown";
 import {
   LinearIssueDetailsPropertyDropdown,
+  LinearIssueDueDatePropertyDropdown,
   LinearIssueEstimateIcon,
   LinearIssueNoEstimateIcon,
 } from "./LinearIssueDetailsPropertyDropdown";
@@ -76,10 +81,12 @@ function LinearIssueDetailsSection({
 function LinearIssueDetailsRow({
   icon,
   label,
+  title,
   muted = false,
 }: {
   icon: ReactNode;
   label: string;
+  title?: string;
   muted?: boolean;
 }) {
   return (
@@ -94,6 +101,7 @@ function LinearIssueDetailsRow({
         ]
           .filter(Boolean)
           .join(" ")}
+        title={title}
       >
         {label}
       </span>
@@ -139,17 +147,56 @@ export function LinearIssueDetailsPanel({
   issue,
   onStatusChange,
   onPriorityChange,
+  onAssigneeChange,
   onEstimateChange,
+  onDueDateChange,
   onLabelAdd,
 }: {
   issue: LinearIssueDetail;
   onStatusChange?: (stateId: string) => void;
   onPriorityChange?: (priority: string) => void;
+  onAssigneeChange?: (assigneeId: string) => void;
   onEstimateChange?: (estimate: string) => void;
+  onDueDateChange?: (dueDate: string | null) => void;
   onLabelAdd?: (labelId: string) => void;
 }) {
+  const openStatusRef = useRef<(() => void) | null>(null);
+  const openPriorityRef = useRef<(() => void) | null>(null);
+  const openAssigneeRef = useRef<(() => void) | null>(null);
+  const openEstimateRef = useRef<(() => void) | null>(null);
+  const openLabelsRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return registerLinearIssuePropertyShortcuts({
+      openStatus: () => {
+        if (!openStatusRef.current) return false;
+        openStatusRef.current();
+        return true;
+      },
+      openPriority: () => {
+        if (!openPriorityRef.current) return false;
+        openPriorityRef.current();
+        return true;
+      },
+      openAssignee: () => {
+        if (!openAssigneeRef.current) return false;
+        openAssigneeRef.current();
+        return true;
+      },
+      openEstimate: () => {
+        if (!openEstimateRef.current) return false;
+        openEstimateRef.current();
+        return true;
+      },
+      openLabels: () => {
+        if (!openLabelsRef.current) return false;
+        openLabelsRef.current();
+        return true;
+      },
+    });
+  }, []);
+
   const priorityLabel = issue.priorityLabel || getPriorityLabel(issue.priority);
-  const dueDateLabel = formatLinearIssueDueDate(issue.dueDate);
   const estimateLabel =
     issue.estimate == null || issue.estimate <= 0
       ? "No estimate"
@@ -225,6 +272,27 @@ export function LinearIssueDetailsPanel({
     [issue.teamEstimation],
   );
 
+  const assigneeOptions = useMemo((): SearchableDropdownOption[] => {
+    return buildLinearAssigneeDropdownOptions(issue.teamMembers).map((option) => {
+      if (option.value === LINEAR_UNASSIGNED_ASSIGNEE_VALUE) {
+        return {
+          ...option,
+          icon: <span className="linear-issue-details-empty-icon" />,
+        };
+      }
+
+      const member = issue.teamMembers.find((entry) => entry.id === option.value);
+      return {
+        ...option,
+        icon: member ? (
+          <AssigneeAvatar name={member.name} avatarUrl={member.avatarUrl} />
+        ) : (
+          <span className="linear-issue-details-empty-icon" />
+        ),
+      };
+    });
+  }, [issue.teamMembers]);
+
   const labelOptions = useMemo((): SearchableDropdownOption[] => {
     const selectedLabelIds = new Set(
       issue.labels
@@ -244,7 +312,18 @@ export function LinearIssueDetailsPanel({
 
   const selectedStateId = issue.stateId ?? statusOptions[0]?.value ?? null;
   const selectedPriority = linearPriorityDropdownValue(issue.priority);
+  const selectedAssignee = linearAssigneeDropdownValue(issue.assigneeId);
   const selectedEstimate = linearEstimateDropdownValue(issue.estimate, issue.teamEstimation);
+
+  const assigneeFallbackLabel = issue.assigneeUsername ?? "Unassigned";
+  const assigneeFallbackIcon = issue.assigneeUsername ? (
+    <AssigneeAvatar
+      name={issue.assigneeName ?? issue.assigneeUsername}
+      avatarUrl={issue.assigneeAvatarUrl}
+    />
+  ) : (
+    <span className="linear-issue-details-empty-icon" />
+  );
 
   const estimateFallbackIcon = isLinearNoEstimateValue(selectedEstimate) ? (
     <LinearIssueNoEstimateIcon />
@@ -259,8 +338,11 @@ export function LinearIssueDetailsPanel({
       onChange={onLabelAdd}
       disabled={!onLabelAdd || labelOptions.length === 0}
       searchPlaceholder="Add label…"
-      searchShortcutLabel="S"
+      searchShortcutLabel="L"
       ariaLabel="Add label"
+      registerOpenMenu={(open) => {
+        openLabelsRef.current = open;
+      }}
       className="linear-issue-details-label-add-dropdown"
       panelWidth={280}
       panelAlign="end"
@@ -294,7 +376,11 @@ export function LinearIssueDetailsPanel({
           options={statusOptions}
           onChange={onStatusChange}
           searchPlaceholder="Change status…"
+          searchShortcutLabel="S"
           ariaLabel="Change status"
+          registerOpenMenu={(open) => {
+            openStatusRef.current = open;
+          }}
           fallbackIcon={
             <LinearStatusIcon
               status={issue.status}
@@ -309,13 +395,31 @@ export function LinearIssueDetailsPanel({
           options={priorityOptions}
           onChange={onPriorityChange}
           searchPlaceholder="Change priority…"
+          searchShortcutLabel="P"
           ariaLabel="Change priority"
+          registerOpenMenu={(open) => {
+            openPriorityRef.current = open;
+          }}
           fallbackIcon={
             <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
           }
           fallbackLabel={priorityLabel}
         />
-        {issue.assigneeUsername ? (
+        {assigneeOptions.length > 0 ? (
+          <LinearIssueDetailsPropertyDropdown
+            value={selectedAssignee}
+            options={assigneeOptions}
+            onChange={onAssigneeChange}
+            searchPlaceholder="Assign to…"
+            searchShortcutLabel="A"
+            ariaLabel="Change assignee"
+            registerOpenMenu={(open) => {
+              openAssigneeRef.current = open;
+            }}
+            fallbackIcon={assigneeFallbackIcon}
+            fallbackLabel={assigneeFallbackLabel}
+          />
+        ) : issue.assigneeUsername ? (
           <LinearIssueDetailsRow
             icon={
               <AssigneeAvatar
@@ -338,7 +442,11 @@ export function LinearIssueDetailsPanel({
             options={estimateOptions}
             onChange={onEstimateChange}
             searchPlaceholder="Change estimate…"
+            searchShortcutLabel="E"
             ariaLabel="Change estimate"
+            registerOpenMenu={(open) => {
+              openEstimateRef.current = open;
+            }}
             fallbackIcon={estimateFallbackIcon}
             fallbackLabel={estimateLabel ?? "No estimate"}
           />
@@ -348,19 +456,10 @@ export function LinearIssueDetailsPanel({
             label={estimateLabel}
           />
         ) : null}
-        {dueDateLabel ? (
-          <LinearIssueDetailsRow
-            icon={
-              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <path
-                  d="M11 1C13.209 1 15 2.791 15 5V11C15 13.209 13.209 15 11 15H5C2.791 15 1 13.209 1 11V5C1 2.791 2.791 1 5 1H11ZM13.5 6H2.5V11C2.5 12.381 3.619 13.5 5 13.5H11C12.381 13.5 13.5 12.381 13.5 11V6Z"
-                  fill="#E15B59"
-                />
-              </svg>
-            }
-            label={dueDateLabel}
-          />
-        ) : null}
+        <LinearIssueDueDatePropertyDropdown
+          dueDate={issue.dueDate}
+          onChange={onDueDateChange}
+        />
       </LinearIssueDetailsSection>
 
       <LinearIssueDetailsSection title="Labels" headerAction={labelsHeaderAction}>
@@ -368,9 +467,12 @@ export function LinearIssueDetailsPanel({
           <ul className="linear-issue-details-label-list">
             {issue.labels.map((label) => (
               <li key={label.id || label.name}>
-                <span className="linear-issue-details-label">
+                <span
+                  className="linear-issue-details-label"
+                  title={githubLabelHoverTitle(label.name)}
+                >
                   <LabelDot color={label.color} />
-                  {label.name}
+                  {abbreviateGithubLabelName(label.name)}
                 </span>
               </li>
             ))}
@@ -384,7 +486,8 @@ export function LinearIssueDetailsPanel({
         <LinearIssueDetailsSection title="Project">
           <LinearIssueDetailsRow
             icon={<LinearProjectIcon title={issue.projectName} />}
-            label={issue.projectName}
+            label={abbreviateGithubLabelName(issue.projectName)}
+            title={githubLabelHoverTitle(issue.projectName)}
           />
         </LinearIssueDetailsSection>
       ) : null}

@@ -20,6 +20,7 @@ import {
 } from "../chat/attachments";
 import { validateLookupAttachment } from "./lookupAttachments";
 import { MessageActions } from "../chat/MessageActions";
+import { MarkdownContent } from "../chat/MarkdownContent";
 import { RunBlock } from "../chat/RunBlock";
 import { ScrollToBottomButton } from "../chat/ScrollToBottomButton";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
@@ -622,7 +623,9 @@ export const LookupView = forwardRef<
               <>
                 {message.text ? (
                   <>
-                    <div className="bubble">{message.text}</div>
+                    <div className="bubble">
+                      <MarkdownContent content={message.text} />
+                    </div>
                     <MessageActions text={message.text} />
                   </>
                 ) : null}

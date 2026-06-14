@@ -100,13 +100,18 @@ import {
   updateLinearDocument,
 } from "./vault/project-documents.ts";
 import { createVaultDocument, readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
+import { isDailyVaultNotePath } from "./vault/vault-whoop-stats.ts";
+import { deleteWorkspaceFile } from "./letter-deletion.ts";
 import { fetchLinearIssueDetail, updateLinearIssueDetail } from "./linear/issue-detail.ts";
 import {
   createLinearAgentThread,
   createLinearIssueComment,
+  deleteLinearIssueCommentThread,
   fetchLinearIssueCommentThread,
   fetchLinearIssueCommentThreads,
+  updateLinearIssueCommentThreadRoot,
 } from "./linear/issue-comments.ts";
+import { fetchLinearAgentSession } from "./linear/agent-session.ts";
 import { buildFocusContextSection, type FocusContextInput } from "./context/focus.ts";
 import { fetchLinearTeams } from "./linear/teams.ts";
 import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
@@ -793,6 +798,9 @@ app.patch("/linear/issues/:issueId", async (c) => {
     estimate?: unknown;
     labelIds?: unknown;
     description?: unknown;
+    title?: unknown;
+    assigneeId?: unknown;
+    dueDate?: unknown;
   };
   const updates: {
     stateId?: string;
@@ -800,6 +808,9 @@ app.patch("/linear/issues/:issueId", async (c) => {
     estimate?: number | null;
     labelIds?: string[];
     description?: string | null;
+    title?: string;
+    assigneeId?: string | null;
+    dueDate?: string | null;
   } = {};
 
   if ("stateId" in body) {
@@ -839,9 +850,37 @@ app.patch("/linear/issues/:issueId", async (c) => {
     updates.description = body.description;
   }
 
+  if ("title" in body) {
+    if (typeof body.title !== "string" || !body.title.trim()) {
+      return c.json({ error: "title must be a non-empty string", issue: null }, 400);
+    }
+    updates.title = body.title.trim();
+  }
+
+  if ("assigneeId" in body) {
+    if (body.assigneeId !== null && (typeof body.assigneeId !== "string" || !body.assigneeId.trim())) {
+      return c.json({ error: "assigneeId must be a non-empty string or null", issue: null }, 400);
+    }
+    updates.assigneeId = body.assigneeId === null ? null : body.assigneeId.trim();
+  }
+
+  if ("dueDate" in body) {
+    if (
+      body.dueDate !== null &&
+      (typeof body.dueDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate.trim()))
+    ) {
+      return c.json({ error: "dueDate must be YYYY-MM-DD or null", issue: null }, 400);
+    }
+    updates.dueDate = body.dueDate === null ? null : body.dueDate.trim().slice(0, 10);
+  }
+
   if (!Object.keys(updates).length) {
     return c.json(
-      { error: "stateId, priority, estimate, labelIds, or description is required", issue: null },
+      {
+        error:
+          "stateId, priority, estimate, labelIds, description, title, assigneeId, or dueDate is required",
+        issue: null,
+      },
       400,
     );
   }
@@ -910,6 +949,34 @@ app.get("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
   }
 });
 
+app.get("/linear/agent-sessions/:sessionId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        session: null,
+      },
+      400,
+    );
+  }
+
+  const sessionId = c.req.param("sessionId")?.trim();
+  if (!sessionId) {
+    return c.json({ error: "sessionId is required", session: null }, 400);
+  }
+
+  try {
+    const session = await fetchLinearAgentSession(sessionId);
+    if (!session) {
+      return c.json({ error: "Agent session not found", session: null }, 404);
+    }
+    return c.json({ session });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load agent session";
+    return c.json({ error: message, session: null }, 500);
+  }
+});
+
 app.post("/linear/issues/:issueId/comment-threads", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
@@ -926,7 +993,11 @@ app.post("/linear/issues/:issueId/comment-threads", async (c) => {
   const body = (await c.req.json()) as { body?: string; parentId?: string; newThread?: boolean };
   try {
     if (body.newThread) {
-      const comment = await createLinearAgentThread(issueId);
+      const userText = body.body?.trim() ?? "";
+      if (!userText) {
+        return c.json({ error: "body is required to start a thread" }, 400);
+      }
+      const comment = await createLinearAgentThread(issueId, userText);
       return c.json({ comment });
     }
 
@@ -939,6 +1010,58 @@ app.post("/linear/issues/:issueId/comment-threads", async (c) => {
     return c.json({ comment });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create comment";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.patch("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      { error: "Linear is not connected. Add an API key or connect OAuth in Settings." },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  const threadId = c.req.param("threadId")?.trim();
+  if (!issueId || !threadId) {
+    return c.json({ error: "issueId and threadId are required" }, 400);
+  }
+
+  const body = (await c.req.json()) as { body?: string };
+  const text = body.body?.trim() ?? "";
+  if (!text) {
+    return c.json({ error: "body is required" }, 400);
+  }
+
+  try {
+    const comment = await updateLinearIssueCommentThreadRoot(issueId, threadId, text);
+    return c.json({ comment });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update comment thread";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.delete("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      { error: "Linear is not connected. Add an API key or connect OAuth in Settings." },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  const threadId = c.req.param("threadId")?.trim();
+  if (!issueId || !threadId) {
+    return c.json({ error: "issueId and threadId are required" }, 400);
+  }
+
+  try {
+    await deleteLinearIssueCommentThread(issueId, threadId);
+    return c.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete comment thread";
     return c.json({ error: message }, 500);
   }
 });
@@ -1937,6 +2060,36 @@ app.patch("/vault/documents", async (c) => {
     return c.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update document";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.delete("/vault/documents", async (c) => {
+  const notesPath = resolveNotesPath();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const path =
+    body && typeof body === "object" && "path" in body && typeof body.path === "string"
+      ? body.path.trim()
+      : "";
+  if (!path) {
+    return c.json({ error: "path is required" }, 400);
+  }
+  if (isDailyVaultNotePath(path)) {
+    return c.json({ error: "Daily notes cannot be deleted" }, 400);
+  }
+
+  try {
+    const deleted = deleteWorkspaceFile(notesPath, path);
+    invalidateVaultSearchIndexCache();
+    return c.json({ deleted });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete document";
     return c.json({ error: message }, 400);
   }
 });

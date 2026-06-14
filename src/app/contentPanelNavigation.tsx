@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
+import { onLinearIssueDetailRefreshRequested } from "../lib/linearIssueDetailRefreshEvents";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { isLinearWorkspaceViewIdForKind, type LinearWorkspaceViewId } from "./linearProjectViews";
 import { ContentPanelChromeProvider, useContentPanelChrome } from "./contentPanelChromeContext";
@@ -420,6 +421,10 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
   const requestLinearIssueRefresh = useCallback(() => {
     setLinearIssueRefreshNonce((current) => current + 1);
   }, []);
+
+  useEffect(() => {
+    return onLinearIssueDetailRefreshRequested(requestLinearIssueRefresh);
+  }, [requestLinearIssueRefresh]);
 
   const resetProjectsOverview = useCallback(() => {
     setLinearSelectionState(null);

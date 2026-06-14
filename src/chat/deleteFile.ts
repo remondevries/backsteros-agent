@@ -68,7 +68,7 @@ const DELETE_TARGET_PATTERNS: RegExp[] = [
 
 export function detectDeleteFileIntent(text: string): boolean {
   const trimmed = text.trim();
-  if (!trimmed || /^\/d(?:\s|$)/i.test(trimmed)) {
+  if (!trimmed || /^\/delete(?:\s|$)/i.test(trimmed)) {
     return false;
   }
   return (
@@ -79,18 +79,15 @@ export function detectDeleteFileIntent(text: string): boolean {
 
 export function parseDeleteShortcut(
   text: string,
-): { kind: "activate" } | { kind: "send"; body: string } | null {
+): { kind: "send"; body: string } | null {
   const trimmed = text.trim();
-  if (!/^\/(?:d|delete)(?:\s|$)/i.test(trimmed)) return null;
-
-  const body = trimmed
-    .replace(/^\/delete\s*/i, "")
-    .replace(/^\/d\s*/i, "")
-    .trim();
-  if (!body) return { kind: "activate" };
-  return { kind: "send", body };
+  const deleteWithBody = trimmed.match(/^\/delete\s+(.+)/i);
+  if (deleteWithBody?.[1]?.trim()) {
+    return { kind: "send", body: deleteWithBody[1].trim() };
+  }
+  return null;
 }
 
 export function shouldActivateDeleteFileFromComposerInput(text: string): boolean {
-  return /^\/(?:d|delete)\s$/i.test(text);
+  return /^\/delete\s$/i.test(text);
 }

@@ -1,8 +1,7 @@
 import type { ProjectDocumentEntity } from "../../lib/documentStatusGroups";
 import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
 import {
-  isContentListKeyboardFocused,
-  useContentListKeyboardFocusedId,
+  useContentListItemKeyboardFocused,
 } from "../../lib/contentListNavigationReact";
 import { formatIssueDueMetaLabel } from "../../lib/linearIssueDisplay";
 import { DocumentNoteIcon } from "./DocumentNoteIcon";
@@ -36,11 +35,7 @@ export function ProjectDocumentRow({
   const dateLabel = formatIssueDueMetaLabel(document.date);
   const showCategory =
     Boolean(document.category) && document.category.trim().toLowerCase() !== "document";
-  const keyboardFocusedId = useContentListKeyboardFocusedId();
-  const keyboardFocused = isContentListKeyboardFocused(
-    keyboardFocusedId,
-    document.linearDocumentId,
-  );
+  const keyboardFocused = useContentListItemKeyboardFocused(document.linearDocumentId);
   const rowClass = [
     "project-document-row",
     grouped ? "project-document-row--grouped" : null,

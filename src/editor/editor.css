@@ -38,7 +38,7 @@
   caret-color: transparent !important;
 }
 
-.tiptap-editor-content p {
+.tiptap-editor-content:not(.markdown-body) p {
   margin: 0;
 }
 

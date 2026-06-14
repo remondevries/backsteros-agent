@@ -17,7 +17,9 @@ import type { LinearIssueEntity } from "../../chat/types";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
 import { fetchLinearIssueDetail, updateLinearIssueDetail } from "../../lib/api";
+import { notifyLinearIssueListUpdateFromDetail } from "../../lib/linearIssueListPatch";
 import { formatIssueDueMetaLabel, linearIssueTitleForCardDisplay } from "../../lib/linearIssueDisplay";
+import { abbreviateGithubLabelName, githubLabelHoverTitle } from "../../lib/linearLabelDisplay";
 import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
 import {
   useLeafAgentWaiting,
@@ -359,7 +361,7 @@ function ProjectWatchersIssueCard({
             <span
               key={`${issue.id}-${label.name}`}
               className="project-watchers-kanban-card-meta-pill project-watchers-kanban-card-meta-pill--tag"
-              title={label.name}
+              title={githubLabelHoverTitle(label.name)}
             >
               <span
                 className="project-watchers-kanban-card-meta-pill-dot"
@@ -367,7 +369,7 @@ function ProjectWatchersIssueCard({
                 aria-hidden="true"
               />
               <span className="project-watchers-kanban-card-meta-pill-label">
-                {label.name}
+                {abbreviateGithubLabelName(label.name)}
               </span>
             </span>
           ))}
@@ -647,6 +649,9 @@ export function ProjectWatchersKanbanPanel({
         const result = await updateLinearIssueDetail(droppedIssueId, { stateId: targetStateId });
         if (result.error) {
           throw new Error(result.error);
+        }
+        if (result.issue) {
+          notifyLinearIssueListUpdateFromDetail(result.issue);
         }
       } catch (moveIssueError) {
         setIssueOverrides((current) => {

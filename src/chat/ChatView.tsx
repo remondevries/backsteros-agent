@@ -1146,14 +1146,6 @@ export const ChatView = forwardRef<
       return;
     }
 
-    if (deleteShortcut?.kind === "activate") {
-      if (!messageText) {
-        setInput("");
-      }
-      activateDeleteFileMode();
-      return;
-    }
-
     const autoDeleteIntent =
       !composerQuickActionId &&
       !deleteShortcut &&
@@ -1983,6 +1975,7 @@ export const ChatView = forwardRef<
             onSend={() => void handleSend()}
             onActivateDailyCaptureShortcut={handleActivateDailyCaptureShortcut}
             onActivateGroceryListShortcut={handleActivateGroceryListShortcut}
+            onActivateDeleteFileShortcut={handleActivateDeleteFileShortcut}
             onTriggerGoodMorningShortcut={handleTriggerGoodMorningShortcut}
             onCancel={() => void handleInterrupt()}
             running={busy}

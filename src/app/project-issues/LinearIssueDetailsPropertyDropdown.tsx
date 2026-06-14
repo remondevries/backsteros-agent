@@ -1,4 +1,16 @@
 import type { ReactNode } from "react";
+import { useCallback, useMemo, useRef } from "react";
+import { formatLinearIssueDueDate } from "../../chat/linearIssue";
+import {
+  buildLinearDueDateDropdownOptions,
+  isLinearPickDueDateValue,
+  linearDueDateDropdownValue,
+  linearDueDateFromDropdownValue,
+} from "../../lib/linearIssueDetailDropdowns";
+import {
+  naturalLanguageDueDatePreview,
+  parseNaturalLanguageDueDate,
+} from "../../lib/parseNaturalLanguageDueDate";
 import {
   SearchableDropdown,
   type SearchableDropdownOption,
@@ -9,19 +21,21 @@ export function LinearIssueDetailsPropertyDropdown({
   options,
   onChange,
   searchPlaceholder,
-  searchShortcutLabel = "S",
+  searchShortcutLabel,
   ariaLabel,
   fallbackIcon,
   fallbackLabel,
+  registerOpenMenu,
 }: {
   value: string | null;
   options: SearchableDropdownOption[];
   onChange?: (value: string) => void;
   searchPlaceholder: string;
-  searchShortcutLabel?: string;
+  searchShortcutLabel: string;
   ariaLabel: string;
   fallbackIcon: ReactNode;
   fallbackLabel: string;
+  registerOpenMenu?: (open: (() => void) | null) => void;
 }) {
   if (options.length === 0) {
     return (
@@ -42,6 +56,7 @@ export function LinearIssueDetailsPropertyDropdown({
       searchPlaceholder={searchPlaceholder}
       searchShortcutLabel={searchShortcutLabel}
       ariaLabel={ariaLabel}
+      registerOpenMenu={registerOpenMenu}
       className="linear-issue-details-property-dropdown"
       panelWidth={280}
       panelAlign="end"
@@ -97,5 +112,132 @@ export function LinearIssueEstimateIcon() {
         fill="#FFFFFF80"
       />
     </svg>
+  );
+}
+
+export function LinearIssueDueDateIcon({ active = false }: { active?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M11 1C13.209 1 15 2.791 15 5V11C15 13.209 13.209 15 11 15H5C2.791 15 1 13.209 1 11V5C1 2.791 2.791 1 5 1H11ZM13.5 6H2.5V11C2.5 12.381 3.619 13.5 5 13.5H11C12.381 13.5 13.5 12.381 13.5 11V6Z"
+        fill={active ? "#E15B59" : "currentColor"}
+      />
+    </svg>
+  );
+}
+
+export function LinearIssueDueDatePropertyDropdown({
+  dueDate,
+  onChange,
+  registerOpenMenu,
+}: {
+  dueDate: string | null;
+  onChange?: (dueDate: string | null) => void;
+  registerOpenMenu?: (open: (() => void) | null) => void;
+}) {
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const options = useMemo(
+    (): SearchableDropdownOption[] => buildLinearDueDateDropdownOptions(dueDate),
+    [dueDate],
+  );
+  const selectedValue = linearDueDateDropdownValue(dueDate);
+  const dueDateLabel = formatLinearIssueDueDate(dueDate);
+  const fallbackLabel = dueDateLabel ?? "No due date";
+  const hasDueDate = Boolean(dueDateLabel);
+  const dueDateYmd = (dueDate ?? "").trim().slice(0, 10);
+
+  const handleChange = (value: string) => {
+    if (!onChange) return;
+    if (isLinearPickDueDateValue(value)) {
+      dateInputRef.current?.showPicker?.();
+      return;
+    }
+    onChange(linearDueDateFromDropdownValue(value));
+  };
+
+  const handleQuerySubmit = useCallback(
+    (query: string) => {
+      if (!onChange) return false;
+      const result = parseNaturalLanguageDueDate(query);
+      if (result.kind === "clear") {
+        onChange(null);
+        return true;
+      }
+      if (result.kind === "date") {
+        onChange(result.ymd);
+        return true;
+      }
+      return false;
+    },
+    [onChange],
+  );
+
+  const handleQueryPreview = useCallback(
+    (query: string) => naturalLanguageDueDatePreview(query),
+    [],
+  );
+
+  return (
+    <>
+      <SearchableDropdown
+        value={selectedValue}
+        options={options}
+        onChange={handleChange}
+        disabled={!onChange}
+        searchPlaceholder="tomorrow, next Friday…"
+        searchShortcutLabel="D"
+        ariaLabel="Change due date"
+        registerOpenMenu={registerOpenMenu}
+        onQuerySubmit={onChange ? handleQuerySubmit : undefined}
+        queryPreviewLabel={onChange ? handleQueryPreview : undefined}
+        className="linear-issue-details-property-dropdown"
+        panelWidth={280}
+        panelAlign="end"
+        renderTrigger={({ selected, open, disabled, triggerId, onToggle }) => (
+          <button
+            type="button"
+            id={triggerId}
+            className={[
+              "linear-issue-details-row",
+              "linear-issue-details-row--interactive",
+              open ? "linear-issue-details-row--open" : null,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            disabled={disabled}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-label="Change due date"
+            onClick={onToggle}
+          >
+            <span className="linear-issue-details-row-icon" aria-hidden="true">
+              <LinearIssueDueDateIcon active={hasDueDate} />
+            </span>
+            <span
+              className={[
+                "linear-issue-details-row-label",
+                !hasDueDate ? "linear-issue-details-row-label-muted" : null,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {selected?.label ?? fallbackLabel}
+            </span>
+          </button>
+        )}
+      />
+      <input
+        ref={dateInputRef}
+        type="date"
+        value={dueDateYmd}
+        onChange={(event) => {
+          const next = event.target.value.trim();
+          onChange?.(next ? next : null);
+        }}
+        className="linear-issue-details-date-input"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+    </>
   );
 }

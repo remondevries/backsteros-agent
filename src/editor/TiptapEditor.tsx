@@ -2,9 +2,11 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useId } from "react";
+import { MARKDOWN_BODY_CLASS } from "../markdown/markdownBodyClass";
 import { BlockCaretExtension } from "./BlockCaretExtension";
 import {
   handleTiptapEditorFocusBlur,
+  noteTiptapEditorFocusRestore,
   registerTiptapEditorFocus,
 } from "../lib/tiptapEditorFocus";
 
@@ -39,7 +41,9 @@ export function TiptapEditor({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class: ["tiptap-editor-content", className].filter(Boolean).join(" "),
+        class: ["tiptap-editor-content", isMarkdown ? MARKDOWN_BODY_CLASS : "", className]
+          .filter(Boolean)
+          .join(" "),
         style: "caret-color: transparent;",
         ...(placeholder ? { "data-placeholder": placeholder } : {}),
       },
@@ -67,6 +71,33 @@ export function TiptapEditor({
       },
     });
   }, [disabled, editor, editorId]);
+
+  useEffect(() => {
+    if (!editor || disabled) return undefined;
+
+    const dom = editor.view.dom;
+    let focusSource: HTMLElement | null = null;
+
+    const handleMouseDown = () => {
+      focusSource =
+        typeof document !== "undefined"
+          ? (document.activeElement as HTMLElement | null)
+          : null;
+    };
+
+    const handleFocus = () => {
+      noteTiptapEditorFocusRestore(focusSource);
+      focusSource = null;
+    };
+
+    dom.addEventListener("mousedown", handleMouseDown, true);
+    dom.addEventListener("focus", handleFocus, true);
+
+    return () => {
+      dom.removeEventListener("mousedown", handleMouseDown, true);
+      dom.removeEventListener("focus", handleFocus, true);
+    };
+  }, [disabled, editor]);
 
   useEffect(() => {
     if (!editor) return;

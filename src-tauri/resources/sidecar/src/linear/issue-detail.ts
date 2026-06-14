@@ -6,6 +6,13 @@ export type LinearIssueDetailLabel = {
   color: string;
 };
 
+export type LinearIssueTeamMember = {
+  id: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+};
+
 export type LinearIssueWorkflowState = {
   id: string;
   name: string;
@@ -24,6 +31,7 @@ export type LinearIssueDetail = {
   statusColor?: string;
   priority: number;
   priorityLabel: string;
+  assigneeId: string | null;
   assigneeName: string | null;
   assigneeUsername: string | null;
   assigneeAvatarUrl: string | null;
@@ -35,6 +43,7 @@ export type LinearIssueDetail = {
   labels: LinearIssueDetailLabel[];
   availableLabels: LinearIssueDetailLabel[];
   workflowStates: LinearIssueWorkflowState[];
+  teamMembers: LinearIssueTeamMember[];
   teamEstimation: LinearTeamEstimationSettings | null;
 };
 
@@ -50,6 +59,9 @@ export type LinearIssueDetailUpdateInput = {
   estimate?: number | null;
   labelIds?: string[];
   description?: string | null;
+  title?: string;
+  assigneeId?: string | null;
+  dueDate?: string | null;
 };
 
 type GraphqlIssueDetailNode = {
@@ -64,7 +76,7 @@ type GraphqlIssueDetailNode = {
   priority?: number | null;
   priorityLabel?: string | null;
   state?: { id?: string | null; name?: string | null; type?: string | null; color?: string | null } | null;
-  assignee?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
+  assignee?: { id?: string | null; name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
   project?: { id?: string | null; name?: string | null } | null;
   labels?: { nodes?: Array<{ id?: string | null; name?: string | null; color?: string | null } | null> | null } | null;
   team?: {
@@ -73,6 +85,14 @@ type GraphqlIssueDetailNode = {
     } | null;
     labels?: {
       nodes?: Array<{ id?: string | null; name?: string | null; color?: string | null } | null> | null;
+    } | null;
+    members?: {
+      nodes?: Array<{
+        id?: string | null;
+        name?: string | null;
+        displayName?: string | null;
+        avatarUrl?: string | null;
+      } | null> | null;
     } | null;
     issueEstimationType?: string | null;
     issueEstimationAllowZero?: boolean | null;
@@ -98,13 +118,16 @@ const ISSUE_DETAIL_QUERY = `
       priority
       priorityLabel
       state { id name type color }
-      assignee { name displayName avatarUrl }
+      assignee { id name displayName avatarUrl }
       project { id name }
       labels(first: 20) { nodes { id name color } }
       team {
         issueEstimationType
         issueEstimationAllowZero
         issueEstimationExtended
+        members(first: 100) {
+          nodes { id name displayName avatarUrl }
+        }
         states {
           nodes { id name type }
         }
@@ -149,6 +172,34 @@ function mapIssueLabels(
   return Array.from(new Map(entries.map((entry) => [entry.id, entry])).values());
 }
 
+function mapTeamMembers(
+  nodes:
+    | Array<{
+        id?: string | null;
+        name?: string | null;
+        displayName?: string | null;
+        avatarUrl?: string | null;
+      } | null>
+    | null
+    | undefined,
+): LinearIssueTeamMember[] {
+  const entries = (nodes ?? [])
+    .map((user) => {
+      const id = (user?.id ?? "").trim();
+      const name = (user?.name ?? "").trim();
+      if (!id || !name) return null;
+      return {
+        id,
+        name,
+        username: linearAssigneeUsername(user?.displayName, user?.name),
+        avatarUrl: (user?.avatarUrl ?? "").trim() || null,
+      } satisfies LinearIssueTeamMember;
+    })
+    .filter((entry): entry is LinearIssueTeamMember => Boolean(entry));
+
+  return Array.from(new Map(entries.map((entry) => [entry.id, entry])).values());
+}
+
 function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined): LinearIssueDetail | null {
   if (!issue?.id?.trim() || !issue.identifier?.trim()) return null;
 
@@ -164,6 +215,8 @@ function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined):
       return { id, name, type } satisfies LinearIssueWorkflowState;
     })
     .filter((entry): entry is LinearIssueWorkflowState => Boolean(entry));
+
+  const teamMembers = mapTeamMembers(issue.team?.members?.nodes);
 
   const estimationType = (issue.team?.issueEstimationType ?? "").trim();
   const teamEstimation = estimationType
@@ -186,6 +239,7 @@ function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined):
     statusColor: (issue.state?.color ?? "").trim() || undefined,
     priority: issue.priority ?? 0,
     priorityLabel: (issue.priorityLabel ?? "").trim(),
+    assigneeId: (issue.assignee?.id ?? "").trim() || null,
     assigneeName: (issue.assignee?.name ?? "").trim() || null,
     assigneeUsername: linearAssigneeUsername(issue.assignee?.displayName, issue.assignee?.name),
     assigneeAvatarUrl: (issue.assignee?.avatarUrl ?? "").trim() || null,
@@ -197,6 +251,7 @@ function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined):
     labels,
     availableLabels,
     workflowStates,
+    teamMembers,
     teamEstimation,
   };
 }
@@ -228,13 +283,16 @@ const ISSUE_UPDATE_MUTATION = `
         priority
         priorityLabel
         state { id name type color }
-        assignee { name displayName avatarUrl }
+        assignee { id name displayName avatarUrl }
         project { id name }
         labels(first: 20) { nodes { id name color } }
         team {
           issueEstimationType
           issueEstimationAllowZero
           issueEstimationExtended
+          members(first: 100) {
+            nodes { id name displayName avatarUrl }
+          }
           states {
             nodes { id name type }
           }
@@ -280,6 +338,24 @@ export async function updateLinearIssueDetail(
     payload.description = null;
   } else if (typeof input.description === "string") {
     payload.description = input.description;
+  }
+  if (typeof input.title === "string") {
+    const title = input.title.trim();
+    if (title) payload.title = title;
+  }
+  if (input.assigneeId === null) {
+    payload.assigneeId = null;
+  } else if (typeof input.assigneeId === "string") {
+    const assigneeId = input.assigneeId.trim();
+    if (assigneeId) payload.assigneeId = assigneeId;
+  }
+  if ("dueDate" in input) {
+    if (input.dueDate === null) {
+      payload.dueDate = null;
+    } else if (typeof input.dueDate === "string") {
+      const dueDate = input.dueDate.trim().slice(0, 10);
+      if (dueDate) payload.dueDate = dueDate;
+    }
   }
   if (!Object.keys(payload).length) return null;
 

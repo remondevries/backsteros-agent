@@ -53,8 +53,8 @@ export type CommandPaletteItem =
 export const COMMAND_PALETTE_SECTIONS: CommandPaletteSection[] = [
   "Navigate",
   "Notes",
-  "Issues",
   "Projects",
+  "Issues",
 ];
 
 export function commandPaletteItemValue(item: CommandPaletteItem): string {

@@ -1,5 +1,6 @@
 import { Command } from "cmdk";
 import { useEffect } from "react";
+import { LinearProjectIcon } from "../chat/LinearProjectIcon";
 import { useCommandPalette } from "./CommandPaletteContext";
 import { useCommandPaletteActions } from "./useCommandPaletteActions";
 import { useCommandPaletteSearch } from "./useCommandPaletteSearch";
@@ -23,7 +24,16 @@ export function CommandPalette({
   onSettingsTabChange: (tab: SettingsTabId) => void;
 }) {
   const { open, setOpen } = useCommandPalette();
-  const { query, setQuery, groupedItems, loading, remoteError, reset } = useCommandPaletteSearch({
+  const {
+    filterMode,
+    searchTerm,
+    setSearchTerm,
+    clearProjectsFilter,
+    groupedItems,
+    loading,
+    remoteError,
+    reset,
+  } = useCommandPaletteSearch({
     enabled: open,
     vaultExplorerEnabled,
   });
@@ -45,6 +55,11 @@ export function CommandPalette({
     (section) => groupedItems[section].length > 0,
   );
 
+  const projectsFilterActive = filterMode === "projects";
+  const inputPlaceholder = projectsFilterActive
+    ? "Search projects…"
+    : "Search navigation, notes, projects, and issues… (p for projects)";
+
   return (
     <Command.Dialog
       open={open}
@@ -56,13 +71,31 @@ export function CommandPalette({
       shouldFilter={false}
     >
       <div className="command-palette-chrome">
-        <Command.Input
-          value={query}
-          onValueChange={setQuery}
-          placeholder="Search navigation, notes, issues, and projects…"
-          className="command-palette-input"
-          autoFocus
-        />
+        <div className="command-palette-input-row">
+          {projectsFilterActive ? (
+            <span className="command-palette-filter-chip" aria-label="Projects filter active">
+              <LinearProjectIcon />
+            </span>
+          ) : null}
+          <Command.Input
+            value={searchTerm}
+            onValueChange={setSearchTerm}
+            onKeyDown={(event) => {
+              if (
+                projectsFilterActive &&
+                event.key === "Backspace" &&
+                searchTerm.length === 0 &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                clearProjectsFilter();
+              }
+            }}
+            placeholder={inputPlaceholder}
+            className="command-palette-input"
+            autoFocus
+          />
+        </div>
         <Command.List className="command-palette-list">
           {loading ? <div className="command-palette-status">Searching…</div> : null}
           {remoteError ? (

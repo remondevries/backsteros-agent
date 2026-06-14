@@ -5,6 +5,8 @@ export type AppNotificationAction = {
   onClick?: () => void;
 };
 
+export type AppNotificationVariant = "default" | "clipboard";
+
 export type AppNotificationPayload = {
   id?: string;
   kind?: AppNotificationKind;
@@ -15,6 +17,7 @@ export type AppNotificationPayload = {
   projectId?: string;
   url?: string;
   action?: AppNotificationAction;
+  variant?: AppNotificationVariant;
 };
 
 export type LinearWatcherChangeKind =

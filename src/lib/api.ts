@@ -13,6 +13,7 @@ import type {
   WhoopSnapshotEntity,
 } from "../chat/types";
 import type { LetterFilingOptions } from "../chat/letterFiling";
+import type { LinearAgentSessionSnapshot } from "./linearAgentSessionTypes";
 import type { ProjectDocumentEntity } from "./documentStatusGroups";
 import {
   cachedRequest,
@@ -621,6 +622,16 @@ export async function createVaultDocument(folder: string, title?: string) {
   return result;
 }
 
+export async function deleteVaultDocument(path: string) {
+  const result = await request<{ deleted: string[]; error?: string }>("/vault/documents", {
+    method: "DELETE",
+    body: JSON.stringify({ path }),
+  });
+  invalidateVaultContentCaches();
+  invalidateRequestCache(cacheKeyVaultDocument(path));
+  return result;
+}
+
 export type WorkoutSetWire = {
   date: string;
   exercise: string;
@@ -967,6 +978,7 @@ export type LinearIssueDetail = {
   statusColor?: string;
   priority: number;
   priorityLabel: string;
+  assigneeId: string | null;
   assigneeName: string | null;
   assigneeUsername: string | null;
   assigneeAvatarUrl: string | null;
@@ -978,6 +990,12 @@ export type LinearIssueDetail = {
   labels: { id: string; name: string; color: string }[];
   availableLabels: { id: string; name: string; color: string }[];
   workflowStates: { id: string; name: string; type: string }[];
+  teamMembers: {
+    id: string;
+    name: string;
+    username: string | null;
+    avatarUrl: string | null;
+  }[];
   teamEstimation: {
     issueEstimationType: string;
     issueEstimationAllowZero: boolean;
@@ -997,6 +1015,9 @@ export type LinearIssueDetailUpdates = {
   estimate?: number | null;
   labelIds?: string[];
   description?: string | null;
+  title?: string;
+  assigneeId?: string | null;
+  dueDate?: string | null;
 };
 
 export async function updateLinearIssueDetail(issueId: string, updates: LinearIssueDetailUpdates) {
@@ -1028,6 +1049,7 @@ export type LinearComment = {
   createdAt: string;
   author: LinearCommentAuthor;
   parentId: string | null;
+  agentSessionId: string | null;
 };
 
 export async function fetchLinearIssueCommentThreads(issueId: string) {
@@ -1044,6 +1066,13 @@ export async function fetchLinearIssueCommentThread(issueId: string, threadId: s
   }>(`/linear/issues/${encodeURIComponent(issueId)}/comment-threads/${encodeURIComponent(threadId)}`);
 }
 
+export async function fetchLinearAgentSession(sessionId: string) {
+  return request<{
+    session: LinearAgentSessionSnapshot | null;
+    error?: string;
+  }>(`/linear/agent-sessions/${encodeURIComponent(sessionId)}`);
+}
+
 export async function createLinearIssueComment(
   issueId: string,
   options: { body?: string; parentId?: string; newThread?: boolean },
@@ -1053,6 +1082,29 @@ export async function createLinearIssueComment(
     {
       method: "POST",
       body: JSON.stringify(options),
+    },
+  );
+}
+
+export async function updateLinearIssueCommentThread(
+  issueId: string,
+  threadId: string,
+  body: string,
+) {
+  return request<{ comment: LinearComment; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}/comment-threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    },
+  );
+}
+
+export async function deleteLinearIssueCommentThread(issueId: string, threadId: string) {
+  return request<{ success: boolean; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}/comment-threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "DELETE",
     },
   );
 }

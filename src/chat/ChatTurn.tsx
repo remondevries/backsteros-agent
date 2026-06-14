@@ -29,6 +29,7 @@ import {
   LETTER_LABEL,
 } from "./letter";
 import { isValidLinearContextChip } from "./linearIssue";
+import { MarkdownContent } from "./MarkdownContent";
 import { MessageActions } from "./MessageActions";
 import {
   isGoodMorningFlowMessage,
@@ -195,7 +196,7 @@ export const ChatTurn = memo(function ChatTurn({
                         <span className="chat-quick-action-tag chat-quick-action-tag-daily-capture chat-daily-capture-time-tag">
                           {logTime}
                         </span>
-                        <span className="chat-daily-capture-text">{body}</span>
+                        <MarkdownContent content={body} className="chat-daily-capture-text" />
                       </div>
                     </div>
                     <MessageActions text={body} />
@@ -216,7 +217,7 @@ export const ChatTurn = memo(function ChatTurn({
                         <span className="chat-quick-action-tag chat-quick-action-tag-grocery-list chat-grocery-list-week-tag">
                           W{week}
                         </span>
-                        <span className="chat-grocery-list-text">{body}</span>
+                        <MarkdownContent content={body} className="chat-grocery-list-text" />
                       </div>
                     </div>
                     <MessageActions text={body} />
@@ -225,7 +226,9 @@ export const ChatTurn = memo(function ChatTurn({
               })()
             ) : isDeleteFileMessage(message.quickActionId) ? (
               <>
-                <div className="bubble">{message.text}</div>
+                <div className="bubble">
+                  <MarkdownContent content={message.text} />
+                </div>
                 <MessageActions text={message.text} />
               </>
             ) : (
@@ -245,11 +248,13 @@ export const ChatTurn = memo(function ChatTurn({
                       : ""
                   }`}
                 >
-                  {isGoodMorningMessage(message.quickActionId)
-                    ? MORNING_REVIEW_MESSAGE
-                    : isGoodNightMessage(message.quickActionId)
-                      ? GOOD_NIGHT_MESSAGE
-                      : message.text}
+                  {isGoodMorningMessage(message.quickActionId) ? (
+                    MORNING_REVIEW_MESSAGE
+                  ) : isGoodNightMessage(message.quickActionId) ? (
+                    GOOD_NIGHT_MESSAGE
+                  ) : (
+                    <MarkdownContent content={message.text} />
+                  )}
                 </div>
                 {!isGoodMorningMessage(message.quickActionId) &&
                   !isGoodNightMessage(message.quickActionId) &&

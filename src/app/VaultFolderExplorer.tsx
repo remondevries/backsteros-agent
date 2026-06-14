@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
-import { createVaultDocument, fetchLinearIssuesByDueDates } from "../lib/api";
+import { createVaultDocument } from "../lib/api";
+import { useLinearIssuesByDueDates } from "../hooks/useLinearIssuesByDueDates";
 import {
   parseEntryDate,
   resolveEntryDueDateKey,
@@ -34,21 +35,27 @@ import {
 } from "../lib/contentListNavigation";
 import {
   useContentListKeyboardFocusedId,
+  useContentListKeyboardNavActive,
   useContentListNavigationRegistration,
 } from "../lib/contentListNavigationReact";
+import { registerSidebarNoteCreation } from "../lib/sidebarNoteCreation";
+import { supportsSidebarNoteCreation } from "../lib/sidebarNoteCreationNavItems";
+import { SIDEBAR_NOTE_CREATION_SHORTCUT } from "../shortcuts/sidebarNoteCreationShortcutBindings";
+import { deleteVaultDocument } from "../lib/api";
+import { notifyVaultContentChanged } from "../lib/vaultContentEvents";
+import { getContentListNavigationController } from "../lib/contentListNavigation";
+import {
+  registerSidebarNoteDeletion,
+  resolveSidebarNoteDeletionTarget,
+  setSidebarNoteDeletionConfirmOpen,
+  vaultDocumentDisplayName,
+} from "../lib/sidebarNoteDeletion";
+import { DeleteNoteConfirmDialog } from "../ui/components/DeleteNoteConfirmDialog";
 
 const RESERVED_WORKOUT_FILES = new Set([
   "dashboard.md",
   "exercise-catalog.md",
   "personal-records.csv",
-]);
-
-const NOTE_CREATION_NAV_ITEMS = new Set<VaultNavItemId>([
-  "inbox",
-  "meetings",
-  "knowledge-base",
-  "letters",
-  "contacts",
 ]);
 
 function PlusIcon() {
@@ -83,9 +90,6 @@ export function VaultFolderExplorer({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [collapsedWeekGroups, setCollapsedWeekGroups] = useState<Set<string>>(() => new Set());
-  const [dailyIssuesByDueDate, setDailyIssuesByDueDate] = useState<
-    Record<string, LinearIssueEntity[]>
-  >({});
 
   const flattenFolders =
     activeNavItem === "meetings" ||
@@ -99,10 +103,14 @@ export function VaultFolderExplorer({
   const navLabel = vaultNavItemLabel(activeNavItem);
   const searchPlaceholder = `Search ${navLabel.toLocaleLowerCase()}…`;
   const searchAriaLabel = `Search ${navLabel.toLocaleLowerCase()} notes`;
-  const canCreateNote = NOTE_CREATION_NAV_ITEMS.has(activeNavItem);
+  const canCreateNote = supportsSidebarNoteCreation(activeNavItem);
   const [creatingNote, setCreatingNote] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetPath, setDeleteTargetPath] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const handleCreateNote = async () => {
+  const handleCreateNote = useCallback(async () => {
     if (!enabled || creatingNote) return;
     setCreatingNote(true);
     try {
@@ -119,7 +127,16 @@ export function VaultFolderExplorer({
     } finally {
       setCreatingNote(false);
     }
-  };
+  }, [creatingNote, enabled, refresh, relativePath, setActiveVaultDocument]);
+
+  useEffect(() => {
+    if (!enabled || !canCreateNote) return undefined;
+    return registerSidebarNoteCreation({
+      createNote: () => {
+        void handleCreateNote();
+      },
+    });
+  }, [canCreateNote, enabled, handleCreateNote, activeNavItem]);
 
   useEffect(() => {
     const nextRootPath = vaultNavItemLabel(activeNavItem);
@@ -242,34 +259,10 @@ export function VaultFolderExplorer({
     return [...dueDates].sort((left, right) => right.localeCompare(left));
   }, [orderedEntries, showDailyWeekGroups]);
 
-  const dailyDueDatesKey = useMemo(() => dailyDueDates.join("\0"), [dailyDueDates]);
-
-  useEffect(() => {
-    if (!enabled || !showDailyWeekGroups) {
-      setDailyIssuesByDueDate({});
-      return;
-    }
-
-    if (dailyDueDates.length === 0) {
-      setDailyIssuesByDueDate({});
-      return;
-    }
-
-    let cancelled = false;
-    void fetchLinearIssuesByDueDates(dailyDueDates)
-      .then((result) => {
-        if (cancelled) return;
-        setDailyIssuesByDueDate(result.issuesByDueDate ?? {});
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setDailyIssuesByDueDate({});
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dailyDueDates, dailyDueDatesKey, enabled, showDailyWeekGroups]);
+  const dailyIssuesByDueDate = useLinearIssuesByDueDates(
+    dailyDueDates,
+    enabled && showDailyWeekGroups,
+  ).issuesByDueDate;
 
   const groupedDailyEntries = useMemo(() => {
     if (!showDailyWeekGroups) return [];
@@ -306,6 +299,7 @@ export function VaultFolderExplorer({
   );
   const virtualizeFlatList = useVirtualListEnabled(filteredEntries.length);
   const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardNavActive = useContentListKeyboardNavActive();
 
   const openLinearIssue = useCallback(
     (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
@@ -383,8 +377,84 @@ export function VaultFolderExplorer({
     selectedId: selectedListId,
   });
 
+  useEffect(() => {
+    setSidebarNoteDeletionConfirmOpen(deleteConfirmOpen);
+  }, [deleteConfirmOpen]);
+
+  const fileTitleByPath = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const entry of orderedEntries) {
+      if (entry.kind !== "file") continue;
+      titles.set(entry.path, formatVaultNoteDisplayName(entry.name));
+    }
+    return titles;
+  }, [orderedEntries]);
+
+  const openDeleteConfirm = useCallback(() => {
+    if (deleting) return;
+    const controller = getContentListNavigationController();
+    const focusedId = controller?.getFocusedId() ?? keyboardFocusedId;
+    const targetPath = resolveSidebarNoteDeletionTarget(focusedId);
+    if (!targetPath) return;
+    setDeleteError(null);
+    setDeleteTargetPath(targetPath);
+    setDeleteConfirmOpen(true);
+  }, [deleting, keyboardFocusedId]);
+
+  const closeDeleteConfirm = useCallback(() => {
+    if (deleting) return;
+    setDeleteConfirmOpen(false);
+    setDeleteTargetPath(null);
+  }, [deleting]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTargetPath || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteVaultDocument(deleteTargetPath);
+      if (result.error) {
+        setDeleteError(result.error);
+        return;
+      }
+      setDeleteConfirmOpen(false);
+      setDeleteTargetPath(null);
+      if (activeVaultDocument?.path === deleteTargetPath) {
+        clearActiveVaultDocument();
+      }
+      notifyVaultContentChanged();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete note");
+    } finally {
+      setDeleting(false);
+    }
+  }, [activeVaultDocument?.path, clearActiveVaultDocument, deleteTargetPath, deleting]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    return registerSidebarNoteDeletion({
+      openDeleteConfirm,
+    });
+  }, [enabled, openDeleteConfirm]);
+
+  const deleteFileName = deleteTargetPath
+    ? vaultDocumentDisplayName(deleteTargetPath, fileTitleByPath.get(deleteTargetPath))
+    : "";
+
   return (
     <div className="vault-folder-explorer">
+      <DeleteNoteConfirmDialog
+        open={deleteConfirmOpen}
+        fileName={deleteFileName}
+        deleting={deleting}
+        onCancel={closeDeleteConfirm}
+        onConfirm={() => {
+          void handleConfirmDelete();
+        }}
+      />
+      {deleteError ? (
+        <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{deleteError}</p>
+      ) : null}
       <div className="vault-folder-explorer-search">
         <input
           type="search"
@@ -400,8 +470,8 @@ export function VaultFolderExplorer({
             className="vault-folder-explorer-add"
             onClick={() => void handleCreateNote()}
             disabled={creatingNote}
-            aria-label={`New note in ${navLabel}`}
-            title={`New note in ${navLabel}`}
+            aria-label={`New note in ${navLabel} (${SIDEBAR_NOTE_CREATION_SHORTCUT.hint})`}
+            title={`New note in ${navLabel} (${SIDEBAR_NOTE_CREATION_SHORTCUT.hint})`}
           >
             <PlusIcon />
           </button>
@@ -425,7 +495,7 @@ export function VaultFolderExplorer({
                     "vault-folder-explorer-entry-file",
                     "vault-folder-explorer-entry-selectable",
                     activeVaultDocument == null ? "vault-folder-explorer-entry-selected" : null,
-                    keyboardFocusedId === WORKOUTS_DASHBOARD_LIST_ID
+                    keyboardNavActive && keyboardFocusedId === WORKOUTS_DASHBOARD_LIST_ID
                       ? "vault-folder-explorer-entry-keyboard-focused"
                       : null,
                   ]
@@ -447,7 +517,7 @@ export function VaultFolderExplorer({
                       className={[
                         "vault-folder-explorer-entry",
                         "vault-folder-explorer-entry-directory",
-                        keyboardFocusedId === entry.path
+                        keyboardNavActive && keyboardFocusedId === entry.path
                           ? "vault-folder-explorer-entry-keyboard-focused"
                           : null,
                       ]
@@ -473,7 +543,7 @@ export function VaultFolderExplorer({
                         {...contentListItemDataAttributes(weekHeaderId)}
                         className={[
                           "vault-folder-explorer-week-header",
-                          keyboardFocusedId === weekHeaderId
+                          keyboardNavActive && keyboardFocusedId === weekHeaderId
                             ? "vault-folder-explorer-entry-keyboard-focused"
                             : null,
                         ]
@@ -513,7 +583,7 @@ export function VaultFolderExplorer({
                                         "vault-folder-explorer-entry-file",
                                         "vault-folder-explorer-entry-selectable",
                                         selected ? "vault-folder-explorer-entry-selected" : null,
-                                        keyboardFocusedId === entry.path
+                                        keyboardNavActive && keyboardFocusedId === entry.path
                                           ? "vault-folder-explorer-entry-keyboard-focused"
                                           : null,
                                       ]
@@ -565,7 +635,7 @@ export function VaultFolderExplorer({
                                       "vault-folder-explorer-entry-file",
                                       "vault-folder-explorer-entry-selectable",
                                       selected ? "vault-folder-explorer-entry-selected" : null,
-                                      keyboardFocusedId === entry.path
+                                      keyboardNavActive && keyboardFocusedId === entry.path
                                         ? "vault-folder-explorer-entry-keyboard-focused"
                                         : null,
                                     ]
@@ -628,7 +698,7 @@ export function VaultFolderExplorer({
                           className={[
                         "vault-folder-explorer-entry",
                         "vault-folder-explorer-entry-directory",
-                        keyboardFocusedId === entry.path
+                        keyboardNavActive && keyboardFocusedId === entry.path
                           ? "vault-folder-explorer-entry-keyboard-focused"
                           : null,
                       ]
@@ -647,7 +717,7 @@ export function VaultFolderExplorer({
                             "vault-folder-explorer-entry-file",
                             "vault-folder-explorer-entry-selectable",
                             selected ? "vault-folder-explorer-entry-selected" : null,
-                            keyboardFocusedId === entry.path
+                            keyboardNavActive && keyboardFocusedId === entry.path
                               ? "vault-folder-explorer-entry-keyboard-focused"
                               : null,
                           ]
@@ -681,7 +751,7 @@ export function VaultFolderExplorer({
                         className={[
                         "vault-folder-explorer-entry",
                         "vault-folder-explorer-entry-directory",
-                        keyboardFocusedId === entry.path
+                        keyboardNavActive && keyboardFocusedId === entry.path
                           ? "vault-folder-explorer-entry-keyboard-focused"
                           : null,
                       ]
@@ -700,7 +770,7 @@ export function VaultFolderExplorer({
                           "vault-folder-explorer-entry-file",
                           "vault-folder-explorer-entry-selectable",
                           selected ? "vault-folder-explorer-entry-selected" : null,
-                          keyboardFocusedId === entry.path
+                          keyboardNavActive && keyboardFocusedId === entry.path
                             ? "vault-folder-explorer-entry-keyboard-focused"
                             : null,
                         ]

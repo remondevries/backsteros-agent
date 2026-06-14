@@ -1,8 +1,10 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import type { LinearIssueDetail } from "../../lib/api";
 import { CursorIcon } from "../../chat/CursorIcon";
-import { copyTextToClipboard, openLinearIssueInCursor } from "../../lib/linearIssueActions";
-import { openExternalUrl } from "../../lib/openExternalUrl";
+import {
+  buildLinearIssueCursorLink,
+  copyTextToClipboardWithNotification,
+} from "../../lib/linearIssueActions";
 
 function ActionButton({
   label,
@@ -75,65 +77,72 @@ function BranchIcon() {
 }
 
 export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
-  const [copiedField, setCopiedField] = useState<"id" | "branch" | null>(null);
-
-  const flashCopied = useCallback((field: "id" | "branch") => {
-    setCopiedField(field);
-    window.setTimeout(() => {
-      setCopiedField((current) => (current === field ? null : current));
-    }, 1500);
-  }, []);
+  const handleCopyLink = useCallback(async () => {
+    await copyTextToClipboardWithNotification(issue.url, {
+      message: "Issue URL copied to clipboard",
+      issueId: issue.id,
+    });
+  }, [issue.id, issue.url]);
 
   const handleCopyIdentifier = useCallback(async () => {
-    const copied = await copyTextToClipboard(issue.identifier);
-    if (copied) flashCopied("id");
-  }, [flashCopied, issue.identifier]);
+    await copyTextToClipboardWithNotification(issue.identifier, {
+      message: "Issue ID copied to clipboard",
+      issueId: issue.id,
+    });
+  }, [issue.id, issue.identifier]);
 
   const handleCopyBranch = useCallback(async () => {
     if (!issue.branchName) return;
-    const copied = await copyTextToClipboard(issue.branchName);
-    if (copied) flashCopied("branch");
-  }, [flashCopied, issue.branchName]);
+    await copyTextToClipboardWithNotification(issue.branchName, {
+      message: "Branch copied to clipboard",
+      issueId: issue.id,
+    });
+  }, [issue.branchName, issue.id]);
 
-  const handleOpenUrl = useCallback(() => {
-    void openExternalUrl(issue.url);
-  }, [issue.url]);
-
-  const handleOpenInCursor = useCallback(() => {
-    void openLinearIssueInCursor({ url: issue.url, branchName: issue.branchName });
-  }, [issue.branchName, issue.url]);
+  const handleCopyCursorLink = useCallback(async () => {
+    const cursorLink = buildLinearIssueCursorLink({
+      url: issue.url,
+      branchName: issue.branchName,
+    });
+    await copyTextToClipboardWithNotification(cursorLink, {
+      message: "Cursor link copied to clipboard",
+      issueId: issue.id,
+    });
+  }, [issue.branchName, issue.id, issue.url]);
 
   return (
     <div className="linear-issue-action-bar" aria-label="Issue actions">
       <div className="linear-issue-action-bar__actions">
-        <ActionButton label="Open in Linear" title="Open Linear URL" onClick={handleOpenUrl}>
+        <ActionButton
+          label="Copy Linear link"
+          title={`Copy ${issue.url}`}
+          onClick={() => void handleCopyLink()}
+        >
           <LinkIcon />
         </ActionButton>
         <ActionButton
           label="Copy Linear ID"
-          title={copiedField === "id" ? "Copied" : `Copy ${issue.identifier}`}
+          title={`Copy ${issue.identifier}`}
           onClick={() => void handleCopyIdentifier()}
         >
           <IdIcon />
         </ActionButton>
         <ActionButton
           label="Copy git branch"
-          title={
-            copiedField === "branch"
-              ? "Copied"
-              : issue.branchName
-                ? `Copy ${issue.branchName}`
-                : "No git branch"
-          }
+          title={issue.branchName ? `Copy ${issue.branchName}` : "No git branch"}
           disabled={!issue.branchName}
           onClick={() => void handleCopyBranch()}
         >
           <BranchIcon />
         </ActionButton>
         <ActionButton
-          label="Open in Cursor"
-          title={issue.branchName ? `Open branch in Cursor` : "Open in Cursor"}
-          onClick={handleOpenInCursor}
+          label="Copy Cursor link"
+          title={
+            issue.branchName
+              ? `Copy Cursor branch link for ${issue.branchName}`
+              : "Copy Cursor link"
+          }
+          onClick={() => void handleCopyCursorLink()}
         >
           <CursorIcon size={14} />
         </ActionButton>

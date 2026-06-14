@@ -22,6 +22,7 @@ import {
   filterSlashCommands,
   isSlashCommandPaletteOpen,
   parseSlashCommandInput,
+  type SlashCommandContext,
   type SlashCommandDefinition,
 } from "./slashCommands";
 import { DotScrollLoader } from "./DotScrollLoader";
@@ -31,6 +32,7 @@ export type ComposerHandle = {
   focus: () => void;
   blur: () => void;
   isFocused: () => boolean;
+  getValue: () => string;
 };
 
 function ComposerSendIcon() {
@@ -96,10 +98,12 @@ export const Composer = forwardRef<
     };
     onActivateDailyCaptureShortcut?: () => void;
     onActivateGroceryListShortcut?: () => void;
+    onActivateDeleteFileShortcut?: () => void;
     onTriggerGoodMorningShortcut?: () => void;
     onTriggerGoodNightShortcut?: () => void;
     onTriggerLetterShortcut?: () => void;
     onSlashCommandSelect?: (command: SlashCommandDefinition) => void;
+    slashCommandContext?: SlashCommandContext;
     onCancelAutomationFlow?: () => boolean;
     onEscapeBlur?: () => void;
     onComposerFocus?: () => void;
@@ -130,10 +134,12 @@ export const Composer = forwardRef<
     groceryWeek,
     onActivateDailyCaptureShortcut,
     onActivateGroceryListShortcut,
+    onActivateDeleteFileShortcut,
     onTriggerGoodMorningShortcut,
     onTriggerGoodNightShortcut,
     onTriggerLetterShortcut,
     onSlashCommandSelect,
+    slashCommandContext = "chat",
     onCancelAutomationFlow,
     onEscapeBlur,
     onComposerFocus,
@@ -154,12 +160,12 @@ export const Composer = forwardRef<
     if (!slashMenuEnabled) return [];
     const slashState = parseSlashCommandInput(value);
     if (!slashState) return [];
-    return filterSlashCommands(slashState.query, { context: "chat" });
-  }, [slashMenuEnabled, value]);
+    return filterSlashCommands(slashState.query, { context: slashCommandContext });
+  }, [slashCommandContext, slashMenuEnabled, value]);
 
   const slashMenuOpen = isSlashCommandPaletteOpen(value, {
     enabled: slashMenuEnabled,
-    context: "chat",
+    context: slashCommandContext,
   });
 
   useEffect(() => {
@@ -207,8 +213,9 @@ export const Composer = forwardRef<
         const footer = footerRef.current;
         return active === textarea || active === footer || Boolean(textarea?.contains(active));
       },
+      getValue: () => textareaRef.current?.value ?? value,
     }),
-    [voiceMode],
+    [value, voiceMode],
   );
 
   function blurComposerInput() {
@@ -449,6 +456,15 @@ export const Composer = forwardRef<
                   ) {
                     event.preventDefault();
                     onActivateGroceryListShortcut();
+                    return;
+                  }
+                  if (
+                    event.key === " " &&
+                    onActivateDeleteFileShortcut &&
+                    /^\/delete$/i.test(value)
+                  ) {
+                    event.preventDefault();
+                    onActivateDeleteFileShortcut();
                     return;
                   }
                   if (

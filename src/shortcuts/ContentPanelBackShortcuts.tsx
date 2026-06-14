@@ -3,7 +3,8 @@ import { useCommandPalette } from "../command-palette/CommandPaletteContext";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { performContentPanelBack } from "../lib/contentPanelBack";
 import { getContentListNavigationController } from "../lib/contentListNavigation";
-import { shouldRestoreTiptapEditorFocus, restoreTiptapEditorFocus } from "../lib/tiptapEditorFocus";
+import { dismissTiptapEditorFocus, isTiptapEditorFocused } from "../lib/tiptapEditorFocus";
+import { isSidebarNoteDeletionConfirmOpen } from "../lib/sidebarNoteDeletion";
 import { useContentPanelNavigation } from "../app/contentPanelNavigation";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -14,8 +15,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
-function isVaultDocumentTitleTarget(target: EventTarget | null): target is HTMLInputElement {
-  return target instanceof HTMLInputElement && target.classList.contains("vault-document-title");
+function isEditableTitleTarget(target: EventTarget | null): target is HTMLInputElement {
+  return (
+    target instanceof HTMLInputElement &&
+    (target.classList.contains("vault-document-title") ||
+      target.classList.contains("linear-issue-title"))
+  );
 }
 
 export function ContentPanelBackShortcuts({
@@ -88,14 +93,15 @@ export function ContentPanelBackShortcuts({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isSidebarNoteDeletionConfirmOpen()) return;
 
-      if (shouldRestoreTiptapEditorFocus() && restoreTiptapEditorFocus()) {
+      if (isTiptapEditorFocused() && dismissTiptapEditorFocus()) {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
       }
 
-      if (isVaultDocumentTitleTarget(event.target)) {
+      if (isEditableTitleTarget(event.target)) {
         event.target.blur();
         event.preventDefault();
         event.stopImmediatePropagation();

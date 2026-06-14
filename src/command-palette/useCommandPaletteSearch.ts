@@ -6,6 +6,14 @@ import {
   searchLinearIssues,
   type VaultSearchIndexEntry,
 } from "../lib/api";
+import {
+  applyAllModeInputChange,
+  applyProjectsModeInputChange,
+  createDefaultCommandPaletteFilterState,
+  exitProjectsFilterMode,
+  type CommandPaletteFilterMode,
+  type CommandPaletteFilterState,
+} from "./commandPaletteFilter";
 import { vaultNavItemIdFromPath } from "./vaultNavFromPath";
 import { buildNavigationCommandItems } from "./navigationItems";
 import {
@@ -20,8 +28,10 @@ const MAX_RESULTS_PER_SECTION = 20;
 let cachedVaultSearchIndex: VaultSearchIndexEntry[] | null = null;
 
 type CommandPaletteSearchState = {
-  query: string;
-  setQuery: (value: string) => void;
+  filterMode: CommandPaletteFilterMode;
+  searchTerm: string;
+  setSearchTerm: (value: string) => void;
+  clearProjectsFilter: () => void;
   groupedItems: Record<CommandPaletteSection, CommandPaletteItem[]>;
   loading: boolean;
   remoteError: string | null;
@@ -35,8 +45,10 @@ export function useCommandPaletteSearch({
   enabled: boolean;
   vaultExplorerEnabled: boolean;
 }): CommandPaletteSearchState {
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [filterState, setFilterState] = useState<CommandPaletteFilterState>(
+    createDefaultCommandPaletteFilterState,
+  );
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [remoteItems, setRemoteItems] = useState<CommandPaletteItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -45,12 +57,14 @@ export function useCommandPaletteSearch({
   );
   const requestIdRef = useRef(0);
 
+  const { mode: filterMode, searchTerm } = filterState;
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setDebouncedQuery(query.trim());
+      setDebouncedSearchTerm(searchTerm.trim());
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [query]);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (!enabled || !vaultExplorerEnabled) {
@@ -97,16 +111,17 @@ export function useCommandPaletteSearch({
     [vaultIndex],
   );
 
-  const navigationItems = useMemo(
-    () => buildNavigationCommandItems(debouncedQuery),
-    [debouncedQuery],
-  );
+  const navigationItems = useMemo(() => {
+    if (filterMode === "projects") return [];
+    return buildNavigationCommandItems(debouncedSearchTerm);
+  }, [debouncedSearchTerm, filterMode]);
 
   const vaultItems = useMemo(() => {
-    if (!vaultExplorerEnabled || !vaultFuse || !debouncedQuery) return [];
+    if (filterMode === "projects") return [];
+    if (!vaultExplorerEnabled || !vaultFuse || !debouncedSearchTerm) return [];
 
     return vaultFuse
-      .search(debouncedQuery, { limit: MAX_RESULTS_PER_SECTION })
+      .search(debouncedSearchTerm, { limit: MAX_RESULTS_PER_SECTION })
       .map(({ item }) => item)
       .map((entry): CommandPaletteItem | null => {
         const navItemId = vaultNavItemIdFromPath(entry.path);
@@ -123,7 +138,7 @@ export function useCommandPaletteSearch({
         };
       })
       .filter((item): item is CommandPaletteItem => item !== null);
-  }, [debouncedQuery, vaultExplorerEnabled, vaultFuse]);
+  }, [debouncedSearchTerm, filterMode, vaultExplorerEnabled, vaultFuse]);
 
   useEffect(() => {
     if (!enabled) {
@@ -133,7 +148,7 @@ export function useCommandPaletteSearch({
       return;
     }
 
-    if (!debouncedQuery) {
+    if (!debouncedSearchTerm) {
       setRemoteItems([]);
       setRemoteError(null);
       setLoading(false);
@@ -144,20 +159,58 @@ export function useCommandPaletteSearch({
     setLoading(true);
     setRemoteError(null);
 
-    void Promise.all([
-      searchLinearIssues(debouncedQuery, { limit: MAX_RESULTS_PER_SECTION }).catch((error) => ({
-        issues: [] as Awaited<ReturnType<typeof searchLinearIssues>>["issues"],
-        error: error instanceof Error ? error.message : "Failed to search Linear issues",
-      })),
-      fetchLinearProjectsPage({ query: debouncedQuery, first: MAX_RESULTS_PER_SECTION }).catch(
-        (error) => ({
-          projects: [] as Awaited<ReturnType<typeof fetchLinearProjectsPage>>["projects"],
-          error: error instanceof Error ? error.message : "Failed to search Linear projects",
-        }),
-      ),
-    ])
-      .then(([issueResult, projectResult]) => {
+    const projectsOnly = filterMode === "projects";
+
+    void (projectsOnly
+      ? fetchLinearProjectsPage({ query: debouncedSearchTerm, first: MAX_RESULTS_PER_SECTION }).catch(
+          (error) => ({
+            projects: [] as Awaited<ReturnType<typeof fetchLinearProjectsPage>>["projects"],
+            error: error instanceof Error ? error.message : "Failed to search Linear projects",
+          }),
+        )
+      : Promise.all([
+          searchLinearIssues(debouncedSearchTerm, { limit: MAX_RESULTS_PER_SECTION }).catch(
+            (error) => ({
+              issues: [] as Awaited<ReturnType<typeof searchLinearIssues>>["issues"],
+              error: error instanceof Error ? error.message : "Failed to search Linear issues",
+            }),
+          ),
+          fetchLinearProjectsPage({ query: debouncedSearchTerm, first: MAX_RESULTS_PER_SECTION }).catch(
+            (error) => ({
+              projects: [] as Awaited<ReturnType<typeof fetchLinearProjectsPage>>["projects"],
+              error: error instanceof Error ? error.message : "Failed to search Linear projects",
+            }),
+          ),
+        ]))
+      .then((result) => {
         if (requestId !== requestIdRef.current) return;
+
+        if (projectsOnly) {
+          const projectResult = result as Awaited<ReturnType<typeof fetchLinearProjectsPage>> & {
+            error?: string;
+          };
+          setRemoteError(
+            "error" in projectResult && projectResult.error ? projectResult.error : null,
+          );
+          const projectItems: CommandPaletteItem[] = (projectResult.projects ?? []).map(
+            (project) => ({
+              kind: "linear-project",
+              id: project.id,
+              section: "Projects",
+              label: project.name,
+              subtitle: project.status?.name,
+              projectId: project.id,
+              projectName: project.name,
+            }),
+          );
+          setRemoteItems(projectItems);
+          return;
+        }
+
+        const [issueResult, projectResult] = result as [
+          Awaited<ReturnType<typeof searchLinearIssues>> & { error?: string },
+          Awaited<ReturnType<typeof fetchLinearProjectsPage>> & { error?: string },
+        ];
 
         const errors = [
           "error" in issueResult ? issueResult.error : undefined,
@@ -186,14 +239,14 @@ export function useCommandPaletteSearch({
           }),
         );
 
-        setRemoteItems([...issueItems, ...projectItems]);
+        setRemoteItems([...projectItems, ...issueItems]);
       })
       .finally(() => {
         if (requestId === requestIdRef.current) {
           setLoading(false);
         }
       });
-  }, [debouncedQuery, enabled]);
+  }, [debouncedSearchTerm, enabled, filterMode]);
 
   const groupedItems = useMemo(() => {
     const grouped = Object.fromEntries(
@@ -215,18 +268,34 @@ export function useCommandPaletteSearch({
     return grouped;
   }, [navigationItems, remoteItems, vaultItems]);
 
+  const setSearchTerm = useCallback((value: string) => {
+    setFilterState((current) => {
+      const next =
+        current.mode === "projects"
+          ? applyProjectsModeInputChange(value, current)
+          : applyAllModeInputChange(value, current);
+      return next ?? current;
+    });
+  }, []);
+
+  const clearProjectsFilter = useCallback(() => {
+    setFilterState((current) => exitProjectsFilterMode(current) ?? current);
+  }, []);
+
   const reset = useCallback(() => {
     requestIdRef.current += 1;
-    setQuery("");
-    setDebouncedQuery("");
+    setFilterState(createDefaultCommandPaletteFilterState());
+    setDebouncedSearchTerm("");
     setRemoteItems([]);
     setRemoteError(null);
     setLoading(false);
   }, []);
 
   return {
-    query,
-    setQuery,
+    filterMode,
+    searchTerm,
+    setSearchTerm,
+    clearProjectsFilter,
     groupedItems,
     loading,
     remoteError,

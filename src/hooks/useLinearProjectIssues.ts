@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { fetchLinearProjectIssues } from "../lib/api";
+import { onLinearIssueListChange } from "../lib/linearIssueListEvents";
+import {
+  addLinearWatcherStreamListener,
+  isLinearWatcherPollEvent,
+} from "../lib/linearWatcherEvents";
+import { isLinearWatcherChangeEvent } from "../lib/notificationPayloads";
 
 export type LinearWorkflowState = {
   id: string;
@@ -59,6 +65,32 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    return onLinearIssueListChange((change) => {
+      if (change.type === "remove") {
+        setIssues((current) => current.filter((issue) => issue.id !== change.issueId));
+        return;
+      }
+
+      setIssues((current) =>
+        current.map((issue) =>
+          issue.id === change.issueId ? { ...issue, ...change.patch } : issue,
+        ),
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !projectId) return undefined;
+
+    return addLinearWatcherStreamListener((event) => {
+      if (isLinearWatcherPollEvent(event)) return;
+      if (!isLinearWatcherChangeEvent(event)) return;
+      if (event.projectId !== projectId) return;
+      void refresh({ background: true });
+    });
+  }, [enabled, projectId, refresh]);
 
   const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);
 

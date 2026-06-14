@@ -47,7 +47,7 @@ const DELETE_TARGET_PATTERNS: RegExp[] = [
 
 export function detectDeleteFileIntent(text: string): boolean {
   const trimmed = text.trim();
-  if (!trimmed || /^\/d(?:\s|$)/i.test(trimmed)) {
+  if (!trimmed || /^\/delete(?:\s|$)/i.test(trimmed)) {
     return false;
   }
   return (

@@ -5,8 +5,7 @@ import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearProjectSummary } from "../../lib/api";
 import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
 import {
-  isContentListKeyboardFocused,
-  useContentListKeyboardFocusedId,
+  useContentListItemKeyboardFocused,
 } from "../../lib/contentListNavigationReact";
 import {
   formatLinearProjectDate,
@@ -29,8 +28,7 @@ export function LinearProjectTableRow({
   const progressLabel = formatLinearProjectProgress(project.progress);
   const statusName = project.status?.name;
   const statusType = project.status?.type;
-  const keyboardFocusedId = useContentListKeyboardFocusedId();
-  const keyboardFocused = isContentListKeyboardFocused(keyboardFocusedId, project.id);
+  const keyboardFocused = useContentListItemKeyboardFocused(project.id);
 
   return (
     <li className="workspace-status-list__item">

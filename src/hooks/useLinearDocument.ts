@@ -4,6 +4,7 @@ import {
   updateLinearDocument,
   type LinearDocumentContent,
 } from "../lib/api";
+import { onLinearDocumentListChange } from "../lib/linearDocumentListEvents";
 
 export function useLinearDocument(documentId: string, enabled = true) {
   const [document, setDocument] = useState<LinearDocumentContent | null>(null);
@@ -40,18 +41,6 @@ export function useLinearDocument(documentId: string, enabled = true) {
     };
   }, [documentId, enabled]);
 
-  const save = useCallback(
-    async (updates: { title?: string; content?: string }) => {
-      const result = await updateLinearDocument(documentId, updates);
-      if (result.error || !result.document) {
-        return result.error ?? "Failed to save document.";
-      }
-      setDocument(result.document);
-      return null;
-    },
-    [documentId],
-  );
-
   const refresh = useCallback(async () => {
     if (!enabled || !documentId) return;
     setRefreshing(true);
@@ -69,6 +58,31 @@ export function useLinearDocument(documentId: string, enabled = true) {
       setRefreshing(false);
     }
   }, [documentId, enabled]);
+
+  useEffect(() => {
+    if (!enabled || !documentId) return undefined;
+
+    return onLinearDocumentListChange((change) => {
+      if (change.type !== "refresh") return;
+      if (change.documentId && change.documentId !== documentId) return;
+      void refresh();
+    });
+  }, [documentId, enabled, refresh]);
+
+  const save = useCallback(
+    async (updates: { title?: string; content?: string }) => {
+      const result = await updateLinearDocument(documentId, updates);
+      if (result.error || !result.document) {
+        return {
+          error: result.error ?? "Failed to save document.",
+          document: null,
+        };
+      }
+      setDocument(result.document);
+      return { error: null, document: result.document };
+    },
+    [documentId],
+  );
 
   return { document, loading, refreshing, error, save, refresh };
 }

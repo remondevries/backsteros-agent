@@ -3,6 +3,7 @@ import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearDocument } from "../../hooks/useLinearDocument";
 import { deleteLinearDocument } from "../../lib/api";
+import { notifyLinearDocumentListChange } from "../../lib/linearDocumentListEvents";
 import {
   handleVaultDocumentTitleEnter,
   registerVaultDocumentTitleFocus,
@@ -89,15 +90,28 @@ export function LinearDocumentView({
       setSaving(true);
       setSaveError(null);
       try {
-        const saveErrorMessage = await save({ title, content: body });
-        if (saveErrorMessage) {
-          setSaveError(saveErrorMessage);
+        const saveResult = await save({ title, content: body });
+        if (saveResult.error) {
+          setSaveError(saveResult.error);
           return;
         }
         setDirty(false);
+        const nextTitle =
+          saveResult.document?.title.trim() ||
+          title.trim() ||
+          document?.title ||
+          "Untitled";
         updateActiveLinearDocument({
-          title: title.trim() || document?.title || "Untitled",
+          title: nextTitle,
           projectId: projectId ?? document?.projectId,
+        });
+        notifyLinearDocumentListChange({
+          type: "update",
+          linearDocumentId: documentId,
+          patch: {
+            title: nextTitle,
+            updatedAt: saveResult.document?.updatedAt,
+          },
         });
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : "Failed to save document");
@@ -173,6 +187,7 @@ export function LinearDocumentView({
         setSaveError(result.error ?? "Failed to delete document.");
         return;
       }
+      notifyLinearDocumentListChange({ type: "remove", linearDocumentId: documentId });
       clearActiveLinearDocument();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to delete document");

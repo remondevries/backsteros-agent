@@ -22,6 +22,8 @@ export type ContentListNavigationController = {
   clearFocus: () => void;
   cycleList: (direction: "next" | "prev") => boolean;
   getFocusedId: () => string | null;
+  focusFromPointer: (itemId: string) => boolean;
+  isKeyboardNavActive: () => boolean;
 };
 
 let contentListNavigationController: ContentListNavigationController | null = null;
@@ -164,14 +166,50 @@ function itemById(items: ContentListNavItem[], id: string): ContentListNavItem |
   return items.find((item) => item.id === id) ?? null;
 }
 
+function focusFromPointer(
+  registrations: Map<string, ContentListRegistration>,
+  activeRegistrationIdRef: { current: string | null } | undefined,
+  focusedIdRef: { current: string | null },
+  setFocusedId: (id: string | null) => void,
+  keyboardNavActiveRef: { current: boolean },
+  setKeyboardNavActive: (active: boolean) => void,
+  itemId: string,
+): boolean {
+  for (const [registrationId, registration] of registrations.entries()) {
+    if (!registration.enabled) continue;
+    if (!registration.itemsRef.current.some((item) => item.id === itemId)) continue;
+
+    if (activeRegistrationIdRef) {
+      activeRegistrationIdRef.current = registrationId;
+    }
+
+    keyboardNavActiveRef.current = false;
+    setKeyboardNavActive(false);
+
+    if (focusedIdRef.current !== itemId) {
+      focusedIdRef.current = itemId;
+      setFocusedId(itemId);
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 function moveFocus(
   registrations: Map<string, ContentListRegistration>,
   preferredListRegionRef: { current: ContentListRegion | null } | undefined,
   activeRegistrationIdRef: { current: string | null } | undefined,
   focusedIdRef: { current: string | null },
   setFocusedId: (id: string | null) => void,
+  keyboardNavActiveRef: { current: boolean },
+  setKeyboardNavActive: (active: boolean) => void,
   direction: "up" | "down",
 ): boolean {
+  keyboardNavActiveRef.current = true;
+  setKeyboardNavActive(true);
+
   const active = resolveActiveRegistration(
     registrations,
     preferredListRegionRef,
@@ -224,7 +262,12 @@ function activateFocused(
   preferredListRegionRef: { current: ContentListRegion | null } | undefined,
   activeRegistrationIdRef: { current: string | null } | undefined,
   focusedIdRef: { current: string | null },
+  keyboardNavActiveRef: { current: boolean },
+  setKeyboardNavActive: (active: boolean) => void,
 ): boolean {
+  keyboardNavActiveRef.current = true;
+  setKeyboardNavActive(true);
+
   const active = resolveActiveRegistration(
     registrations,
     preferredListRegionRef,
@@ -295,10 +338,16 @@ export function clearContentListKeyboardFocus(
   focusedIdRef: { current: string | null },
   setFocusedId: (id: string | null) => void,
   activeRegistrationIdRef?: { current: string | null },
+  keyboardNavActiveRef?: { current: boolean },
+  setKeyboardNavActive?: (active: boolean) => void,
 ) {
   if (activeRegistrationIdRef) {
     activeRegistrationIdRef.current = null;
   }
+  if (keyboardNavActiveRef) {
+    keyboardNavActiveRef.current = false;
+  }
+  setKeyboardNavActive?.(false);
   if (focusedIdRef.current === null) return;
   focusedIdRef.current = null;
   setFocusedId(null);
@@ -346,6 +395,8 @@ export function installContentListNavigationController(
   setFocusedId: (id: string | null) => void,
   preferredListRegionRef?: { current: ContentListRegion | null },
   activeRegistrationIdRef?: { current: string | null },
+  keyboardNavActiveRef?: { current: boolean },
+  setKeyboardNavActive?: (active: boolean) => void,
 ): () => void {
   contentListNavigationController = {
     moveFocus: (direction) =>
@@ -355,10 +406,19 @@ export function installContentListNavigationController(
         activeRegistrationIdRef,
         focusedIdRef,
         setFocusedId,
+        keyboardNavActiveRef ?? { current: false },
+        setKeyboardNavActive ?? (() => {}),
         direction,
       ),
     activateFocused: () =>
-      activateFocused(registrations, preferredListRegionRef, activeRegistrationIdRef, focusedIdRef),
+      activateFocused(
+        registrations,
+        preferredListRegionRef,
+        activeRegistrationIdRef,
+        focusedIdRef,
+        keyboardNavActiveRef ?? { current: false },
+        setKeyboardNavActive ?? (() => {}),
+      ),
     autoFocus: () =>
       autoFocusActiveContentList(
         registrations,
@@ -368,18 +428,42 @@ export function installContentListNavigationController(
         activeRegistrationIdRef,
       ),
     clearFocus: () =>
-      clearContentListKeyboardFocus(focusedIdRef, setFocusedId, activeRegistrationIdRef),
+      clearContentListKeyboardFocus(
+        focusedIdRef,
+        setFocusedId,
+        activeRegistrationIdRef,
+        keyboardNavActiveRef,
+        setKeyboardNavActive,
+      ),
     cycleList: (direction) => {
       if (!activeRegistrationIdRef) return false;
-      return cycleActiveContentList(
+      const cycled = cycleActiveContentList(
         registrations,
         focusedIdRef,
         setFocusedId,
         activeRegistrationIdRef,
         direction,
       );
+      if (cycled) {
+        if (keyboardNavActiveRef) {
+          keyboardNavActiveRef.current = true;
+        }
+        setKeyboardNavActive?.(true);
+      }
+      return cycled;
     },
     getFocusedId: () => focusedIdRef.current,
+    focusFromPointer: (itemId) =>
+      focusFromPointer(
+        registrations,
+        activeRegistrationIdRef,
+        focusedIdRef,
+        setFocusedId,
+        keyboardNavActiveRef ?? { current: false },
+        setKeyboardNavActive ?? (() => {}),
+        itemId,
+      ),
+    isKeyboardNavActive: () => keyboardNavActiveRef?.current ?? false,
   };
   return () => {
     contentListNavigationController = null;

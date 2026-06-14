@@ -11,6 +11,7 @@ import {
 import {
   isContentListKeyboardFocused,
   useContentListKeyboardFocusedId,
+  useContentListKeyboardNavActive,
 } from "../../lib/contentListNavigationReact";
 import { GroupChevron } from "./GroupChevron";
 
@@ -49,9 +50,14 @@ export function CollapsibleStatusSection({
   onGroupMouseUp?: () => void;
 }) {
   const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardNavActive = useContentListKeyboardNavActive();
   const headerListId = contentListGroupHeaderId(idPrefix, groupKey);
   const groupId = `${idPrefix}-${groupKey.replace(/\s+/g, "-").toLowerCase()}`;
-  const keyboardFocused = isContentListKeyboardFocused(keyboardFocusedId, headerListId);
+  const keyboardFocused = isContentListKeyboardFocused(
+    keyboardFocusedId,
+    headerListId,
+    keyboardNavActive,
+  );
   const hasIcon = icon != null;
   const hasHeaderAction = headerAction != null;
 

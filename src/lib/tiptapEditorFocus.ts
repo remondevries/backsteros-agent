@@ -58,40 +58,36 @@ export function clearTiptapEditorFocusRestore(): void {
   restoreOnEscape = false;
 }
 
-export function shouldRestoreTiptapEditorFocus(): boolean {
-  if (!restoreOnEscape) return false;
-  const registration = pickActiveRegistration();
-  return registration?.isFocused() ?? false;
+function isTiptapEditorDom(element: HTMLElement): boolean {
+  return Boolean(element.closest(".tiptap-editor-root, .ProseMirror"));
 }
 
-export function focusPageTiptapEditor(): boolean {
-  const registration = pickActiveRegistration();
-  if (!registration) return false;
+function captureFocusRestoreTarget(active: Element | null | undefined): HTMLElement | null {
+  const candidate = asRestorableFocusTarget(active);
+  if (!candidate || isTiptapEditorDom(candidate)) return null;
+  return candidate;
+}
 
-  if (registration.isFocused()) {
-    return true;
-  }
-
-  const active =
-    typeof document !== "undefined" ? document.activeElement : null;
-  const restorableActive = asRestorableFocusTarget(active);
-  if (restorableActive) {
-    previousFocusElement = restorableActive;
-  } else {
-    previousFocusElement = null;
-  }
+export function noteTiptapEditorFocusRestore(fromElement?: HTMLElement | null): void {
+  const candidate =
+    fromElement != null
+      ? captureFocusRestoreTarget(fromElement)
+      : captureFocusRestoreTarget(
+          typeof document !== "undefined" ? document.activeElement : null,
+        );
+  previousFocusElement = candidate;
   restoreOnEscape = true;
-
-  return registration.focus();
 }
 
-export function restoreTiptapEditorFocus(): boolean {
-  if (!restoreOnEscape) return false;
+export function isTiptapEditorFocused(): boolean {
+  return pickActiveRegistration()?.isFocused() ?? false;
+}
 
+export function dismissTiptapEditorFocus(): boolean {
   const registration = pickActiveRegistration();
   if (!registration?.isFocused()) return false;
 
-  const target = previousFocusElement;
+  const target = restoreOnEscape ? previousFocusElement : null;
 
   suppressBlurClear = true;
   registration.blur();
@@ -104,6 +100,31 @@ export function restoreTiptapEditorFocus(): boolean {
   }
 
   return true;
+}
+
+export function focusPageTiptapEditor(): boolean {
+  const registration = pickActiveRegistration();
+  if (!registration) return false;
+
+  if (registration.isFocused()) {
+    return true;
+  }
+
+  noteTiptapEditorFocusRestore(
+    captureFocusRestoreTarget(typeof document !== "undefined" ? document.activeElement : null),
+  );
+
+  return registration.focus();
+}
+
+export function shouldRestoreTiptapEditorFocus(): boolean {
+  if (!restoreOnEscape) return false;
+  return isTiptapEditorFocused();
+}
+
+export function restoreTiptapEditorFocus(): boolean {
+  if (!shouldRestoreTiptapEditorFocus()) return false;
+  return dismissTiptapEditorFocus();
 }
 
 export function handleTiptapEditorFocusBlur(): void {

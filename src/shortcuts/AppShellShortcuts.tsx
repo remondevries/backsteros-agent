@@ -8,7 +8,10 @@ import { LinearProjectViewShortcuts } from "./LinearProjectViewShortcuts";
 import { PanelToggleShortcuts } from "./PanelToggleShortcuts";
 import { RightPanelChatFocusShortcuts } from "./RightPanelChatFocusShortcuts";
 import { SidebarNavCycleShortcuts } from "./SidebarNavCycleShortcuts";
+import { SidebarNoteCreationShortcuts } from "./SidebarNoteCreationShortcuts";
+import { SidebarNoteDeletionShortcuts } from "./SidebarNoteDeletionShortcuts";
 import { TiptapEditorFocusShortcuts } from "./TiptapEditorFocusShortcuts";
+import { LinearIssuePropertyShortcuts } from "./LinearIssuePropertyShortcuts";
 import { VaultDocumentTitleFocusShortcuts } from "./VaultDocumentTitleFocusShortcuts";
 import { useCommandPaletteShortcut } from "./useCommandPaletteShortcut";
 
@@ -53,6 +56,7 @@ export function AppShellShortcuts({
         activeVaultNavItem={activeVaultNavItem}
       />
       <TiptapEditorFocusShortcuts enabled={globalShortcutsEnabled} />
+      <LinearIssuePropertyShortcuts enabled={globalShortcutsEnabled} />
       <VaultDocumentTitleFocusShortcuts enabled={globalShortcutsEnabled} />
       <RightPanelChatFocusShortcuts
         enabled={globalShortcutsEnabled}
@@ -70,6 +74,8 @@ export function AppShellShortcuts({
         activeVaultNavItem={activeVaultNavItem}
         onVaultNavItemChange={onVaultNavItemChange}
       />
+      <SidebarNoteCreationShortcuts enabled={globalShortcutsEnabled} />
+      <SidebarNoteDeletionShortcuts enabled={globalShortcutsEnabled} />
       <AppNavigationShortcuts
         enabled={globalShortcutsEnabled}
         onVaultNavItemChange={onVaultNavItemChange}

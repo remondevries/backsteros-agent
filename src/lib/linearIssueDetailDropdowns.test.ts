@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildLinearAssigneeDropdownOptions,
+  buildLinearDueDateDropdownOptions,
   buildLinearEstimateDropdownOptions,
   buildLinearEstimateScaleValues,
   buildLinearPriorityDropdownOptions,
   isLinearNoEstimateValue,
+  isLinearPickDueDateValue,
+  LINEAR_NO_DUE_DATE_VALUE,
+  LINEAR_PICK_DUE_DATE_VALUE,
+  linearAssigneeDropdownValue,
+  linearAssigneeIdFromDropdownValue,
+  linearDueDateDropdownValue,
+  linearDueDateFromDropdownValue,
   linearEstimateDropdownValue,
   linearEstimateLabelFromValue,
   linearPriorityDropdownValue,
@@ -94,5 +103,40 @@ describe("linearIssueDetailDropdowns", () => {
     ).toBe("No estimate");
     expect(isLinearNoEstimateValue("0")).toBe(true);
     expect(isLinearNoEstimateValue("3")).toBe(false);
+  });
+
+  test("builds assignee options with unassigned first", () => {
+    const options = buildLinearAssigneeDropdownOptions([
+      { id: "user-2", name: "Sam", username: "sam", avatarUrl: null },
+      { id: "user-1", name: "Alex", username: "alex", avatarUrl: null },
+    ]);
+
+    expect(options[0]).toMatchObject({ value: "__none__", label: "No assignee" });
+    expect(options[1]).toMatchObject({ value: "user-1", label: "alex" });
+    expect(linearAssigneeDropdownValue("user-1")).toBe("user-1");
+    expect(linearAssigneeIdFromDropdownValue("__none__")).toBeNull();
+  });
+
+  test("builds due date options with presets and clear action", () => {
+    const now = new Date(2026, 5, 13);
+    const options = buildLinearDueDateDropdownOptions(null, now);
+
+    expect(options[0]).toMatchObject({ value: "2026-06-13", label: "Today" });
+    expect(options[1]).toMatchObject({ value: "2026-06-14", label: "Tomorrow" });
+    expect(options.at(-2)).toMatchObject({ value: LINEAR_PICK_DUE_DATE_VALUE, label: "Pick a date…" });
+    expect(options.at(-1)).toMatchObject({ value: LINEAR_NO_DUE_DATE_VALUE, label: "No due date" });
+  });
+
+  test("includes current due date when it is not a preset", () => {
+    const options = buildLinearDueDateDropdownOptions("2026-12-25", new Date(2026, 5, 13));
+    expect(options[0]).toMatchObject({ value: "2026-12-25" });
+  });
+
+  test("maps due date dropdown values", () => {
+    expect(linearDueDateDropdownValue(null)).toBe(LINEAR_NO_DUE_DATE_VALUE);
+    expect(linearDueDateDropdownValue("2026-06-13")).toBe("2026-06-13");
+    expect(linearDueDateFromDropdownValue(LINEAR_NO_DUE_DATE_VALUE)).toBeNull();
+    expect(linearDueDateFromDropdownValue("2026-06-13")).toBe("2026-06-13");
+    expect(isLinearPickDueDateValue(LINEAR_PICK_DUE_DATE_VALUE)).toBe(true);
   });
 });

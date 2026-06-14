@@ -5,7 +5,7 @@ import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useVaultDocument } from "../../hooks/useVaultDocument";
 import { useVaultDocumentWhoopSnapshot } from "../../hooks/useVaultDocumentWhoopSnapshot";
-import { fetchLinearIssuesByDueDates } from "../../lib/api";
+import { useLinearIssuesByDueDates } from "../../hooks/useLinearIssuesByDueDates";
 import { isDailyVaultNotePath } from "../../lib/vaultNotePaths";
 import { dailyDateFromPath } from "../../lib/vaultDates";
 import { notifyVaultContentChanged } from "../../lib/vaultContentEvents";
@@ -44,18 +44,26 @@ export function VaultDocumentView({ path }: { path: string }) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [dueDateIssues, setDueDateIssues] = useState<LinearIssueEntity[]>([]);
-  const [dueDateIssuesLoading, setDueDateIssuesLoading] = useState(false);
-  const [dueDateIssuesError, setDueDateIssuesError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(titleDraft);
   const bodyRef = useRef(bodyDraft);
   const userEditedRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const focusHandledRef = useRef(false);
+  const preserveEditStateOnPathChangeRef = useRef(false);
   const focusTitleRequested =
     activeVaultDocument?.focusTitle === true && activeVaultDocument.path === path;
   const dueDate = document?.date?.trim() || dailyDateHint || null;
+  const dueDatesForIssues = useMemo(
+    () => (isDailyNote && dueDate ? [dueDate] : []),
+    [dueDate, isDailyNote],
+  );
+  const {
+    issuesByDueDate,
+    loading: dueDateIssuesLoading,
+    error: dueDateIssuesError,
+  } = useLinearIssuesByDueDates(dueDatesForIssues, isDailyNote && Boolean(dueDate));
+  const dueDateIssues = dueDate ? (issuesByDueDate[dueDate] ?? []) : [];
   titleRef.current = titleDraft;
   bodyRef.current = bodyDraft;
 
@@ -73,10 +81,16 @@ export function VaultDocumentView({ path }: { path: string }) {
   });
 
   useEffect(() => {
-    setDirty(false);
+    const preserveEditState = preserveEditStateOnPathChangeRef.current;
+    preserveEditStateOnPathChangeRef.current = false;
+
     setSaveError(null);
-    userEditedRef.current = false;
     focusHandledRef.current = false;
+
+    if (!preserveEditState) {
+      setDirty(false);
+      userEditedRef.current = false;
+    }
   }, [path]);
 
   useEffect(() => {
@@ -120,40 +134,6 @@ export function VaultDocumentView({ path }: { path: string }) {
       },
     });
   }, [document, path]);
-
-  useEffect(() => {
-    if (!isDailyNote || !dueDate) {
-      setDueDateIssues([]);
-      setDueDateIssuesLoading(false);
-      setDueDateIssuesError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setDueDateIssuesLoading(true);
-    setDueDateIssuesError(null);
-
-    void fetchLinearIssuesByDueDates([dueDate])
-      .then((result) => {
-        if (cancelled) return;
-        setDueDateIssues(result.issuesByDueDate[dueDate] ?? []);
-      })
-      .catch((fetchError) => {
-        if (cancelled) return;
-        setDueDateIssues([]);
-        setDueDateIssuesError(
-          fetchError instanceof Error ? fetchError.message : "Failed to load due-date issues",
-        );
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setDueDateIssuesLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dueDate, isDailyNote]);
 
   const groupedDueDateIssues = useMemo(() => groupLinearIssuesByStatus(dueDateIssues), [dueDateIssues]);
   const showStatusGrouping = groupedDueDateIssues.length > 1;
@@ -217,6 +197,7 @@ export function VaultDocumentView({ path }: { path: string }) {
         const savedDocument = result.document;
         const nextTitle = title.trim() || savedDocument?.title || document?.title || "Untitled";
         if (savedDocument && savedDocument.path !== path) {
+          preserveEditStateOnPathChangeRef.current = true;
           updateActiveVaultDocument({
             path: savedDocument.path,
             title: nextTitle,

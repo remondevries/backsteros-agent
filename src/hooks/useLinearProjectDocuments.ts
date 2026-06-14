@@ -4,6 +4,7 @@ import {
   fetchLinearTeamDocuments,
 } from "../lib/api";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
+import { onLinearDocumentListChange } from "../lib/linearDocumentListEvents";
 
 export function useLinearProjectDocuments({
   projectId,
@@ -60,6 +61,30 @@ export function useLinearProjectDocuments({
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    return onLinearDocumentListChange((change) => {
+      if (change.type === "refresh") {
+        void refresh({ background: true });
+        return;
+      }
+
+      if (change.type === "remove") {
+        setDocuments((current) =>
+          current.filter((document) => document.linearDocumentId !== change.linearDocumentId),
+        );
+        return;
+      }
+
+      setDocuments((current) =>
+        current.map((document) =>
+          document.linearDocumentId === change.linearDocumentId
+            ? { ...document, ...change.patch }
+            : document,
+        ),
+      );
+    });
   }, [refresh]);
 
   const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);

@@ -25,6 +25,11 @@ import {
   consumeLinearIssueViewMode,
   subscribeLinearIssueViewModeIntent,
 } from "./issueViewModeIntent";
+import {
+  handleVaultDocumentTitleEnter,
+  registerVaultDocumentTitleFocus,
+} from "../../lib/vaultDocumentTitleFocus";
+import { linearAssigneeIdFromDropdownValue } from "../../lib/linearIssueDetailDropdowns";
 
 const LINEAR_ISSUE_DETAILS_WIDTH_KEY = "backsteros.layout.linearIssueDetailsWidth";
 const SAVE_DEBOUNCE_MS = 800;
@@ -60,16 +65,25 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   const [descriptionDirty, setDescriptionDirty] = useState(false);
   const [descriptionSaving, setDescriptionSaving] = useState(false);
   const [descriptionSaveError, setDescriptionSaveError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleDirty, setTitleDirty] = useState(false);
+  const [titleSaving, setTitleSaving] = useState(false);
+  const [titleSaveError, setTitleSaveError] = useState<string | null>(null);
+  const descriptionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descriptionRef = useRef(descriptionDraft);
+  const titleRef = useRef(titleDraft);
   const issueScrollRef = useRef<HTMLDivElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const userEditedDescriptionRef = useRef(false);
+  const userEditedTitleRef = useRef(false);
   descriptionRef.current = descriptionDraft;
+  titleRef.current = titleDraft;
 
   useContentPanelBarState({
-    saving: descriptionSaving,
-    dirty: descriptionDirty,
-    error: descriptionSaveError ?? error,
+    saving: descriptionSaving || titleSaving,
+    dirty: descriptionDirty || titleDirty,
+    error: titleSaveError ?? descriptionSaveError ?? error,
     loading: loading && !issue,
     loadingMessage: "Loading issue…",
     refreshing: refreshing || updating,
@@ -102,8 +116,13 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     setDescriptionDirty(false);
     setDescriptionSaving(false);
     setDescriptionSaveError(null);
+    setTitleDraft("");
+    setTitleDirty(false);
+    setTitleSaving(false);
+    setTitleSaveError(null);
     setContentMode(consumeLinearIssueViewMode(issueId) ?? "issue");
     userEditedDescriptionRef.current = false;
+    userEditedTitleRef.current = false;
   }, [issueId]);
 
   useEffect(() => {
@@ -120,10 +139,19 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     setDescriptionDraft(issue.description ?? "");
   }, [descriptionDirty, issue]);
 
+  useEffect(() => {
+    if (!issue) return;
+    if (titleDirty || userEditedTitleRef.current) return;
+    setTitleDraft(issue.title);
+  }, [issue, titleDirty]);
+
   useEffect(
     () => () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+      if (descriptionDebounceRef.current) {
+        clearTimeout(descriptionDebounceRef.current);
+      }
+      if (titleDebounceRef.current) {
+        clearTimeout(titleDebounceRef.current);
       }
     },
     [],
@@ -133,11 +161,11 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     if (!issue) return;
     updateActiveLinearIssue({
       identifier: issue.identifier,
-      title: issue.title,
+      title: titleDirty ? titleDraft.trim() || issue.title : issue.title,
       status: issue.status,
       stateType: issue.stateType,
     });
-  }, [issue, updateActiveLinearIssue]);
+  }, [issue, titleDirty, titleDraft, updateActiveLinearIssue]);
 
   const focusSnapshot = useMemo(() => {
     if (!issue) return null;
@@ -148,6 +176,18 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   }, [descriptionDraft, issue]);
 
   useDebouncedFocusContentSnapshot(focusSnapshot, Boolean(issue));
+
+  useEffect(() => {
+    if (!issue || contentMode !== "issue") return undefined;
+    return registerVaultDocumentTitleFocus({
+      focusTitle: () => {
+        const input = titleInputRef.current;
+        if (!input) return;
+        input.focus();
+        input.select();
+      },
+    });
+  }, [contentMode, issue]);
 
   const handleStatusChange = useCallback(
     (stateId: string) => {
@@ -173,6 +213,20 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
         return;
       }
       void updateIssue({ estimate: Math.round(value) });
+    },
+    [updateIssue],
+  );
+
+  const handleAssigneeChange = useCallback(
+    (assigneeValue: string) => {
+      void updateIssue({ assigneeId: linearAssigneeIdFromDropdownValue(assigneeValue) });
+    },
+    [updateIssue],
+  );
+
+  const handleDueDateChange = useCallback(
+    (dueDate: string | null) => {
+      void updateIssue({ dueDate });
     },
     [updateIssue],
   );
@@ -212,16 +266,58 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
     [updateIssue],
   );
 
+  const persistTitle = useCallback(
+    async (nextTitle: string) => {
+      const normalized = nextTitle.trim();
+      if (!normalized) {
+        setTitleSaveError("Title cannot be empty.");
+        if (issue) {
+          setTitleDraft(issue.title);
+          setTitleDirty(false);
+        }
+        return;
+      }
+
+      setTitleSaving(true);
+      setTitleSaveError(null);
+      try {
+        const saveError = await updateIssue({ title: normalized });
+        if (saveError) {
+          setTitleSaveError(saveError);
+          return;
+        }
+        setTitleDirty(false);
+      } catch (err) {
+        setTitleSaveError(err instanceof Error ? err.message : "Failed to save title");
+      } finally {
+        setTitleSaving(false);
+      }
+    },
+    [issue, updateIssue],
+  );
+
   const scheduleDescriptionSave = useCallback(
     (content: string) => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+      if (descriptionDebounceRef.current) {
+        clearTimeout(descriptionDebounceRef.current);
       }
-      debounceRef.current = setTimeout(() => {
+      descriptionDebounceRef.current = setTimeout(() => {
         void persistDescription(content);
       }, SAVE_DEBOUNCE_MS);
     },
     [persistDescription],
+  );
+
+  const scheduleTitleSave = useCallback(
+    (nextTitle: string) => {
+      if (titleDebounceRef.current) {
+        clearTimeout(titleDebounceRef.current);
+      }
+      titleDebounceRef.current = setTimeout(() => {
+        void persistTitle(nextTitle);
+      }, SAVE_DEBOUNCE_MS);
+    },
+    [persistTitle],
   );
 
   const handleDescriptionFocus = () => {
@@ -237,12 +333,34 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   };
 
   const handleDescriptionBlur = () => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
+    if (descriptionDebounceRef.current) {
+      clearTimeout(descriptionDebounceRef.current);
+      descriptionDebounceRef.current = null;
     }
     if (descriptionDirty && userEditedDescriptionRef.current) {
       void persistDescription(descriptionRef.current);
+    }
+  };
+
+  const handleTitleFocus = () => {
+    userEditedTitleRef.current = true;
+  };
+
+  const handleTitleChange = (nextTitle: string) => {
+    setTitleDraft(nextTitle);
+    if (!userEditedTitleRef.current) return;
+    setTitleDirty(true);
+    setTitleSaveError(null);
+    scheduleTitleSave(nextTitle);
+  };
+
+  const handleTitleBlur = () => {
+    if (titleDebounceRef.current) {
+      clearTimeout(titleDebounceRef.current);
+      titleDebounceRef.current = null;
+    }
+    if (titleDirty && userEditedTitleRef.current) {
+      void persistTitle(titleRef.current);
     }
   };
 
@@ -354,7 +472,18 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
           ) : issue ? (
             <article className="linear-issue">
               <header className="linear-issue-header">
-                  <h1 className="linear-issue-title">{issue.title}</h1>
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  className="linear-issue-title"
+                  value={titleDraft}
+                  onChange={(event) => handleTitleChange(event.target.value)}
+                  onFocus={handleTitleFocus}
+                  onBlur={handleTitleBlur}
+                  onKeyDown={handleVaultDocumentTitleEnter}
+                  placeholder="Issue title"
+                  aria-label="Issue title"
+                />
               </header>
               <div className="linear-issue-body-editor">
                 <TiptapEditor
@@ -389,7 +518,9 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
                 issue={issue}
                 onStatusChange={handleStatusChange}
                 onPriorityChange={handlePriorityChange}
+                onAssigneeChange={handleAssigneeChange}
                 onEstimateChange={handleEstimateChange}
+                onDueDateChange={handleDueDateChange}
                 onLabelAdd={handleLabelAdd}
               />
             </div>

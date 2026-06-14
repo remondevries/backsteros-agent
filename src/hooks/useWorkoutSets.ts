@@ -10,6 +10,7 @@ import {
 import { setExerciseCatalogEntries } from "../lib/workouts/exerciseCatalogRuntime";
 import { computeAllPersonalRecordsFromSets } from "../lib/workouts/personalRecords";
 import type { WorkoutSet } from "../lib/workouts/types";
+import { notifyWorkoutSetsChanged, onWorkoutSetsChanged } from "../lib/workoutSetsEvents";
 
 function toWorkoutSet(row: WorkoutSetWire): WorkoutSet {
   return {
@@ -67,13 +68,19 @@ export function useWorkoutSets() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    return onWorkoutSetsChanged(() => {
+      void refresh();
+    });
+  }, [refresh]);
+
   const personalRecords = useMemo(() => computeAllPersonalRecordsFromSets(sets), [sets]);
 
   const appendSets = useCallback(
     async (incoming: Omit<WorkoutSetWire, "setNumber">[]) => {
       const result = await appendWorkoutSets(incoming);
       if (result.error) throw new Error(result.error);
-      await refresh();
+      notifyWorkoutSetsChanged();
       return result;
     },
     [refresh],
@@ -86,7 +93,7 @@ export function useWorkoutSets() {
     ) => {
       const result = await updateWorkoutSet(locator, patch);
       if (result.error) throw new Error(result.error);
-      await refresh();
+      notifyWorkoutSetsChanged();
       return result.ok;
     },
     [refresh],
@@ -96,7 +103,7 @@ export function useWorkoutSets() {
     async (locator: { date: string; exercise: string; setNumber: number }) => {
       const result = await deleteWorkoutSet(locator);
       if (result.error) throw new Error(result.error);
-      await refresh();
+      notifyWorkoutSetsChanged();
       return result.ok;
     },
     [refresh],

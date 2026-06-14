@@ -52,6 +52,20 @@ function emitNotification(payload: AppNotificationPayload): void {
   }
 }
 
+function notificationClassNames(variant: AppNotificationPayload["variant"] = "default") {
+  const toastClassName =
+    variant === "clipboard"
+      ? "app-notification-toast app-notification-toast--clipboard"
+      : "app-notification-toast";
+
+  return {
+    toast: toastClassName,
+    title: "app-notification-toast__title",
+    description: "app-notification-toast__description",
+    closeButton: "app-notification-toast__close",
+  };
+}
+
 export function pushNotification(payload: AppNotificationPayload): string | null {
   if (shouldDedupeNotification(payload)) {
     return null;
@@ -59,22 +73,26 @@ export function pushNotification(payload: AppNotificationPayload): string | null
 
   emitNotification(payload);
 
-  const toastId = toast(payload.title, {
+  const variant = payload.variant ?? "default";
+  const toastOptions = {
     id: payload.id,
-    description: payload.message,
+    description: variant === "clipboard" ? undefined : payload.message,
     duration: payload.durationMs ?? DEFAULT_DURATION_MS,
-    classNames: {
-      toast: "app-notification-toast",
-      title: "app-notification-toast__title",
-      description: "app-notification-toast__description",
-    },
+    classNames: notificationClassNames(variant),
     action: payload.action
       ? {
           label: payload.action.label,
           onClick: () => payload.action?.onClick?.(),
         }
       : undefined,
-  });
+  };
+
+  const toastId =
+    variant === "clipboard"
+      ? toast.info(payload.title, toastOptions)
+      : payload.kind === "error"
+        ? toast.error(payload.title, toastOptions)
+        : toast(payload.title, toastOptions);
 
   return String(toastId);
 }

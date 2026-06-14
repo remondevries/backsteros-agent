@@ -5,6 +5,7 @@ import {
   type LinearIssueDetail,
   type LinearIssueDetailUpdates,
 } from "../lib/api";
+import { notifyLinearIssueListUpdateFromDetail } from "../lib/linearIssueListPatch";
 
 export function useLinearIssueDetail(issueId: string, enabled = true) {
   const [issue, setIssue] = useState<LinearIssueDetail | null>(null);
@@ -57,6 +58,7 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
       } else {
         setIssue(result.issue);
         setError(null);
+        notifyLinearIssueListUpdateFromDetail(result.issue);
       }
     } finally {
       if (!silent) {
@@ -78,6 +80,7 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
           return message;
         }
         setIssue(result.issue);
+        notifyLinearIssueListUpdateFromDetail(result.issue);
         return null;
       } finally {
         setUpdating(false);

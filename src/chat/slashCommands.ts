@@ -9,7 +9,7 @@ import {
 } from "./morningReview";
 import type { ToolSelection } from "./tool-routing";
 
-export type SlashCommandContext = "chat" | "lookup";
+export type SlashCommandContext = "chat" | "lookup" | "linear-thread";
 
 export type SlashCommandId =
   | "good-morning"
@@ -75,8 +75,8 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   {
     id: "delete-file",
     label: DELETE_FILE_LABEL,
-    description: "Delete a note or file from your vault",
-    triggers: ["d", "delete"],
+    description: "Delete a note or file from your vault (/delete <path>)",
+    triggers: ["delete-file"],
     contexts: ["chat"],
   },
   {
@@ -115,8 +115,15 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
     id: "clear",
     label: "Clear chat",
     description: "Clear this session's messages and start fresh",
-    triggers: ["clear"],
+    triggers: ["clear", "delete"],
     contexts: ["chat", "lookup"],
+  },
+  {
+    id: "clear",
+    label: "Delete thread",
+    description: "Remove this Linear conversation and start fresh",
+    triggers: ["delete", "d", "clear"],
+    contexts: ["linear-thread"],
   },
 ];
 
@@ -144,11 +151,23 @@ export function filterSlashCommands(
 ): SlashCommandDefinition[] {
   const now = options.now ?? new Date();
   const context = options.context ?? "chat";
-  return SLASH_COMMANDS.filter((command) => {
+  const normalizedQuery = query.toLowerCase();
+  const matched = SLASH_COMMANDS.filter((command) => {
     if (!command.contexts.includes(context)) return false;
     if (command.isVisible && !command.isVisible(now)) return false;
     return slashCommandMatchesQuery(command, query);
   });
+
+  if (!normalizedQuery) return matched;
+
+  const exactTriggerMatches = matched.filter((command) =>
+    command.triggers.some((trigger) => trigger.toLowerCase() === normalizedQuery),
+  );
+  if (exactTriggerMatches.length > 0) {
+    return exactTriggerMatches;
+  }
+
+  return matched;
 }
 
 export function isSlashCommandPaletteOpen(

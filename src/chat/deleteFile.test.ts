@@ -7,16 +7,17 @@ import {
 } from "./deleteFile.ts";
 
 describe("parseDeleteShortcut", () => {
-  test("activates on /d alone", () => {
-    expect(parseDeleteShortcut("/d")).toEqual({ kind: "activate" });
-    expect(parseDeleteShortcut("/delete")).toEqual({ kind: "activate" });
-  });
-
-  test("sends body on /d with text", () => {
-    expect(parseDeleteShortcut("/d Daily/2025-06-10.md")).toEqual({
+  test("sends body on /delete with text", () => {
+    expect(parseDeleteShortcut("/delete Daily/2025-06-10.md")).toEqual({
       kind: "send",
       body: "Daily/2025-06-10.md",
     });
+  });
+
+  test("ignores bare /delete and /d", () => {
+    expect(parseDeleteShortcut("/delete")).toBeNull();
+    expect(parseDeleteShortcut("/d")).toBeNull();
+    expect(parseDeleteShortcut("/d Daily/2025-06-10.md")).toBeNull();
   });
 });
 
@@ -58,7 +59,8 @@ describe("detectDeleteFileIntent", () => {
   });
 
   test("ignores slash activation and unrelated text", () => {
-    expect(detectDeleteFileIntent("/d")).toBe(false);
+    expect(detectDeleteFileIntent("/delete")).toBe(false);
+    expect(detectDeleteFileIntent("/delete ")).toBe(false);
     expect(detectDeleteFileIntent("hello there")).toBe(false);
   });
 });

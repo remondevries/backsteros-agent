@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { fetchLinearIssueDetail, updateLinearIssueDetail } from "../lib/api";
+import { notifyLinearIssueListUpdateFromDetail } from "../lib/linearIssueListPatch";
 import {
   applyIssueStatusOverrides,
   canonicalStatusKey,
@@ -165,6 +166,9 @@ export function useLinearIssueStatusDragDrop({
         const result = await updateLinearIssueDetail(droppedIssueId, { stateId: targetStateId });
         if (result.error) {
           throw new Error(result.error);
+        }
+        if (result.issue) {
+          notifyLinearIssueListUpdateFromDetail(result.issue);
         }
       } catch (moveIssueError) {
         setIssueOverrides((current) => {

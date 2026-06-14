@@ -6,13 +6,13 @@ import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearIssueEntity } from "../../chat/types";
 import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
 import {
-  isContentListKeyboardFocused,
-  useContentListKeyboardFocusedId,
+  useContentListItemKeyboardFocused,
 } from "../../lib/contentListNavigationReact";
 import {
   formatIssueDueMetaLabel,
   linearIssueTitleForCardDisplay,
 } from "../../lib/linearIssueDisplay";
+import { abbreviateGithubLabelName, githubLabelHoverTitle } from "../../lib/linearLabelDisplay";
 import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
 import {
   useLeafAgentWaiting,
@@ -74,8 +74,7 @@ export function ProjectIssueRow({
   const priorityLabel =
     issue.priorityLabel || getPriorityLabel(issue.priority);
   const leadingTitle = leadingIcon === "status" ? (issue.status?.trim() || "Unknown") : priorityLabel;
-  const keyboardFocusedId = useContentListKeyboardFocusedId();
-  const keyboardFocused = isContentListKeyboardFocused(keyboardFocusedId, issue.id);
+  const keyboardFocused = useContentListItemKeyboardFocused(issue.id);
 
   const rowClass = [
     "project-issue-row",
@@ -87,7 +86,17 @@ export function ProjectIssueRow({
     .join(" ");
 
   const labelTitle =
-    labels.length > 1 ? labels.map((label) => label.name).join(" · ") : primaryLabel?.name;
+    labels.length > 1
+      ? labels.map((label) => label.name).join(" · ")
+      : primaryLabel
+        ? githubLabelHoverTitle(primaryLabel.name)
+        : undefined;
+  const primaryLabelDisplay = primaryLabel
+    ? abbreviateGithubLabelName(primaryLabel.name)
+    : null;
+  const projectLabelDisplay = issue.projectName
+    ? abbreviateGithubLabelName(issue.projectName)
+    : null;
   const hasTerminalIndicator = terminalSessionActive;
 
   const isTerminalIndicatorTarget = (event: MouseEvent<HTMLButtonElement>): boolean => {
@@ -160,12 +169,15 @@ export function ProjectIssueRow({
               style={{ backgroundColor: primaryLabel.color }}
               aria-hidden="true"
             />
-            <span className="project-issue-row__pill-label">{primaryLabel.name}</span>
+            <span className="project-issue-row__pill-label">{primaryLabelDisplay}</span>
           </span>
         ) : null}
         {showProjectLabel && issue.projectName ? (
-          <span className="project-issue-row__pill project-issue-row__pill--project" title={issue.projectName}>
-            <span className="project-issue-row__pill-label">{issue.projectName}</span>
+          <span
+            className="project-issue-row__pill project-issue-row__pill--project"
+            title={githubLabelHoverTitle(issue.projectName)}
+          >
+            <span className="project-issue-row__pill-label">{projectLabelDisplay}</span>
           </span>
         ) : null}
         {dueLabel ? (

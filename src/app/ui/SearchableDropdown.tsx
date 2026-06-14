@@ -64,19 +64,27 @@ export function SearchableDropdown<T extends string>({
   panelWidth = DEFAULT_PANEL_WIDTH,
   panelAlign = "start",
   renderTrigger,
+  registerOpenMenu,
+  onQuerySubmit,
+  queryPreviewLabel,
 }: {
   value: T | null;
   options: SearchableDropdownOption<T>[];
   onChange?: (value: T) => void;
   disabled?: boolean;
   searchPlaceholder?: string;
-  /** Badge shown in the search header (e.g. "S" to focus search). */
+  /** Badge next to the search field showing the keyboard shortcut that opens this menu (e.g. "S" for status). */
   searchShortcutLabel?: string;
   ariaLabel: string;
   className?: string;
   triggerClassName?: string;
   panelWidth?: number;
   panelAlign?: "start" | "end";
+  registerOpenMenu?: (open: (() => void) | null) => void;
+  /** When Enter is pressed with a non-empty query, run before selecting a list option. Return true if handled. */
+  onQuerySubmit?: (query: string) => boolean;
+  /** Optional preview line shown while typing (e.g. parsed natural-language date). */
+  queryPreviewLabel?: (query: string) => string | null;
   renderTrigger?: (props: {
     selected: SearchableDropdownOption<T> | null;
     open: boolean;
@@ -101,6 +109,10 @@ export function SearchableDropdown<T extends string>({
   );
 
   const filteredOptions = useMemo(() => filterOptions(options, query), [options, query]);
+  const queryPreview = useMemo(
+    () => (query.trim() ? (queryPreviewLabel?.(query) ?? null) : null),
+    [query, queryPreviewLabel],
+  );
 
   const close = useCallback(() => {
     setOpen(false);
@@ -193,6 +205,11 @@ export function SearchableDropdown<T extends string>({
   }, [open]);
 
   useEffect(() => {
+    registerOpenMenu?.(openMenu);
+    return () => registerOpenMenu?.(null);
+  }, [openMenu, registerOpenMenu]);
+
+  useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent) {
@@ -233,6 +250,11 @@ export function SearchableDropdown<T extends string>({
 
     if (event.key === "Enter") {
       event.preventDefault();
+      const trimmed = query.trim();
+      if (trimmed && onQuerySubmit?.(trimmed)) {
+        close();
+        return;
+      }
       const option = filteredOptions[activeIndex];
       if (option) selectOption(option);
       return;
@@ -318,6 +340,12 @@ export function SearchableDropdown<T extends string>({
                   </span>
                 ) : null}
               </div>
+
+              {queryPreview ? (
+                <div className="searchable-dropdown-nl-preview" aria-live="polite">
+                  {queryPreview}
+                </div>
+              ) : null}
 
               <ul className="searchable-dropdown-list" role="listbox" aria-labelledby={triggerId}>
                 {filteredOptions.length === 0 ? (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createLinearIssueComment } from "../../lib/api";
+import { createLinearIssueComment, deleteLinearIssueCommentThread, updateLinearIssueCommentThread } from "../../lib/api";
 import { useLinearIssueCommentThreads } from "../../hooks/useLinearIssueCommentThreads";
 import { composerContextItems as buildComposerContextItems } from "../../lib/chatFocusContext";
 import { registerRightPanelComposerFocus } from "../../lib/rightPanelChatFocus";
@@ -46,31 +46,56 @@ export function LinearIssueAgentPanel({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() =>
     readStoredThreadId(issueId),
   );
+  const [isDraftingNewThread, setIsDraftingNewThread] = useState(false);
+  const [draftSessionKey, setDraftSessionKey] = useState(0);
   const [creatingThread, setCreatingThread] = useState(false);
+  const [awaitAgentForThreadId, setAwaitAgentForThreadId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const threadChatRef = useRef<LinearIssueThreadChatHandle>(null);
+  const pendingCreatedThreadIdRef = useRef<string | null>(null);
+
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        threadChatRef.current?.focusComposer();
+      });
+    });
+  }, []);
 
   useEffect(() => {
     return registerRightPanelComposerFocus({
       focusComposer: () => {
         setPanelMode("chat");
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            threadChatRef.current?.focusComposer();
-          });
-        });
+        focusComposer();
       },
     });
-  }, []);
+  }, [focusComposer]);
 
   useEffect(() => {
     setPanelMode("chat");
     setActiveThreadId(readStoredThreadId(issueId));
+    setIsDraftingNewThread(false);
+    setDraftSessionKey(0);
     setActionError(null);
+    pendingCreatedThreadIdRef.current = null;
   }, [issueId]);
 
   useEffect(() => {
-    if (loading || threads.length === 0) return;
+    if (loading || isDraftingNewThread || creatingThread) return;
+
+    const pendingThreadId = pendingCreatedThreadIdRef.current;
+    if (pendingThreadId) {
+      const pendingVisible = threads.some((thread) => thread.id === pendingThreadId);
+      if (!pendingVisible) {
+        return;
+      }
+      pendingCreatedThreadIdRef.current = null;
+    }
+
+    if (threads.length === 0) {
+      setActiveThreadId(null);
+      return;
+    }
 
     const stored = readStoredThreadId(issueId);
     const storedExists = stored ? threads.some((thread) => thread.id === stored) : false;
@@ -85,13 +110,26 @@ export function LinearIssueAgentPanel({
       }
       return threads[0]?.id ?? null;
     });
-  }, [issueId, loading, threads]);
+  }, [creatingThread, issueId, isDraftingNewThread, loading, threads]);
+
+  const handleThreadUnavailable = useCallback(() => {
+    setActiveThreadId((current) => {
+      if (!current) return current;
+      if (threads.some((thread) => thread.id === current)) return current;
+      return threads[0]?.id ?? null;
+    });
+  }, [threads]);
 
   useEffect(() => {
+    if (isDraftingNewThread) {
+      writeStoredThreadId(issueId, null);
+      return;
+    }
     writeStoredThreadId(issueId, activeThreadId);
-  }, [activeThreadId, issueId]);
+  }, [activeThreadId, issueId, isDraftingNewThread]);
 
   const handleSelectThread = useCallback((threadId: string) => {
+    setIsDraftingNewThread(false);
     setActiveThreadId(threadId);
     setPanelMode("chat");
     setActionError(null);
@@ -102,26 +140,64 @@ export function LinearIssueAgentPanel({
     setActionError(null);
   }, []);
 
-  const handleCreateThread = useCallback(async () => {
-    if (creatingThread) return;
-    setCreatingThread(true);
-    setActionError(null);
-    try {
-      const result = await createLinearIssueComment(issueId, { newThread: true });
-      if (result.error || !result.comment) {
-        setActionError(result.error ?? "Failed to start a new thread.");
-        return;
+  const handleEditThread = useCallback(
+    async (threadId: string, body: string) => {
+      setActionError(null);
+      try {
+        const result = await updateLinearIssueCommentThread(issueId, threadId, body);
+        if (result.error || !result.comment) {
+          setActionError(result.error ?? "Failed to update thread.");
+          return false;
+        }
+        await refresh();
+        return true;
+      } catch {
+        setActionError("Failed to update thread.");
+        return false;
       }
+    },
+    [issueId, refresh],
+  );
 
-      await refresh();
-      setActiveThreadId(result.comment.id);
-      setPanelMode("chat");
-    } catch {
-      setActionError("Failed to start a new thread.");
-    } finally {
-      setCreatingThread(false);
+  const handleDeleteThread = useCallback(
+    async (threadId: string) => {
+      setActionError(null);
+      try {
+        const result = await deleteLinearIssueCommentThread(issueId, threadId);
+        if (result.error || !result.success) {
+          setActionError(result.error ?? "Failed to delete thread.");
+          return false;
+        }
+
+        await refresh();
+        setActiveThreadId((current) => (current === threadId ? null : current));
+        return true;
+      } catch {
+        setActionError("Failed to delete thread.");
+        return false;
+      }
+    },
+    [issueId, refresh],
+  );
+
+  const handleStartNewThreadDraft = useCallback(() => {
+    pendingCreatedThreadIdRef.current = null;
+    setIsDraftingNewThread(true);
+    setActiveThreadId(null);
+    setAwaitAgentForThreadId(null);
+    setDraftSessionKey((current) => current + 1);
+    setPanelMode("chat");
+    setActionError(null);
+    focusComposer();
+  }, [focusComposer]);
+
+  const handleClearLinearConversation = useCallback(async () => {
+    if (activeThreadId) {
+      return handleDeleteThread(activeThreadId);
     }
-  }, [creatingThread, issueId, refresh]);
+    handleStartNewThreadDraft();
+    return true;
+  }, [activeThreadId, handleDeleteThread, handleStartNewThreadDraft]);
 
   const handleStartThreadWithMessage = useCallback(
     async (body: string) => {
@@ -136,9 +212,14 @@ export function LinearIssueAgentPanel({
           return false;
         }
 
-        await refresh();
-        setActiveThreadId(result.comment.id);
+        const newThreadId = result.comment.id;
+        pendingCreatedThreadIdRef.current = newThreadId;
+        writeStoredThreadId(issueId, newThreadId);
+        setActiveThreadId(newThreadId);
+        setAwaitAgentForThreadId(newThreadId);
         setPanelMode("chat");
+        setIsDraftingNewThread(false);
+        await refresh();
         return true;
       } catch {
         setActionError("Failed to start a new thread.");
@@ -166,6 +247,15 @@ export function LinearIssueAgentPanel({
     });
   }, [activeLinearIssue, focusContentSnapshot, issueId]);
 
+  const viewingExistingThread = Boolean(activeThreadId) && !isDraftingNewThread;
+  const hasThreadHistory = threads.length > 0;
+
+  useEffect(() => {
+    if (!hasThreadHistory && panelMode === "threads") {
+      setPanelMode("chat");
+    }
+  }, [hasThreadHistory, panelMode]);
+
   return (
     <div className="right-side-panel-chat">
       <RightPanelChatHeader
@@ -173,21 +263,22 @@ export function LinearIssueAgentPanel({
         agentId="linear"
         actions={
           <>
-            <button
-              type="button"
-              className={`linear-thread-header-button${panelMode === "threads" ? " linear-thread-header-button-active" : ""}`}
-              onClick={handleToggleHistory}
-              aria-label={panelMode === "threads" ? "Back to thread chat" : "Show thread history"}
-              aria-pressed={panelMode === "threads"}
-              title={panelMode === "threads" ? "Back to chat" : "Thread history"}
-            >
-              <ThreadHistoryIcon />
-            </button>
+            {hasThreadHistory ? (
+              <button
+                type="button"
+                className={`linear-thread-header-button${panelMode === "threads" ? " linear-thread-header-button-active" : ""}`}
+                onClick={handleToggleHistory}
+                aria-label={panelMode === "threads" ? "Back to thread chat" : "Show thread history"}
+                aria-pressed={panelMode === "threads"}
+                title={panelMode === "threads" ? "Back to chat" : "Thread history"}
+              >
+                <ThreadHistoryIcon />
+              </button>
+            ) : null}
             <button
               type="button"
               className="linear-thread-header-button"
-              onClick={() => void handleCreateThread()}
-              disabled={creatingThread}
+              onClick={handleStartNewThreadDraft}
               aria-label="Start new thread"
               title="New thread"
             >
@@ -205,25 +296,34 @@ export function LinearIssueAgentPanel({
             loading={loading}
             error={error}
             onSelect={handleSelectThread}
+            onEdit={handleEditThread}
+            onDelete={handleDeleteThread}
           />
-        ) : activeThreadId ? (
+        ) : viewingExistingThread && activeThreadId ? (
           <LinearIssueThreadChat
+            key={activeThreadId}
             ref={threadChatRef}
             issueId={issueId}
             threadId={activeThreadId}
             composerContextItems={composerContextItems}
+            awaitAgentReplyOnMount={activeThreadId === awaitAgentForThreadId}
+            onAwaitAgentReplyStarted={() => setAwaitAgentForThreadId(null)}
+            onThreadUnavailable={handleThreadUnavailable}
+            onDeleteThread={handleClearLinearConversation}
           />
-        ) : loading ? (
+        ) : loading && threads.length > 0 && !isDraftingNewThread ? (
           <div className="linear-thread-empty-chat">
             <p className="linear-thread-list-status">Loading threads…</p>
           </div>
         ) : (
           <LinearIssueThreadChat
+            key={`draft-new-thread-${draftSessionKey}`}
             ref={threadChatRef}
             issueId={issueId}
             threadId={null}
             composerContextItems={composerContextItems}
             onStartThread={handleStartThreadWithMessage}
+            onDeleteThread={handleClearLinearConversation}
             starting={creatingThread}
           />
         )}

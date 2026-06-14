@@ -20,6 +20,7 @@
   --border-muted: #171819;
   --border-scrollbar: #171819;
   --border-hover: #171819;
+  --list-item-outline: #2a2c49;
   --link: #7aa2f7;
   --link-hover: #a5c4ff;
   --accent: #4a78ff;
@@ -32,6 +33,7 @@
   --model-mode-test-bg: var(--accent);
   --model-mode-max-bg: #f97316;
   --hover-overlay: rgba(255, 255, 255, 0.08);
+  --sidebar-item-active-bg: #141415;
   --linear-priority-active: #9aa0a6;
   --linear-priority-inactive: #4b5563;
   --linear-priority-none: #9aa0a6;
@@ -39,6 +41,7 @@
   --surface-0: rgba(255, 255, 255, 0.02);
   --surface-1: rgba(255, 255, 255, 0.04);
   --surface-14: rgba(255, 255, 255, 0.14);
+  --surface-elevated: #141415;
   --icon-color: rgba(255, 255, 255, 0.7);
   --chrome-border: #171819;
   --overlay-scrim: rgba(0, 0, 0, 0.72);
@@ -129,6 +132,7 @@
 
   --searchable-dropdown-bg: #171718;
   --searchable-dropdown-border: #1e1e20;
+  --command-palette-bg: #1b1b1c;
 
   --linear-project-view-tab-bg: transparent;
   --linear-project-view-tab-border: #2e2e2f;
@@ -201,6 +205,7 @@
     --border-muted: #ebebf0;
     --border-scrollbar: #c7c7cc;
     --border-hover: #aeaeb2;
+    --list-item-outline: var(--border-hover);
     --link: #0066cc;
     --link-hover: #004999;
     --accent: #0066cc;
@@ -213,6 +218,7 @@
     --model-mode-test-bg: var(--accent);
     --model-mode-max-bg: #f97316;
     --hover-overlay: rgba(0, 0, 0, 0.06);
+    --sidebar-item-active-bg: #ebebf0;
     --linear-priority-active: #6b7280;
     --linear-priority-inactive: #d1d5db;
     --linear-priority-none: #1c1c1e;
@@ -220,6 +226,7 @@
     --surface-0: rgba(0, 0, 0, 0.02);
     --surface-1: rgba(0, 0, 0, 0.04);
     --surface-14: rgba(0, 0, 0, 0.08);
+    --surface-elevated: #ffffff;
     --icon-color: rgba(0, 0, 0, 0.55);
     --chrome-border: rgba(0, 0, 0, 0.08);
     --overlay-scrim: rgba(0, 0, 0, 0.35);
@@ -308,6 +315,7 @@
 
     --searchable-dropdown-bg: var(--bg-elevated, var(--bg-surface));
     --searchable-dropdown-border: var(--border-subtle);
+    --command-palette-bg: var(--bg-surface);
 
     --linear-project-view-tab-bg: #fcfcfd;
     --linear-project-view-tab-border: #dbdbdb;

@@ -14,6 +14,7 @@ import {
   installContentListNavigationController,
   getContentListNavigationController,
   resolveContentListPreferredRegion,
+  CONTENT_LIST_ITEM_ATTR,
   type ContentListNavItem,
   type ContentListRegion,
 } from "./contentListNavigation";
@@ -22,6 +23,7 @@ type ContentListNavigationContextValue = {
   register: (id: string, registration: RegistrationRecord) => void;
   unregister: (id: string) => void;
   keyboardFocusedId: string | null;
+  keyboardNavActive: boolean;
   preferredListRegionRef: { current: ContentListRegion | null };
 };
 
@@ -42,7 +44,9 @@ export function ContentListNavigationProvider({ children }: { children: ReactNod
   const focusedIdRef = useRef<string | null>(null);
   const preferredListRegionRef = useRef<ContentListRegion | null>(null);
   const activeRegistrationIdRef = useRef<string | null>(null);
+  const keyboardNavActiveRef = useRef(false);
   const [keyboardFocusedId, setKeyboardFocusedId] = useState<string | null>(null);
+  const [keyboardNavActive, setKeyboardNavActive] = useState(false);
 
   const register = useCallback((id: string, registration: RegistrationRecord) => {
     registrationsRef.current.set(id, registration);
@@ -57,15 +61,21 @@ export function ContentListNavigationProvider({ children }: { children: ReactNod
       register,
       unregister,
       keyboardFocusedId,
+      keyboardNavActive,
       preferredListRegionRef,
     }),
-    [keyboardFocusedId, register, unregister],
+    [keyboardFocusedId, keyboardNavActive, register, unregister],
   );
 
   const setFocusedId = (id: string | null) => {
     focusedIdRef.current = id;
     setKeyboardFocusedId(id);
   };
+
+  const setKeyboardNavActiveState = useCallback((active: boolean) => {
+    keyboardNavActiveRef.current = active;
+    setKeyboardNavActive(active);
+  }, []);
 
   useEffect(() => {
     return installContentListNavigationController(
@@ -74,7 +84,39 @@ export function ContentListNavigationProvider({ children }: { children: ReactNod
       setFocusedId,
       preferredListRegionRef,
       activeRegistrationIdRef,
+      keyboardNavActiveRef,
+      setKeyboardNavActiveState,
     );
+  }, [setKeyboardNavActiveState]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (keyboardNavActive) {
+      root.dataset.contentListKeyboardNav = "true";
+    } else {
+      delete root.dataset.contentListKeyboardNav;
+    }
+  }, [keyboardNavActive]);
+
+  useEffect(() => {
+    function onMouseOver(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const item = target.closest(`[${CONTENT_LIST_ITEM_ATTR}]`);
+      if (!item) return;
+
+      const related = event.relatedTarget;
+      if (related instanceof Node && item.contains(related)) return;
+
+      const itemId = item.getAttribute(CONTENT_LIST_ITEM_ATTR);
+      if (!itemId) return;
+
+      getContentListNavigationController()?.focusFromPointer(itemId);
+    }
+
+    document.addEventListener("mouseover", onMouseOver);
+    return () => document.removeEventListener("mouseover", onMouseOver);
   }, []);
 
   return (
@@ -117,6 +159,17 @@ export function ContentListNavigationLayoutSync({
 export function useContentListKeyboardFocusedId(): string | null {
   const context = useContext(ContentListNavigationContext);
   return context?.keyboardFocusedId ?? null;
+}
+
+export function useContentListKeyboardNavActive(): boolean {
+  const context = useContext(ContentListNavigationContext);
+  return context?.keyboardNavActive ?? false;
+}
+
+export function useContentListItemKeyboardFocused(itemId: string): boolean {
+  const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardNavActive = useContentListKeyboardNavActive();
+  return isContentListKeyboardFocused(keyboardFocusedId, itemId, keyboardNavActive);
 }
 
 export function useContentListNavigationRegistration({
@@ -168,6 +221,7 @@ export function useContentListNavigationRegistration({
 export function isContentListKeyboardFocused(
   keyboardFocusedId: string | null,
   itemId: string,
+  keyboardNavActive = true,
 ): boolean {
-  return keyboardFocusedId === itemId;
+  return keyboardNavActive && keyboardFocusedId === itemId;
 }

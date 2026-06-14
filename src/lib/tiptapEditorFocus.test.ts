@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   clearTiptapEditorFocusRestore,
+  dismissTiptapEditorFocus,
   focusPageTiptapEditor,
+  isTiptapEditorFocused,
   registerTiptapEditorFocus,
   resetTiptapEditorFocusStateForTests,
   restoreTiptapEditorFocus,
@@ -87,6 +89,17 @@ describe("tiptapEditorFocus", () => {
     const unregister = registerTiptapEditorFocus(registration);
 
     expect(focusPageTiptapEditor()).toBe(false);
+
+    unregister();
+  });
+
+  test("dismissTiptapEditorFocus blurs a focused editor even without cmd+e restore", () => {
+    const registration = createRegistration({ id: "editor-1", focused: true });
+    const unregister = registerTiptapEditorFocus(registration);
+
+    expect(isTiptapEditorFocused()).toBe(true);
+    expect(dismissTiptapEditorFocus()).toBe(true);
+    expect(registration.isFocused()).toBe(false);
 
     unregister();
   });

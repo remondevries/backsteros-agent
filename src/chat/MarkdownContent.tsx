@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { linkifyWikilinks } from "../lib/obsidianUri";
 import { isOpenableExternalUrl, openExternalUrl } from "../lib/openExternalUrl";
 import { useVault } from "./VaultContext";
+import { MARKDOWN_BODY_CLASS } from "../markdown/markdownBodyClass";
 
 export function MarkdownContent({
   content,
@@ -21,9 +23,9 @@ export function MarkdownContent({
   }, [content, vault]);
 
   return (
-    <div className={["markdown-content", className].filter(Boolean).join(" ")}>
+    <div className={[MARKDOWN_BODY_CLASS, "markdown-content", className].filter(Boolean).join(" ")}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           a: ({ href, children, ...props }) => {
             if (href && isOpenableExternalUrl(href)) {

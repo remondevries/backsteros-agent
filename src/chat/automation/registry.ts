@@ -211,7 +211,7 @@ export const DELETE_FILE_AUTOMATION: AutomationDefinition = {
   flowVariant: "delete-file",
   label: DELETE_FILE_LABEL,
   trigger: {
-    shortcut: /^\/(?:d|delete)(?:\s|$)/i,
+    shortcut: /^\/delete\s/i,
     initialMessage: "",
     initialQuickActionId: DELETE_FILE_ACTION_ID,
   },

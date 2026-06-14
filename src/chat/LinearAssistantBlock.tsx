@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ActivityHeader, ActivityStepRow, ActivityTimeline } from "./ActivityTimeline";
+import { DotScrollLoader } from "./DotScrollLoader";
 import { LinearBrand } from "./LinearBrand";
 import { MessageActions } from "./MessageActions";
 import { TerminalTypingText } from "./TerminalTypingText";
@@ -13,6 +14,22 @@ export function LinearBrandHeader() {
   return (
     <div className="run-entity-brands">
       <LinearBrand />
+    </div>
+  );
+}
+
+export function LinearThinkingBlock({ statusLabel }: { statusLabel?: string }) {
+  const label = statusLabel?.trim() || "Thinking…";
+
+  return (
+    <div className="run-block">
+      <LinearBrandHeader />
+      <div className="run-text-block">
+        <div className="assistant-text terminal-message terminal-message-loading linear-thinking-block">
+          <DotScrollLoader aria-label={label} />
+          <span className="linear-thinking-status">{label}</span>
+        </div>
+      </div>
     </div>
   );
 }

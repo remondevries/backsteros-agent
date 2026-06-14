@@ -8,6 +8,7 @@ import {
 } from "../lib/contentListNavigation";
 import {
   useContentListKeyboardFocusedId,
+  useContentListKeyboardNavActive,
   useContentListNavigationRegistration,
 } from "../lib/contentListNavigationReact";
 import { useContentPanelNavigation, useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
@@ -31,6 +32,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
   const projectsQuery = useLinearProjects(enabled && view === "projects");
   const normalizedSearch = search.trim().toLowerCase();
   const keyboardFocusedId = useContentListKeyboardFocusedId();
+  const keyboardNavActive = useContentListKeyboardNavActive();
 
   useContentPanelSidebarBreadcrumbs(
     useMemo(
@@ -183,7 +185,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                             "vault-folder-explorer-entry",
                             "vault-folder-explorer-entry-selectable",
                             selected ? "vault-folder-explorer-entry-selected" : null,
-                            keyboardFocusedId === team.id
+                            keyboardNavActive && keyboardFocusedId === team.id
                               ? "vault-folder-explorer-entry-keyboard-focused"
                               : null,
                           ]
@@ -241,7 +243,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                         {...contentListItemDataAttributes(groupHeaderId)}
                         className={[
                           "linear-project-group-header",
-                          keyboardFocusedId === groupHeaderId
+                          keyboardNavActive && keyboardFocusedId === groupHeaderId
                             ? "vault-folder-explorer-entry-keyboard-focused"
                             : null,
                         ]
@@ -279,7 +281,7 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
                                   "vault-folder-explorer-entry",
                                   "vault-folder-explorer-entry-selectable",
                                   selected ? "vault-folder-explorer-entry-selected" : null,
-                                  keyboardFocusedId === project.id
+                                  keyboardNavActive && keyboardFocusedId === project.id
                                     ? "vault-folder-explorer-entry-keyboard-focused"
                                     : null,
                                 ]

@@ -6,9 +6,16 @@ mod window;
 
 use modules::pty::PtyState;
 use sidecar::SidecarState;
-use tauri::Manager;
+use tauri::{Manager, Theme, webview::Color};
 
 const WINDOW_LABEL: &str = "main";
+
+fn splash_background_for_theme(theme: Theme) -> Color {
+    match theme {
+        Theme::Light => Color::from((0xf3, 0xf3, 0xf4)),
+        Theme::Dark | _ => Color::from((0x07, 0x07, 0x07)),
+    }
+}
 
 #[tauri::command]
 fn get_sidecar_connection(state: tauri::State<'_, SidecarState>) -> sidecar::SidecarConnection {
@@ -64,6 +71,9 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
                 let _ = window.set_theme(None);
+                if let Ok(theme) = window.theme() {
+                    let _ = window.set_background_color(Some(splash_background_for_theme(theme)));
+                }
                 let _ = window.show();
                 let _ = window.set_focus();
                 let _ = traffic_lights::set_visible(&window, true);

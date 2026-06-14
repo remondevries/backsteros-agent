@@ -16,6 +16,7 @@ import { WhoopSleepScoreLabel } from "./WhoopSleepScoreLabel";
 import { WhoopRecoveryScoreLabel } from "./WhoopRecoveryScoreLabel";
 import { WhoopStrainScoreLabel } from "./WhoopStrainScoreLabel";
 import { useVault } from "./VaultContext";
+import { MARKDOWN_BODY_CLASS } from "../markdown/markdownBodyClass";
 
 function MarkdownLink({ href, children, ...props }: ComponentProps<"a">) {
   if (href && isOpenableExternalUrl(href)) {
@@ -208,7 +209,9 @@ export function AssistantMessageContent({
 }) {
   if (contentHasInlineTokens(content)) {
     return (
-      <div className={["markdown-content", className].filter(Boolean).join(" ")}>
+      <div
+        className={[MARKDOWN_BODY_CLASS, "markdown-content", className].filter(Boolean).join(" ")}
+      >
         <InlineParagraph
           text={content}
           onOpenLinearDashboard={onOpenLinearDashboard}
@@ -221,7 +224,7 @@ export function AssistantMessageContent({
   const paragraphs = content.split(/\n\n+/);
 
   return (
-    <div className={["markdown-content", className].filter(Boolean).join(" ")}>
+    <div className={[MARKDOWN_BODY_CLASS, "markdown-content", className].filter(Boolean).join(" ")}>
       {paragraphs.map((paragraph, index) => {
         const key = `${index}-${paragraph.slice(0, 24)}`;
 

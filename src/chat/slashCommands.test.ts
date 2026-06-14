@@ -29,6 +29,18 @@ describe("slashCommands", () => {
     });
     expect(clearOnly.map((command) => command.id)).toEqual(["clear"]);
 
+    const deleteChat = filterSlashCommands("delete", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "chat",
+    });
+    expect(deleteChat.map((command) => command.id)).toEqual(["clear"]);
+
+    const deleteFile = filterSlashCommands("delete-file", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "chat",
+    });
+    expect(deleteFile.map((command) => command.id)).toEqual(["delete-file"]);
+
     const grocery = filterSlashCommands("gr", { now: new Date(2026, 5, 10, 10, 0, 0), context: "chat" });
     expect(grocery.map((command) => command.id)).toEqual(["grocery-list"]);
 
@@ -42,6 +54,38 @@ describe("slashCommands", () => {
       context: "lookup",
     });
     expect(lookupCommands.map((command) => command.id)).toEqual(["clear"]);
+  });
+
+  test("filterSlashCommands limits linear-thread context to delete thread", () => {
+    const linearCommands = filterSlashCommands("", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "linear-thread",
+    });
+    expect(linearCommands.map((command) => command.label)).toEqual(["Delete thread"]);
+
+    const deleteThread = filterSlashCommands("delete", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "linear-thread",
+    });
+    expect(deleteThread.map((command) => command.label)).toEqual(["Delete thread"]);
+
+    const shortDelete = filterSlashCommands("d", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "linear-thread",
+    });
+    expect(shortDelete.map((command) => command.label)).toEqual(["Delete thread"]);
+
+    const chatDelete = filterSlashCommands("delete", {
+      now: new Date(2026, 5, 10, 10, 0, 0),
+      context: "chat",
+    });
+    expect(chatDelete.map((command) => command.label)).toEqual(["Clear chat"]);
+  });
+
+  test("isSlashCommandPaletteOpen respects linear-thread context", () => {
+    expect(isSlashCommandPaletteOpen("/delete", { context: "linear-thread" })).toBe(true);
+    expect(isSlashCommandPaletteOpen("/d", { context: "linear-thread" })).toBe(true);
+    expect(isSlashCommandPaletteOpen("/dc", { context: "linear-thread" })).toBe(false);
   });
 
   test("filterSlashCommands hides good morning outside the morning window", () => {

@@ -3,7 +3,12 @@ import { ScrollToBottomButton } from "../../chat/ScrollToBottomButton";
 import { ChatTurn } from "../../chat/ChatTurn";
 import { Composer, type ComposerHandle } from "../../chat/Composer";
 import { ComposerContextCard } from "../../chat/ComposerContextCard";
-import { LinearAssistantBlock } from "../../chat/LinearAssistantBlock";
+import { parseLinearThreadChatCommand } from "../../chat/chatCommands";
+import { LinearAssistantBlock, LinearThinkingBlock } from "../../chat/LinearAssistantBlock";
+import {
+  isSlashCommandPaletteOpen,
+  type SlashCommandDefinition,
+} from "../../chat/slashCommands";
 import type { ComposerContextItem } from "../../lib/chatFocusContext";
 import { shouldRefreshLinearIssueFromAgentReply } from "../../lib/linearIssueAgentRefresh";
 import { useLinearIssueCommentThread } from "../../hooks/useLinearIssueCommentThread";
@@ -11,9 +16,11 @@ import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { useTts } from "../../hooks/useTts";
 import type { ChatMessage } from "../../chat/types";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
-import { linearCommentToChatMessage } from "./linearThreadFormat";
+import { linearThreadCommentsToChatMessages } from "./linearThreadFormat";
+import { pickLinearAgentStatusLabel } from "./linearAgentSessionFormat";
 
 const noop = () => undefined;
+const LINEAR_AGENT_THINKING_DELAY_MS = 500;
 
 export type LinearIssueThreadChatHandle = {
   focusComposer: () => void;
@@ -26,7 +33,11 @@ export const LinearIssueThreadChat = forwardRef<
     threadId: string | null;
     composerContextItems?: ComposerContextItem[];
     onStartThread?: (body: string) => Promise<boolean>;
+    onDeleteThread?: () => Promise<boolean>;
     starting?: boolean;
+    awaitAgentReplyOnMount?: boolean;
+    onAwaitAgentReplyStarted?: () => void;
+    onThreadUnavailable?: () => void;
   }
 >(function LinearIssueThreadChat(
   {
@@ -34,28 +45,44 @@ export const LinearIssueThreadChat = forwardRef<
     threadId,
     composerContextItems = [],
     onStartThread,
+    onDeleteThread,
     starting = false,
+    awaitAgentReplyOnMount = false,
+    onAwaitAgentReplyStarted,
+    onThreadUnavailable,
   },
   ref,
 ) {
   const { requestLinearIssueRefresh } = useContentPanelNavigation();
-  const awaitingAgentRef = useRef<{
-    assistantIds: Set<string>;
-    refreshedMessageIds: Set<string>;
-  } | null>(null);
+  const issueRefreshedForAssistantMessageIdsRef = useRef<Set<string>>(new Set());
 
-  const handleAgentPollSettled = useCallback(() => {
-    if (!awaitingAgentRef.current) return;
+  const refreshIssueForAgentMessage = useCallback(
+    (messageId: string, text: string) => {
+      if (issueRefreshedForAssistantMessageIdsRef.current.has(messageId)) return;
+      if (!shouldRefreshLinearIssueFromAgentReply(text)) return;
+      issueRefreshedForAssistantMessageIdsRef.current.add(messageId);
+      requestLinearIssueRefresh();
+    },
+    [requestLinearIssueRefresh],
+  );
+
+  const handleSubstantiveAgentReply = useCallback(() => {
     requestLinearIssueRefresh();
-    awaitingAgentRef.current = null;
   }, [requestLinearIssueRefresh]);
 
-  const { comments, viewerId, loading, sending, error, sendReply } =
+  const handleAgentPollSettled = useCallback(() => {
+    requestLinearIssueRefresh();
+  }, [requestLinearIssueRefresh]);
+
+  const { comments, viewerId, loading, sending, awaitingAgentReply, agentSessionSnapshot, error, sendReply, beginAwaitingAgentReply, refresh } =
     useLinearIssueCommentThread(issueId, threadId, true, {
       onAgentPollSettled: handleAgentPollSettled,
+      onSubstantiveAgentReply: handleSubstantiveAgentReply,
+      onThreadUnavailable,
     });
   const { supported: ttsSupported } = useTts({ isActive: true });
   const [input, setInput] = useState("");
+  const [deletingThread, setDeletingThread] = useState(false);
   const {
     scrollRef,
     contentRef: transcriptInnerRef,
@@ -67,6 +94,64 @@ export const LinearIssueThreadChat = forwardRef<
   const composerRef = useRef<ComposerHandle>(null);
   const hydratedMessageIdsRef = useRef<Set<string> | null>(null);
   const observedInitialLoadRef = useRef(false);
+  const beganAwaitOnMountRef = useRef(false);
+  const [agentThinkingReady, setAgentThinkingReady] = useState(false);
+
+  useEffect(() => {
+    beganAwaitOnMountRef.current = false;
+    issueRefreshedForAssistantMessageIdsRef.current = new Set();
+  }, [threadId]);
+
+  const messages = useMemo(
+    () => linearThreadCommentsToChatMessages(comments, threadId, viewerId),
+    [comments, threadId, viewerId],
+  );
+
+  const hasUserMessage = messages.some((message) => message.role === "user");
+  const agentResponsePending = Boolean(threadId && awaitingAgentReply && hasUserMessage);
+
+  useEffect(() => {
+    setAgentThinkingReady(false);
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!agentResponsePending) {
+      setAgentThinkingReady(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setAgentThinkingReady(true);
+    }, LINEAR_AGENT_THINKING_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [agentResponsePending]);
+
+  const visibleMessages = useMemo(() => {
+    if (!hasUserMessage) {
+      return messages.filter((message) => message.role === "user");
+    }
+    return messages;
+  }, [hasUserMessage, messages]);
+
+  useEffect(() => {
+    if (!awaitAgentReplyOnMount || !threadId || loading || beganAwaitOnMountRef.current) return;
+    if (!hasUserMessage) return;
+    beganAwaitOnMountRef.current = true;
+    beginAwaitingAgentReply();
+    onAwaitAgentReplyStarted?.();
+    void refresh();
+  }, [
+    awaitAgentReplyOnMount,
+    beginAwaitingAgentReply,
+    hasUserMessage,
+    loading,
+    onAwaitAgentReplyStarted,
+    refresh,
+    threadId,
+  ]);
 
   useImperativeHandle(
     ref,
@@ -78,13 +163,16 @@ export const LinearIssueThreadChat = forwardRef<
     [],
   );
 
-  const messages = useMemo(
-    () =>
-      comments
-        .map((comment) => linearCommentToChatMessage(comment, viewerId))
-        .filter((message) => message.text.trim().length > 0),
-    [comments, viewerId],
+  const showLinearThinking = agentResponsePending && agentThinkingReady;
+  const linearThinkingStatusLabel = useMemo(
+    () => pickLinearAgentStatusLabel(agentSessionSnapshot),
+    [agentSessionSnapshot],
   );
+
+  useEffect(() => {
+    if (!showLinearThinking) return;
+    pinTranscriptScroll();
+  }, [pinTranscriptScroll, showLinearThinking]);
 
   useEffect(() => {
     hydratedMessageIdsRef.current = null;
@@ -97,8 +185,8 @@ export const LinearIssueThreadChat = forwardRef<
       return;
     }
     if (!observedInitialLoadRef.current || hydratedMessageIdsRef.current !== null) return;
-    hydratedMessageIdsRef.current = new Set(messages.map((message) => message.id));
-  }, [loading, messages]);
+    hydratedMessageIdsRef.current = new Set(visibleMessages.map((message) => message.id));
+  }, [loading, visibleMessages]);
 
   const shouldAnimateAssistant = useCallback((message: ChatMessage) => {
     const hydrated = hydratedMessageIdsRef.current;
@@ -106,9 +194,54 @@ export const LinearIssueThreadChat = forwardRef<
     return !hydrated.has(message.id);
   }, []);
 
+  const handleDeleteConversation = useCallback(async () => {
+    if (!onDeleteThread || deletingThread) return;
+    setDeletingThread(true);
+    try {
+      await onDeleteThread();
+    } finally {
+      setDeletingThread(false);
+      composerRef.current?.focus();
+    }
+  }, [deletingThread, onDeleteThread]);
+
+  const handleSlashCommandSelect = useCallback(
+    (command: SlashCommandDefinition) => {
+      if (command.id === "clear") {
+        setInput("");
+        void handleDeleteConversation();
+      }
+    },
+    [handleDeleteConversation],
+  );
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key !== "Escape") return;
+      if (!isSlashCommandPaletteOpen(composerRef.current?.getValue() ?? input, {
+        context: "linear-thread",
+      })) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setInput("");
+    }
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [input]);
+
   const handleSubmit = useCallback(async () => {
-    const trimmed = input.trim();
+    const trimmed = (composerRef.current?.getValue() ?? input).trim();
     if (!trimmed) return;
+
+    if (parseLinearThreadChatCommand(trimmed)) {
+      setInput("");
+      await handleDeleteConversation();
+      return;
+    }
 
     if (!threadId) {
       if (!onStartThread || starting) return;
@@ -123,55 +256,26 @@ export const LinearIssueThreadChat = forwardRef<
 
     if (sending) return;
     pinTranscriptScroll();
-    awaitingAgentRef.current = {
-      assistantIds: new Set(
-        messages.filter((message) => message.role === "assistant").map((message) => message.id),
-      ),
-      refreshedMessageIds: new Set(),
-    };
     const sent = await sendReply(trimmed);
     if (sent) {
       setInput("");
       pinTranscriptScroll();
       composerRef.current?.focus();
-      return;
     }
-    awaitingAgentRef.current = null;
-  }, [input, messages, onStartThread, pinTranscriptScroll, sendReply, sending, starting, threadId]);
+  }, [handleDeleteConversation, input, onStartThread, pinTranscriptScroll, sendReply, sending, starting, threadId]);
 
-  const busy = threadId ? sending : starting;
-
-  const maybeRefreshIssueFromAgentReply = useCallback(
-    (message: ChatMessage) => {
-      const pending = awaitingAgentRef.current;
-      if (!pending || message.role !== "assistant") return;
-      if (pending.assistantIds.has(message.id)) return;
-      if (pending.refreshedMessageIds.has(message.id)) return;
-      if (!shouldRefreshLinearIssueFromAgentReply(message.text)) return;
-
-      pending.refreshedMessageIds.add(message.id);
-      requestLinearIssueRefresh();
-    },
-    [requestLinearIssueRefresh],
-  );
+  const busy = deletingThread || (threadId ? sending : starting);
 
   useEffect(() => {
-    const pending = awaitingAgentRef.current;
-    if (!pending) return;
+    const hydrated = hydratedMessageIdsRef.current;
+    if (!hydrated) return;
 
-    for (const message of messages) {
+    for (const message of visibleMessages) {
       if (message.role !== "assistant") continue;
-      if (pending.assistantIds.has(message.id)) continue;
-      if (!shouldRefreshLinearIssueFromAgentReply(message.text)) continue;
-      if (pending.refreshedMessageIds.has(message.id)) continue;
-      pending.refreshedMessageIds.add(message.id);
-      requestLinearIssueRefresh();
+      if (hydrated.has(message.id)) continue;
+      refreshIssueForAgentMessage(message.id, message.text);
     }
-  }, [messages, requestLinearIssueRefresh]);
-
-  if (loading && messages.length === 0) {
-    return <p className="linear-thread-list-status">Loading thread…</p>;
-  }
+  }, [visibleMessages, refreshIssueForAgentMessage]);
 
   return (
     <div className="chat-view chat-view--panel">
@@ -183,7 +287,7 @@ export const LinearIssueThreadChat = forwardRef<
           />
           <div ref={scrollRef} className="chat-transcript" onScroll={handleScroll}>
             <div className="chat-transcript-inner" ref={transcriptInnerRef}>
-              {messages.map((message) =>
+              {visibleMessages.map((message) =>
                 message.role === "assistant" ? (
                   <div key={message.id} className="chat-turn">
                     <LinearAssistantBlock
@@ -193,7 +297,7 @@ export const LinearIssueThreadChat = forwardRef<
                       animate={shouldAnimateAssistant(message)}
                       canSpeak={ttsSupported && message.text.trim().length > 0}
                       onAgentReplyComplete={() => {
-                        maybeRefreshIssueFromAgentReply(message);
+                        refreshIssueForAgentMessage(message.id, message.text);
                       }}
                     />
                   </div>
@@ -216,10 +320,10 @@ export const LinearIssueThreadChat = forwardRef<
                   />
                 ),
               )}
-              {busy ? (
-                <p className="linear-thread-chat-pending">
-                  {threadId ? "Sending…" : "Starting thread…"}
-                </p>
+              {showLinearThinking ? (
+                <div className="chat-turn">
+                  <LinearThinkingBlock statusLabel={linearThinkingStatusLabel} />
+                </div>
               ) : null}
             </div>
           </div>
@@ -238,6 +342,8 @@ export const LinearIssueThreadChat = forwardRef<
             value={input}
             onChange={setInput}
             onSend={() => void handleSubmit()}
+            onSlashCommandSelect={onDeleteThread ? handleSlashCommandSelect : undefined}
+            slashCommandContext="linear-thread"
             running={busy}
             disabled={busy}
             attachments={[]}

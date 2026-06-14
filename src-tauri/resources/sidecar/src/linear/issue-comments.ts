@@ -13,6 +13,7 @@ export type LinearComment = {
   createdAt: string;
   author: LinearCommentAuthor;
   parentId: string | null;
+  agentSessionId: string | null;
 };
 
 export type LinearCommentThreadSummary = {
@@ -27,6 +28,7 @@ type GraphqlCommentNode = {
   body?: string | null;
   createdAt?: string | null;
   parent?: { id?: string | null } | null;
+  agentSession?: { id?: string | null } | null;
   user?: {
     id?: string | null;
     name?: string | null;
@@ -37,12 +39,13 @@ type GraphqlCommentNode = {
 const ISSUE_COMMENTS_QUERY = `
   query BacksterIssueComments($issueId: String!) {
     issue(id: $issueId) {
-      comments {
+      comments(first: 250) {
         nodes {
           id
           body
           createdAt
           parent { id }
+          agentSession { id }
           user { id name avatarUrl }
         }
       }
@@ -65,6 +68,29 @@ const COMMENT_CREATE_MUTATION = `
   }
 `;
 
+const COMMENT_UPDATE_MUTATION = `
+  mutation BacksterCommentUpdate($id: String!, $input: CommentUpdateInput!) {
+    commentUpdate(id: $id, input: $input) {
+      success
+      comment {
+        id
+        body
+        createdAt
+        parent { id }
+        user { id name avatarUrl }
+      }
+    }
+  }
+`;
+
+const COMMENT_DELETE_MUTATION = `
+  mutation BacksterCommentDelete($id: String!) {
+    commentDelete(id: $id) {
+      success
+    }
+  }
+`;
+
 function normalizeAuthor(user: GraphqlCommentNode["user"]): LinearCommentAuthor {
   return {
     id: (user?.id ?? "").trim(),
@@ -83,6 +109,7 @@ function normalizeComment(node: GraphqlCommentNode): LinearComment | null {
     createdAt: (node.createdAt ?? "").trim(),
     author: normalizeAuthor(node.user),
     parentId: (node.parent?.id ?? "").trim() || null,
+    agentSessionId: (node.agentSession?.id ?? "").trim() || null,
   };
 }
 
@@ -118,6 +145,30 @@ async function fetchIssueComments(issueId: string): Promise<LinearComment[]> {
     .filter((comment): comment is LinearComment => comment != null);
 }
 
+function collectThreadComments(
+  comments: LinearComment[],
+  threadId: string,
+): LinearComment[] {
+  const root = comments.find((comment) => comment.id === threadId && !comment.parentId);
+  if (!root) return [];
+
+  const collected = new Map<string, LinearComment>([[root.id, root]]);
+  let expanded = true;
+
+  while (expanded) {
+    expanded = false;
+    for (const comment of comments) {
+      const parentId = comment.parentId?.trim();
+      if (!parentId || collected.has(comment.id)) continue;
+      if (!collected.has(parentId)) continue;
+      collected.set(comment.id, comment);
+      expanded = true;
+    }
+  }
+
+  return sortByCreatedAtAsc([...collected.values()]);
+}
+
 export async function fetchLinearIssueCommentThreads(
   issueId: string,
 ): Promise<LinearCommentThreadSummary[]> {
@@ -143,15 +194,9 @@ export async function fetchLinearIssueCommentThread(
     fetchLinearViewerId().catch(() => undefined),
   ]);
 
-  const root = comments.find((comment) => comment.id === threadId && !comment.parentId);
-  if (!root) {
-    return { viewerId: viewerId ?? null, comments: [] };
-  }
-
-  const replies = comments.filter((comment) => comment.parentId === threadId);
   return {
     viewerId: viewerId ?? null,
-    comments: sortByCreatedAtAsc([root, ...replies]),
+    comments: collectThreadComments(comments, threadId),
   };
 }
 
@@ -194,8 +239,90 @@ export async function createLinearIssueComment(
   return comment;
 }
 
+export async function updateLinearIssueComment(
+  commentId: string,
+  body: string,
+): Promise<LinearComment> {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    throw new Error("Comment body is required");
+  }
+
+  const response = await linearGraphqlRequest<{
+    commentUpdate?: {
+      success?: boolean;
+      comment?: GraphqlCommentNode | null;
+    } | null;
+  }>(COMMENT_UPDATE_MUTATION, {
+    id: commentId.trim(),
+    input: { body: trimmedBody },
+  });
+
+  if (!response.commentUpdate?.success) {
+    throw new Error("Linear rejected the comment update");
+  }
+
+  const comment = normalizeComment(response.commentUpdate.comment ?? {});
+  if (!comment) {
+    throw new Error("Linear returned no comment");
+  }
+
+  return comment;
+}
+
+export async function deleteLinearIssueComment(commentId: string): Promise<void> {
+  const response = await linearGraphqlRequest<{
+    commentDelete?: { success?: boolean } | null;
+  }>(COMMENT_DELETE_MUTATION, { id: commentId.trim() });
+
+  if (!response.commentDelete?.success) {
+    throw new Error("Linear rejected the comment deletion");
+  }
+}
+
+export async function updateLinearIssueCommentThreadRoot(
+  issueId: string,
+  threadId: string,
+  body: string,
+): Promise<LinearComment> {
+  const comments = await fetchIssueComments(issueId);
+  const threadComments = collectThreadComments(comments, threadId);
+  const root = threadComments[0];
+  if (!root) {
+    throw new Error("Thread not found");
+  }
+
+  return updateLinearIssueComment(root.id, body);
+}
+
+export async function deleteLinearIssueCommentThread(
+  issueId: string,
+  threadId: string,
+): Promise<void> {
+  const comments = await fetchIssueComments(issueId);
+  const threadComments = collectThreadComments(comments, threadId);
+  if (threadComments.length === 0) {
+    throw new Error("Thread not found");
+  }
+
+  const toDelete = [...threadComments].reverse();
+  for (const comment of toDelete) {
+    await deleteLinearIssueComment(comment.id);
+  }
+}
+
 export const LINEAR_AGENT_THREAD_PREFIX = "@linear";
 
-export async function createLinearAgentThread(issueId: string): Promise<LinearComment> {
-  return createLinearIssueComment(issueId, LINEAR_AGENT_THREAD_PREFIX);
+export function buildLinearAgentThreadBody(userBody?: string | null): string {
+  const trimmed = userBody?.trim() ?? "";
+  if (!trimmed) return LINEAR_AGENT_THREAD_PREFIX;
+  if (/^@linear\b/i.test(trimmed)) return trimmed;
+  return `${LINEAR_AGENT_THREAD_PREFIX} ${trimmed}`;
+}
+
+export async function createLinearAgentThread(
+  issueId: string,
+  userBody?: string | null,
+): Promise<LinearComment> {
+  return createLinearIssueComment(issueId, buildLinearAgentThreadBody(userBody));
 }
