@@ -16,6 +16,7 @@ import {
   getSidecarHost,
   ensureWorkspaceDir,
   isDevelopmentAuthMode,
+  isServerAccessAuthEnabled,
   isVaultEnabled,
 } from "./config.ts";
 import { resolveDistDir, tryServeStatic } from "./static-spa.ts";
@@ -315,6 +316,11 @@ const port = getSidecarPort();
 const hostname = getSidecarHost();
 const staticDistDir = resolveDistDir();
 const bearerOrCookieAuth = createBearerOrCookieAuth(token);
+const serverAccessAuth = isServerAccessAuthEnabled()
+  ? bearerOrCookieAuth
+  : async (_c, next) => {
+      await next();
+    };
 const SIDECAR_RUNTIME_ID = `${Date.now()}-${process.pid}`;
 
 function readSidecarVersion(): string | null {
@@ -493,12 +499,15 @@ app.post("/auth/logout", (c) => {
 });
 
 app.get("/auth/status", (c) => {
+  if (!isServerAccessAuthEnabled()) {
+    return c.json({ authenticated: true, requiresServerAccessAuth: false });
+  }
   const authorized = isAuthorizedRequest(
     token,
     c.req.header("Authorization"),
     getCookie(c, SESSION_COOKIE),
   );
-  return c.json({ authenticated: authorized });
+  return c.json({ authenticated: authorized, requiresServerAccessAuth: true });
 });
 
 app.get(LINEAR_OAUTH_CALLBACK_PATH, async (c) => {
@@ -508,29 +517,29 @@ app.get(LINEAR_OAUTH_CALLBACK_PATH, async (c) => {
   });
 });
 
-app.use("/flows/*", bearerOrCookieAuth);
-app.use("/settings", bearerOrCookieAuth);
-app.use("/accounts/*", bearerOrCookieAuth);
-app.use("/sessions/*", bearerOrCookieAuth);
-app.use("/lookup/*", bearerOrCookieAuth);
-app.use("/runs/*", bearerOrCookieAuth);
-app.use("/approvals/*", bearerOrCookieAuth);
-app.use("/hooks/*", bearerOrCookieAuth);
-app.use("/workspace/*", bearerOrCookieAuth);
-app.use("/tts/*", bearerOrCookieAuth);
-app.use("/stt/*", bearerOrCookieAuth);
-app.use("/llm-extract/*", bearerOrCookieAuth);
-app.use("/linear/*", bearerOrCookieAuth);
-app.use("/integrations/*", bearerOrCookieAuth);
-app.use("/profiles/*", bearerOrCookieAuth);
-app.use("/pdf/*", bearerOrCookieAuth);
+app.use("/flows/*", serverAccessAuth);
+app.use("/settings", serverAccessAuth);
+app.use("/accounts/*", serverAccessAuth);
+app.use("/sessions/*", serverAccessAuth);
+app.use("/lookup/*", serverAccessAuth);
+app.use("/runs/*", serverAccessAuth);
+app.use("/approvals/*", serverAccessAuth);
+app.use("/hooks/*", serverAccessAuth);
+app.use("/workspace/*", serverAccessAuth);
+app.use("/tts/*", serverAccessAuth);
+app.use("/stt/*", serverAccessAuth);
+app.use("/llm-extract/*", serverAccessAuth);
+app.use("/linear/*", serverAccessAuth);
+app.use("/integrations/*", serverAccessAuth);
+app.use("/profiles/*", serverAccessAuth);
+app.use("/pdf/*", serverAccessAuth);
 app.use("/vault/*", async (c, next) => {
   if (!isVaultEnabled()) {
     return c.json({ error: "Vault features are disabled in linear product mode" }, 404);
   }
   await next();
 });
-app.use("/vault/*", bearerOrCookieAuth);
+app.use("/vault/*", serverAccessAuth);
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
@@ -558,6 +567,7 @@ app.get("/healthz", (c) => {
     sidecarVersion: SIDECAR_VERSION,
     sidecarBuildId: SIDECAR_BUILD_ID,
     staticUiAvailable: Boolean(staticDistDir),
+    requiresServerAccessAuth: isServerAccessAuthEnabled(),
   });
 });
 

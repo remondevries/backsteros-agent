@@ -305,7 +305,7 @@ export default function App() {
 
       setServiceOffline(false);
 
-      if (!import.meta.env.DEV) {
+      if (!import.meta.env.DEV && health.requiresServerAccessAuth !== false) {
         const authStatus = await getAuthStatus();
         if (!authStatus.authenticated) {
           clearConnectGateAccessCache();

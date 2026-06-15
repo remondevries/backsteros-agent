@@ -8,6 +8,7 @@ import {
   getLinearOAuthCredentialsPath,
   getSidecarToken,
   isLinearOAuthConfigured,
+  isServerAccessAuthEnabled,
   isUserCursorApiKeyConfigured,
 } from "./config.ts";
 import { mergeEnvFile } from "./env-file.ts";
@@ -32,6 +33,29 @@ describe("getSidecarToken", () => {
   test("reads SIDECAR_TOKEN from env when set", () => {
     process.env.SIDECAR_TOKEN = "custom-token";
     expect(getSidecarToken()).toBe("custom-token");
+  });
+});
+
+describe("isServerAccessAuthEnabled", () => {
+  let previousValue: string | undefined;
+
+  beforeEach(() => {
+    previousValue = process.env.BACKSTER_SERVER_ACCESS_AUTH;
+  });
+
+  afterEach(() => {
+    if (previousValue === undefined) delete process.env.BACKSTER_SERVER_ACCESS_AUTH;
+    else process.env.BACKSTER_SERVER_ACCESS_AUTH = previousValue;
+  });
+
+  test("defaults to enabled", () => {
+    delete process.env.BACKSTER_SERVER_ACCESS_AUTH;
+    expect(isServerAccessAuthEnabled()).toBe(true);
+  });
+
+  test("can be disabled for public staging web", () => {
+    process.env.BACKSTER_SERVER_ACCESS_AUTH = "0";
+    expect(isServerAccessAuthEnabled()).toBe(false);
   });
 });
 

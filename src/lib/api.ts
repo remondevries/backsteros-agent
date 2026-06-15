@@ -554,12 +554,16 @@ type HealthResponse = {
   vaultEnabled?: boolean;
   productMode?: "linear" | "full";
   staticUiAvailable?: boolean;
+  requiresServerAccessAuth?: boolean;
   sidecarRuntimeId?: string | null;
   sidecarVersion?: string | null;
   sidecarBuildId?: string | null;
 };
 
-export async function getAuthStatus(): Promise<{ authenticated: boolean }> {
+export async function getAuthStatus(): Promise<{
+  authenticated: boolean;
+  requiresServerAccessAuth?: boolean;
+}> {
   const response = await fetchWithTimeout(`${connection.baseUrl}/auth/status`, {
     credentials: "include",
   });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAuthStatus, loginWithAccessToken } from "../lib/api";
+import { getAuthStatus, getHealth, loginWithAccessToken } from "../lib/api";
 
 export function ConnectGateServerAccess({
   onSignedIn,
@@ -10,10 +10,31 @@ export function ConnectGateServerAccess({
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const [required, setRequired] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      setRequired(false);
+      setChecking(false);
+      return;
+    }
+    void getHealth()
+      .then((health) => {
+        setRequired(health.requiresServerAccessAuth !== false);
+      })
+      .catch(() => {
+        setRequired(true);
+      });
+  }, []);
+
   const refreshAuthStatus = useCallback(async () => {
+    if (!required) {
+      setAuthenticated(true);
+      setChecking(false);
+      return;
+    }
     setChecking(true);
     try {
       const status = await getAuthStatus();
@@ -26,17 +47,20 @@ export function ConnectGateServerAccess({
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [required]);
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV || !required) {
+      if (!import.meta.env.DEV && !required) {
+        setAuthenticated(true);
+      }
       setChecking(false);
       return;
     }
     void refreshAuthStatus();
-  }, [refreshAuthStatus]);
+  }, [refreshAuthStatus, required]);
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV || !required) {
     return null;
   }
 

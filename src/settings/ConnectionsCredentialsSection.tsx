@@ -3,6 +3,7 @@ import type { AccountWorkspaceResponse } from "../chat/types";
 import {
   deleteAccount,
   getAccountWorkspace,
+  getHealth,
   loginWithAccessToken,
   type IntegrationsStatus,
 } from "../lib/api";
@@ -34,6 +35,21 @@ export function ConnectionsCredentialsSection({
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountInfo, setAccountInfo] = useState<AccountWorkspaceResponse | null>(null);
+  const [serverAccessRequired, setServerAccessRequired] = useState(!import.meta.env.DEV);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      setServerAccessRequired(false);
+      return;
+    }
+    void getHealth()
+      .then((health) => {
+        setServerAccessRequired(health.requiresServerAccessAuth !== false);
+      })
+      .catch(() => {
+        setServerAccessRequired(true);
+      });
+  }, []);
 
   const cursorApiKeyConfigured = integrationsStatus?.cursorApiKey.configured ?? false;
   const linearOAuth = integrationsStatus?.linear;
@@ -142,7 +158,7 @@ export function ConnectionsCredentialsSection({
         ) : null}
       </section>
 
-      {!import.meta.env.DEV && (
+      {!import.meta.env.DEV && serverAccessRequired ? (
         <section className="settings-section">
           <h3 className="settings-subsection-title">Server access</h3>
           <p className="settings-hint settings-hint-spaced-top">
@@ -187,7 +203,7 @@ export function ConnectionsCredentialsSection({
             <p className="error-text settings-hint-spaced">{serverAccessError}</p>
           ) : null}
         </section>
-      )}
+      ) : null}
     </>
   );
 }

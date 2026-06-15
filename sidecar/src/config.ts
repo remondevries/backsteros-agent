@@ -67,6 +67,15 @@ export function isDevelopmentAuthMode(): boolean {
   );
 }
 
+/** When false, the browser UI does not require SIDECAR_TOKEN sign-in (e.g. trusted staging web). */
+export function isServerAccessAuthEnabled(): boolean {
+  const value = process.env.BACKSTER_SERVER_ACCESS_AUTH?.trim().toLowerCase();
+  if (value === "0" || value === "false" || value === "off" || value === "disabled") {
+    return false;
+  }
+  return true;
+}
+
 export function getWorkspaceDir(): string {
   const configured = process.env.BACKSTER_WORKSPACE_DIR?.trim();
   if (configured) return configured;

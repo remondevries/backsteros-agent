@@ -18,13 +18,15 @@ cp .kamal/secrets.example .kamal/secrets
 chmod 600 .kamal/secrets
 ```
 
-Generate a server access token (if you do not reuse your local dev token):
+`SIDECAR_TOKEN` in `.kamal/secrets` is optional for staging — `config/deploy.yml` sets `BACKSTER_SERVER_ACCESS_AUTH=0`, so the browser does not prompt for a server access token. Users only connect Linear, add a Cursor API key, and complete setup.
+
+If you enable server access auth later (`BACKSTER_SERVER_ACCESS_AUTH=1`), generate a token:
 
 ```bash
 openssl rand -base64 32
 ```
 
-Users paste this in **Settings → Account → Server access** after deploy.
+and users sign in via **Settings → Account → Server access**.
 
 ### SSH for Kamal (1Password)
 
@@ -96,7 +98,7 @@ kamal app boot -c config/deploy.yml
 curl -sS https://staging.backsteros.com/healthz | jq .
 ```
 
-Open `https://staging.backsteros.com`, sign in with `SIDECAR_TOKEN`, connect Linear, then add your **Cursor API key** in the connect gate or **Settings → Cursor** (each user provides their own key; it is stored on the server volume under `/data`).
+Open `https://staging.backsteros.com`, connect Linear, then add your **Cursor API key** in the connect gate or **Settings → Cursor** (each user provides their own key; it is stored on the server volume under `/data`).
 
 Seed OAuth files on the volume or configure client id/secret in secrets if needed.
 
