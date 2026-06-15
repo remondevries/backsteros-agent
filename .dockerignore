@@ -1,0 +1,19 @@
+# Deploy image: web dist + sidecar only (see Dockerfile)
+.git
+.cursor
+node_modules
+dist
+src-tauri
+.sidecar-data
+.env
+.env.*
+*.log
+
+# Sidecar dev artifacts (reinstalled in image)
+sidecar/node_modules
+sidecar/tts
+sidecar/stt
+sidecar/tools/macos-pdf-ocr
+
+# Agent kit / local-only
+agent/designs

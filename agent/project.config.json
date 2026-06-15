@@ -185,6 +185,10 @@
       "assigneeId": "eac047ba-fd17-4eab-b97e-016ecb854693"
     }
   },
+  "administrator": {
+    "linearScopeId": "d10ef989-a610-4b9e-9275-c9f58e23045e",
+    "_comment": "Linear team or organization UUID. Users whose viewer org or team matches see Settings → Administrator."
+  },
   "scope": {
     "paths": {
       "localOnly": [
@@ -202,9 +206,10 @@
       ],
       "cloudSafe": [
         "sidecar/**",
-        "src-tauri/resources/sidecar/**",
         "src/lib/**",
         "src-tauri/capabilities/**",
+        "Dockerfile",
+        "scripts/smoke-web.mjs",
         "scripts/**",
         "docs/**",
         ".github/**",
