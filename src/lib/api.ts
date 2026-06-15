@@ -525,6 +525,18 @@ type HealthResponse = {
   sidecarBuildId?: string | null;
 };
 
+export async function getAuthStatus(): Promise<{ authenticated: boolean }> {
+  const response = await fetchWithTimeout(`${connection.baseUrl}/auth/status`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return response.json() as Promise<{ authenticated: boolean }>;
+}
+
 export async function loginWithAccessToken(accessToken: string): Promise<void> {
   const response = await fetchWithTimeout(`${connection.baseUrl}/auth/login`, {
     method: "POST",
@@ -1531,6 +1543,12 @@ export type WorkoutSessionEntity = {
 export async function fetchLinearWorkoutSession(teamId: string, date: string) {
   return request<{ session: WorkoutSessionEntity | null; error?: string }>(
     `/linear/teams/${encodeURIComponent(teamId)}/workout-sessions/${encodeURIComponent(date)}`,
+  );
+}
+
+export async function fetchLinearWorkoutSubIssueCount(teamId: string, date: string) {
+  return request<{ count: number; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/workout-sessions/${encodeURIComponent(date)}/sub-issue-count`,
   );
 }
 

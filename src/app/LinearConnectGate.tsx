@@ -31,6 +31,7 @@ export function LinearConnectGate({
   bootstrapMessage = null,
   bootstrapRetrying = false,
   onBootstrapRetry,
+  onServerAccessSignedIn,
   showCursorStepOption = false,
   cursorStepComplete = false,
   onAdvanceToCursor,
@@ -39,6 +40,7 @@ export function LinearConnectGate({
   bootstrapMessage?: string | null;
   bootstrapRetrying?: boolean;
   onBootstrapRetry?: () => void;
+  onServerAccessSignedIn?: () => void | Promise<void>;
   showCursorStepOption?: boolean;
   cursorStepComplete?: boolean;
   onAdvanceToCursor?: () => void;
@@ -60,6 +62,20 @@ export function LinearConnectGate({
     setStatus(next);
     return next;
   }, []);
+
+  const handleServerAccessSignedIn = useCallback(async () => {
+    setError(null);
+    setMessage("Signed in. Continue with Linear OAuth below.");
+    setLoadingStatus(true);
+    try {
+      await loadStatus();
+      await onServerAccessSignedIn?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load integration status");
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, [loadStatus, onServerAccessSignedIn]);
 
   const bootstrapBlocking = Boolean(bootstrapMessage);
 
@@ -250,14 +266,7 @@ export function LinearConnectGate({
         {!loadingStatus ? (
           <>
             <ConnectGateServerAccess
-              onSignedIn={() => {
-                setLoadingStatus(true);
-                void loadStatus()
-                  .catch((err) => {
-                    setError(err instanceof Error ? err.message : "Failed to load integration status");
-                  })
-                  .finally(() => setLoadingStatus(false));
-              }}
+              onSignedIn={handleServerAccessSignedIn}
             />
             <div
               className={[
@@ -302,14 +311,7 @@ export function LinearConnectGate({
         ) : (
           <>
             <ConnectGateServerAccess
-              onSignedIn={() => {
-                setLoadingStatus(true);
-                void loadStatus()
-                  .catch((err) => {
-                    setError(err instanceof Error ? err.message : "Failed to load integration status");
-                  })
-                  .finally(() => setLoadingStatus(false));
-              }}
+              onSignedIn={handleServerAccessSignedIn}
             />
             <section className="linear-connect-gate-section">
               <h2 className="settings-subsection-title">1. OAuth application</h2>

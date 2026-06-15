@@ -625,6 +625,7 @@ export default function App() {
             onBootstrapRetry={() => {
               void runBootstrap();
             }}
+            onServerAccessSignedIn={() => runBootstrap()}
             onAdvanceToCursor={() => {
               setConnectGateFocusStep("cursor");
             }}
@@ -656,6 +657,7 @@ export default function App() {
         onBootstrapRetry={() => {
           void runBootstrap();
         }}
+        onServerAccessSignedIn={() => runBootstrap()}
         onOAuthSuccess={() => {
           void handleLinearOAuthSuccess();
         }}
