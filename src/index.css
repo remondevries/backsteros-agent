@@ -60,6 +60,20 @@ body {
   }
 }
 
+@media (display-mode: standalone) {
+  :root {
+    --titlebar-height: max(52px, calc(env(safe-area-inset-top, 0px) + 12px));
+  }
+
+  .app-main-shell {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .app-window-chrome {
+    display: none;
+  }
+}
+
 button,
 input,
 textarea {
