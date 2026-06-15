@@ -6,12 +6,18 @@ import {
 import { useAdministratorAccess } from "../settings/useAdministratorAccess";
 import { SidebarChevronIcon } from "./SidebarNavIcons";
 
-type SettingsNavSectionId = "general" | "integration" | "extension" | "administrator";
+type SettingsNavSectionId =
+  | "general"
+  | "integration"
+  | "extension"
+  | "development-testing"
+  | "administrator";
 
 const SETTINGS_NAV_SECTION_LABEL: Record<SettingsNavSectionId, string> = {
   general: "General",
   integration: "Integrations",
   extension: "Extensions",
+  "development-testing": "Development testing",
   administrator: "Administrator",
 };
 
@@ -85,6 +91,7 @@ export function SettingsSidePanelNav({
     general: true,
     integration: true,
     extension: true,
+    "development-testing": true,
     administrator: true,
   });
   const visibleSettingsTabs = getVisibleSettingsTabs({ isAdministrator });
@@ -92,10 +99,13 @@ export function SettingsSidePanelNav({
     general: visibleSettingsTabs.filter((tab) => tab.group === "general"),
     integration: visibleSettingsTabs.filter((tab) => tab.group === "integration"),
     extension: visibleSettingsTabs.filter((tab) => tab.group === "extension"),
+    "development-testing": visibleSettingsTabs.filter(
+      (tab) => tab.group === "development-testing",
+    ),
     administrator: visibleSettingsTabs.filter((tab) => tab.group === "administrator"),
   };
   const sectionOrder: SettingsNavSectionId[] = isAdministrator
-    ? ["general", "integration", "extension", "administrator"]
+    ? ["general", "integration", "extension", "development-testing", "administrator"]
     : ["general", "integration", "extension"];
 
   return (
@@ -120,7 +130,9 @@ export function SettingsSidePanelNav({
           </header>
 
           <div className="left-side-panel-list">
-            {sectionOrder.map((sectionId) => (
+            {sectionOrder
+              .filter((sectionId) => settingsTabsBySection[sectionId].length > 0)
+              .map((sectionId) => (
               <SettingsNavSection
                 key={sectionId}
                 label={SETTINGS_NAV_SECTION_LABEL[sectionId]}

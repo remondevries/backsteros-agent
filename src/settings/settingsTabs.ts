@@ -14,7 +14,12 @@ export type SettingsTabId =
   | "user-management"
   | "connections";
 
-export type SettingsTabGroup = "general" | "integration" | "extension" | "administrator";
+export type SettingsTabGroup =
+  | "general"
+  | "integration"
+  | "extension"
+  | "development-testing"
+  | "administrator";
 
 /** Tabs shown in the settings sidebar. */
 export const SETTINGS_NAV_TABS: {
@@ -51,19 +56,19 @@ export const SETTINGS_NAV_TABS: {
     id: "gemini",
     label: "Gemini",
     description: "API key for lookup and extraction",
-    group: "extension",
+    group: "development-testing",
   },
   {
     id: "google-calendar",
     label: "Google Calendar",
     description: "OAuth and calendar access",
-    group: "extension",
+    group: "development-testing",
   },
   {
     id: "google-gmail",
     label: "Google Gmail",
     description: "OAuth and inbox access",
-    group: "extension",
+    group: "development-testing",
   },
   {
     id: "obsidian",
@@ -75,7 +80,7 @@ export const SETTINGS_NAV_TABS: {
     id: "whoop",
     label: "Whoop",
     description: "Recovery, sleep, and strain data via Totem",
-    group: "extension",
+    group: "development-testing",
   },
   {
     id: "ui-preview",
@@ -121,12 +126,33 @@ const INTEGRATION_TAB_IDS = new Set<SettingsTabId>([
 
 const ADMINISTRATOR_TAB_IDS = new Set<SettingsTabId>(["ui-preview", "user-management"]);
 
+const DEVELOPMENT_TESTING_TAB_IDS = new Set<SettingsTabId>([
+  "gemini",
+  "google-calendar",
+  "google-gmail",
+  "whoop",
+]);
+
+const ADMIN_ONLY_SETTINGS_GROUPS = new Set<SettingsTabGroup>([
+  "development-testing",
+  "administrator",
+]);
+
 export function isIntegrationNavTab(tabId: SettingsTabId): boolean {
   return INTEGRATION_TAB_IDS.has(tabId);
 }
 
+export function isDevelopmentTestingNavTab(tabId: SettingsTabId): boolean {
+  return DEVELOPMENT_TESTING_TAB_IDS.has(tabId);
+}
+
 export function isAdministratorNavTab(tabId: SettingsTabId): boolean {
   return ADMINISTRATOR_TAB_IDS.has(tabId);
+}
+
+export function isAdminOnlySettingsNavTab(tabId: SettingsTabId): boolean {
+  const tab = SETTINGS_NAV_TABS.find((entry) => entry.id === tabId);
+  return tab ? ADMIN_ONLY_SETTINGS_GROUPS.has(tab.group) : false;
 }
 
 /** @deprecated Persisted tab id from before integrations sidebar refactor. */
@@ -147,7 +173,7 @@ export function getVisibleSettingsTabs(options?: { isAdministrator?: boolean }) 
     : SETTINGS_NAV_TABS;
 
   if (!options?.isAdministrator) {
-    navTabs = navTabs.filter((tab) => tab.group !== "administrator");
+    navTabs = navTabs.filter((tab) => !ADMIN_ONLY_SETTINGS_GROUPS.has(tab.group));
   }
 
   return orderSettingsNavTabs(navTabs);

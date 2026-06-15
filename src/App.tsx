@@ -26,7 +26,7 @@ import {
 import type { SidebarNavItemId } from "./app/sidebarNavConfig";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import type { SettingsTabId } from "./settings/settingsTabs";
-import { isAdministratorNavTab } from "./settings/settingsTabs";
+import { isAdminOnlySettingsNavTab } from "./settings/settingsTabs";
 import { useAdministratorAccess } from "./settings/useAdministratorAccess";
 import { VaultProvider } from "./chat/VaultContext";
 import {
@@ -246,7 +246,7 @@ export default function App() {
 
   useEffect(() => {
     if (administratorAccessLoading || isAdministrator) return;
-    if (!isAdministratorNavTab(activeSettingsTab)) return;
+    if (!isAdminOnlySettingsNavTab(activeSettingsTab)) return;
     setActiveSettingsTab("general");
   }, [activeSettingsTab, administratorAccessLoading, isAdministrator]);
 

@@ -18,7 +18,7 @@ import type { CursorSettingsView } from "./CursorIntegrationSection";
 import { ObsidianSettingsSection } from "./ObsidianSettingsSection";
 import { ProfileEditorSection } from "./ProfileEditorSection";
 import { SettingsSectionToggle } from "./SettingsSectionToggle";
-import { getVisibleSettingsTabs, isAdministratorNavTab, isIntegrationNavTab, type SettingsTabId } from "./settingsTabs";
+import { getVisibleSettingsTabs, isAdminOnlySettingsNavTab, isAdministratorNavTab, isIntegrationNavTab, type SettingsTabId } from "./settingsTabs";
 import { useIntegrationsStatus } from "./useIntegrationsStatus";
 import { useAdministratorAccess } from "./useAdministratorAccess";
 
@@ -167,7 +167,7 @@ export function SettingsPanel({
 
   useEffect(() => {
     if (administratorLoading || isAdministrator) return;
-    if (isAdministratorNavTab(activeTab)) {
+    if (isAdminOnlySettingsNavTab(activeTab)) {
       setSaveMessage(null);
       setError(null);
       setProfileEditor(null);
