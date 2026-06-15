@@ -190,6 +190,7 @@ export function LinearProjectsTableView({
                   key={project.id}
                   project={project}
                   projectStatuses={projectStatuses}
+                  hideStatus
                   selected={
                     linearSelection?.kind === "project" && linearSelection.id === project.id
                   }

@@ -94,6 +94,33 @@ describe("groupLinearProjectsByWorkflow", () => {
 
     expect(groups.map((group) => group.label)).toEqual(["In Progress"]);
   });
+
+  test("merges workspace statuses that share the same display name", () => {
+    const duplicateNameStatuses = sortLinearProjectStatusesForDisplay([
+      { id: "started-a", name: "In Progress", type: "started", position: 2 },
+      { id: "started-b", name: "In Progress", type: "started", position: 2 },
+      { id: "planned", name: "Planned", type: "planned", position: 1 },
+    ]);
+
+    const groups = groupLinearProjectsByWorkflow(
+      [
+        {
+          id: "1",
+          name: "Alpha",
+          status: { id: "started-a", name: "In Progress", type: "started", position: 2 },
+        },
+        {
+          id: "2",
+          name: "Beta",
+          status: { id: "started-b", name: "In Progress", type: "started", position: 2 },
+        },
+      ],
+      duplicateNameStatuses,
+    );
+
+    expect(groups.filter((group) => group.label === "In Progress")).toHaveLength(1);
+    expect(groups.find((group) => group.label === "In Progress")?.projects).toHaveLength(2);
+  });
 });
 
 describe("sortLinearProjectStatusesForDisplay", () => {

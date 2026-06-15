@@ -4607,7 +4607,8 @@ button.meeting-document-sidebar-row--keyboard-focused {
 }
 
 .linear-issue-details-resizable--letters.app-resizable-panel-inset.app-resizable-panel-right,
-.linear-issue-details-resizable--meetings.app-resizable-panel-inset.app-resizable-panel-right {
+.linear-issue-details-resizable--meetings.app-resizable-panel-inset.app-resizable-panel-right,
+.linear-issue-details-resizable--inbox.app-resizable-panel-inset.app-resizable-panel-right {
   border-left: none;
 }
 

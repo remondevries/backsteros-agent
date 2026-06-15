@@ -29,6 +29,7 @@ export function LinearIssueDetailsSidePanel({
   dueDatePropertyLabels,
   hideEstimateProperty = false,
   lettersLayout = false,
+  inboxLayout = false,
   inboxProjectMove,
   organizationProjectDisabled = false,
   onSyncDocumentOrganizationProject,
@@ -41,6 +42,7 @@ export function LinearIssueDetailsSidePanel({
   dueDatePropertyLabels?: LinearIssueDueDatePropertyLabels;
   hideEstimateProperty?: boolean;
   lettersLayout?: boolean;
+  inboxLayout?: boolean;
   inboxProjectMove?: InboxProjectMoveConfig;
   organizationProjectDisabled?: boolean;
   onSyncDocumentOrganizationProject?: (updates: {
@@ -153,6 +155,7 @@ export function LinearIssueDetailsSidePanel({
         "app-resizable-panel-inset",
         "linear-issue-details-resizable",
         lettersLayout ? "linear-issue-details-resizable--letters" : null,
+        inboxLayout ? "linear-issue-details-resizable--inbox" : null,
       ]
         .filter(Boolean)
         .join(" ")}

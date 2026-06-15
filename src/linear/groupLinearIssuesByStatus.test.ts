@@ -80,4 +80,33 @@ describe("groupLinearIssuesByWorkflow", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.status).toBe("In Review");
   });
+
+  test("merges workflow states that share the same display name", () => {
+    const duplicateNameStates = [
+      { id: "team-a-progress", name: "In Progress", type: "started", position: 2, color: "#fabd00" },
+      { id: "team-b-progress", name: "In Progress", type: "started", position: 2, color: "#fabd00" },
+      { id: "todo", name: "Todo", type: "unstarted", position: 1, color: "#e2e2e2" },
+    ];
+
+    const groups = groupLinearIssuesByWorkflow(
+      [
+        issue({
+          id: "i1",
+          status: "In Progress",
+          stateId: "team-a-progress",
+          stateType: "started",
+        }),
+        issue({
+          id: "i2",
+          status: "In Progress",
+          stateId: "team-b-progress",
+          stateType: "started",
+        }),
+      ],
+      duplicateNameStates,
+    );
+
+    expect(groups.filter((group) => group.status === "In Progress")).toHaveLength(1);
+    expect(groups.find((group) => group.status === "In Progress")?.issues).toHaveLength(2);
+  });
 });

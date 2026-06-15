@@ -16,11 +16,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export function ContentPanelTabShortcuts({
   enabled,
   onNewTab,
+  onCloseActiveTab,
   onPreviousTab,
   onNextTab,
 }: {
   enabled: boolean;
   onNewTab: () => void;
+  onCloseActiveTab: () => void;
   onPreviousTab: () => void;
   onNextTab: () => void;
 }) {
@@ -41,6 +43,12 @@ export function ContentPanelTabShortcuts({
         return;
       }
 
+      if (key === "w") {
+        event.preventDefault();
+        onCloseActiveTab();
+        return;
+      }
+
       if (isEditableTarget(event.target)) return;
 
       if (key === "[") {
@@ -57,7 +65,7 @@ export function ContentPanelTabShortcuts({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onNewTab, onNextTab, onPreviousTab, shortcutsEnabled]);
+  }, [onCloseActiveTab, onNewTab, onNextTab, onPreviousTab, shortcutsEnabled]);
 
   return null;
 }

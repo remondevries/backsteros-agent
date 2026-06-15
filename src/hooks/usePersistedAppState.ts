@@ -22,11 +22,21 @@ const SETTINGS_TABS = new Set<SettingsTabId | "connections">([
   "user-management",
 ]);
 
+export type PersistedWorkspaceTeams = {
+  inboxLinearTeamId?: string | null;
+  dailyLinearTeamId?: string | null;
+  workoutsLinearTeamId?: string | null;
+  lettersLinearTeamId?: string | null;
+  knowledgeBaseLinearTeamId?: string | null;
+  addressbookLinearTeamId?: string | null;
+};
+
 export type PersistedAppState = {
   appView?: AppView;
   showSettings?: boolean;
   activeSettingsTab?: SettingsTabId | "connections";
   activeVaultNavItem?: SidebarNavItemId;
+  workspaceTeams?: PersistedWorkspaceTeams;
 };
 
 function readRawState(): PersistedAppState {
@@ -58,6 +68,25 @@ export function readPersistedSettingsTab(): SettingsTabId | null {
 export function readPersistedVaultNavItem(): SidebarNavItemId | null {
   const item = readRawState().activeVaultNavItem;
   return item && isSidebarNavItemId(item) ? item : null;
+}
+
+function normalizePersistedTeamId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+export function readPersistedWorkspaceTeams(): PersistedWorkspaceTeams {
+  const teams = readRawState().workspaceTeams;
+  if (!teams || typeof teams !== "object") return {};
+  return {
+    inboxLinearTeamId: normalizePersistedTeamId(teams.inboxLinearTeamId),
+    dailyLinearTeamId: normalizePersistedTeamId(teams.dailyLinearTeamId),
+    workoutsLinearTeamId: normalizePersistedTeamId(teams.workoutsLinearTeamId),
+    lettersLinearTeamId: normalizePersistedTeamId(teams.lettersLinearTeamId),
+    knowledgeBaseLinearTeamId: normalizePersistedTeamId(teams.knowledgeBaseLinearTeamId),
+    addressbookLinearTeamId: normalizePersistedTeamId(teams.addressbookLinearTeamId),
+  };
 }
 
 export function writePersistedAppState(patch: PersistedAppState) {

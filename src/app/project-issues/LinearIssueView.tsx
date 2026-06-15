@@ -499,6 +499,7 @@ export function LinearIssueView({
         <LinearIssueDetailsSidePanel
           issueId={issue.id}
           workspaceTeamConfig={workspaceTeamConfig}
+          inboxLayout={showInboxConvertBar}
           inboxProjectMove={
             showInboxConvertBar && !showTerminal
               ? {

@@ -64,6 +64,41 @@ function sortWorkflowStatesForDisplay(
   return [...states].sort(compareWorkflowStatesForDisplay);
 }
 
+function normalizeWorkflowStateName(name?: string): string {
+  return name?.trim().toLowerCase() ?? "";
+}
+
+/** Multi-team projects can expose several workflow states with the same label. */
+function canonicalizeWorkflowStatesForGrouping(
+  states: LinearWorkflowStateForIcon[],
+): {
+  displayStates: LinearWorkflowStateForIcon[];
+  resolveState: (state: LinearWorkflowStateForIcon) => LinearWorkflowStateForIcon;
+} {
+  const sortedStates = sortWorkflowStatesForDisplay(states);
+  const displayStates: LinearWorkflowStateForIcon[] = [];
+  const canonicalByName = new Map<string, LinearWorkflowStateForIcon>();
+  const resolveById = new Map<string, LinearWorkflowStateForIcon>();
+
+  for (const state of sortedStates) {
+    const nameKey = normalizeWorkflowStateName(state.name);
+    let canonical = nameKey ? canonicalByName.get(nameKey) : undefined;
+    if (!canonical) {
+      canonical = state;
+      if (nameKey) {
+        canonicalByName.set(nameKey, canonical);
+      }
+      displayStates.push(canonical);
+    }
+    resolveById.set(state.id, canonical);
+  }
+
+  return {
+    displayStates,
+    resolveState: (state) => resolveById.get(state.id) ?? state,
+  };
+}
+
 function groupSortKey(group: LinearStatusGroup): number {
   const stateType = group.stateType ?? group.issues[0]?.stateType;
   const iconKey = resolveLinearStatusKey(group.status, stateType);
@@ -156,6 +191,7 @@ export function groupLinearIssuesByWorkflow(
   }
 
   const sortedStates = sortWorkflowStatesForDisplay(workflowStates);
+  const { displayStates, resolveState } = canonicalizeWorkflowStatesForGrouping(sortedStates);
   const issuesByStateId = new Map<string, LinearIssueEntity[]>();
   const unmatchedIssues: LinearIssueEntity[] = [];
 
@@ -166,12 +202,13 @@ export function groupLinearIssuesByWorkflow(
       continue;
     }
 
-    const list = issuesByStateId.get(matchedState.id) ?? [];
+    const canonicalState = resolveState(matchedState);
+    const list = issuesByStateId.get(canonicalState.id) ?? [];
     list.push(issue);
-    issuesByStateId.set(matchedState.id, list);
+    issuesByStateId.set(canonicalState.id, list);
   }
 
-  const workflowGroups: LinearStatusGroup[] = sortedStates.map((state) => ({
+  const workflowGroups: LinearStatusGroup[] = displayStates.map((state) => ({
     status: state.name,
     stateId: state.id,
     stateType: state.type,
@@ -183,5 +220,12 @@ export function groupLinearIssuesByWorkflow(
     return workflowGroups;
   }
 
-  return [...workflowGroups, ...groupLinearIssuesByStatus(unmatchedIssues)];
+  const workflowStatusNames = new Set(
+    workflowGroups.map((group) => normalizeWorkflowStateName(group.status)),
+  );
+  const extraGroups = groupLinearIssuesByStatus(unmatchedIssues).filter(
+    (group) => !workflowStatusNames.has(normalizeWorkflowStateName(group.status)),
+  );
+
+  return extraGroups.length > 0 ? [...workflowGroups, ...extraGroups] : workflowGroups;
 }

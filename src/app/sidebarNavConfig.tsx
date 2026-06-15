@@ -73,10 +73,26 @@ const FULL_MODE_PRIMARY_ITEMS: SidebarNavItemDefinition[] = [
   navItem("workouts"),
 ];
 
+const LINEAR_MODE_SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
+  {
+    id: "workspace",
+    label: "Workspace",
+    items: [
+      projectsNavItem(),
+      navItem("meetings"),
+      navItem("knowledge-base"),
+      navItem("letters"),
+    ],
+  },
+  {
+    id: "people",
+    label: "People",
+    items: [navItem("organizations"), navItem("contacts")],
+  },
+];
+
 /** @deprecated Prefer getSidebarPrimaryItems for linear team configuration. */
-export const SIDEBAR_PRIMARY_ITEMS: SidebarNavItemDefinition[] = isLinearProductMode()
-  ? []
-  : FULL_MODE_PRIMARY_ITEMS;
+export const SIDEBAR_PRIMARY_ITEMS: SidebarNavItemDefinition[] = FULL_MODE_PRIMARY_ITEMS;
 
 export type LinearSidebarTeamConfig = {
   inboxLinearTeamId?: string | null;
@@ -88,21 +104,8 @@ export type LinearSidebarTeamConfig = {
 };
 
 export function getSidebarPrimaryItems(
-  config?: LinearSidebarTeamConfig,
+  _config?: LinearSidebarTeamConfig,
 ): SidebarNavItemDefinition[] {
-  if (isLinearProductMode()) {
-    const items: SidebarNavItemDefinition[] = [];
-    if (config?.inboxLinearTeamId?.trim()) {
-      items.push(navItem("inbox"));
-    }
-    if (config?.dailyLinearTeamId?.trim()) {
-      items.push(navItem("daily"));
-    }
-    if (config?.workoutsLinearTeamId?.trim()) {
-      items.push(navItem("workouts"));
-    }
-    return items;
-  }
   return FULL_MODE_PRIMARY_ITEMS;
 }
 
@@ -126,35 +129,10 @@ const FULL_MODE_SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
 ];
 
 export function getSidebarSections(
-  config?: LinearSidebarTeamConfig,
+  _config?: LinearSidebarTeamConfig,
 ): SidebarNavSectionDefinition[] {
   if (isLinearProductMode()) {
-    const workspaceItems: SidebarNavItemDefinition[] = [
-      projectsNavItem(),
-      navItem("meetings"),
-    ];
-    if (config?.knowledgeBaseLinearTeamId?.trim()) {
-      workspaceItems.push(navItem("knowledge-base"));
-    }
-    if (config?.lettersLinearTeamId?.trim()) {
-      workspaceItems.push(navItem("letters"));
-    }
-    const peopleItems: SidebarNavItemDefinition[] = [navItem("organizations")];
-    if (config?.addressbookLinearTeamId?.trim()) {
-      peopleItems.push(navItem("contacts"));
-    }
-    return [
-      {
-        id: "workspace",
-        label: "Workspace",
-        items: workspaceItems,
-      },
-      {
-        id: "people",
-        label: "People",
-        items: peopleItems,
-      },
-    ];
+    return LINEAR_MODE_SIDEBAR_SECTIONS;
   }
   return FULL_MODE_SIDEBAR_SECTIONS;
 }
@@ -180,9 +158,9 @@ export function shouldShowPrimaryNavEmptyState(id: SidebarNavItemId): boolean {
   return isSidebarPrimaryNavItem(id) && id !== "daily";
 }
 
-/** @deprecated Prefer getSidebarSections(config) for linear letters team gating. */
+/** @deprecated Prefer getSidebarSections(config). */
 export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = isLinearProductMode()
-  ? getSidebarSections()
+  ? LINEAR_MODE_SIDEBAR_SECTIONS
   : FULL_MODE_SIDEBAR_SECTIONS;
 
 export const SIDEBAR_VAULT_NAV_ITEM_IDS = VAULT_NAV_ITEMS.map((item) => item.id);

@@ -19,11 +19,13 @@ export function LinearProjectTableRow({
   projectStatuses,
   selected,
   onSelect,
+  hideStatus = false,
 }: {
   project: LinearProjectSummary;
   projectStatuses?: LinearProjectStatusForIcon[];
   selected: boolean;
   onSelect: () => void;
+  hideStatus?: boolean;
 }) {
   const priorityLabel =
     project.priorityLabel?.trim() || getPriorityLabel(project.priority ?? 0);
@@ -70,21 +72,25 @@ export function LinearProjectTableRow({
         <span className="linear-project-table-row__issues">
           {project.issueCount != null ? project.issueCount : ""}
         </span>
-        <span className="linear-project-table-row__status">
-          {statusName ? (
-            <LinearProjectStatusIcon
-              status={statusName}
-              stateType={statusType}
-              stateId={project.status?.id}
-              statusPosition={project.status?.position}
-              projectStatuses={projectStatuses}
-              title={statusName}
-            />
-          ) : null}
-          {progressLabel ? (
-            <span className="linear-project-table-row__progress">{progressLabel}</span>
-          ) : null}
-        </span>
+        {!hideStatus ? (
+          <span className="linear-project-table-row__status">
+            {statusName ? (
+              <LinearProjectStatusIcon
+                status={statusName}
+                stateType={statusType}
+                stateId={project.status?.id}
+                statusPosition={project.status?.position}
+                projectStatuses={projectStatuses}
+                title={statusName}
+              />
+            ) : null}
+            {progressLabel ? (
+              <span className="linear-project-table-row__progress">{progressLabel}</span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="linear-project-table-row__status" aria-hidden="true" />
+        )}
       </button>
     </li>
   );

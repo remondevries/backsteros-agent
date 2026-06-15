@@ -87,6 +87,60 @@ function sortProjectsInGroup(projects: LinearProjectWithStatus[]): LinearProject
   return [...projects].sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function normalizeProjectStatusName(name?: string): string {
+  return name?.trim().toLowerCase() ?? "";
+}
+
+function assignProjectToWorkflowStatus(
+  project: LinearProjectWithStatus,
+  workspaceStatuses: LinearProjectStatus[],
+): LinearProjectStatus | null {
+  const statusId = project.status?.id?.trim();
+  if (statusId) {
+    const byId = workspaceStatuses.find((status) => status.id === statusId);
+    if (byId) return byId;
+  }
+
+  const normalizedName = normalizeProjectStatusName(project.status?.name);
+  if (!normalizedName) return null;
+
+  return (
+    workspaceStatuses.find(
+      (status) => normalizeProjectStatusName(status.name) === normalizedName,
+    ) ?? null
+  );
+}
+
+function canonicalizeProjectStatusesForGrouping(
+  statuses: LinearProjectStatus[],
+): {
+  displayStatuses: LinearProjectStatus[];
+  resolveStatus: (status: LinearProjectStatus) => LinearProjectStatus;
+} {
+  const sortedStatuses = sortLinearProjectStatusesForDisplay(statuses);
+  const displayStatuses: LinearProjectStatus[] = [];
+  const canonicalByName = new Map<string, LinearProjectStatus>();
+  const resolveById = new Map<string, LinearProjectStatus>();
+
+  for (const status of sortedStatuses) {
+    const nameKey = normalizeProjectStatusName(status.name);
+    let canonical = nameKey ? canonicalByName.get(nameKey) : undefined;
+    if (!canonical) {
+      canonical = status;
+      if (nameKey) {
+        canonicalByName.set(nameKey, canonical);
+      }
+      displayStatuses.push(canonical);
+    }
+    resolveById.set(status.id, canonical);
+  }
+
+  return {
+    displayStatuses,
+    resolveStatus: (status) => resolveById.get(status.id) ?? status,
+  };
+}
+
 export function groupLinearProjectsByStatus(
   projects: LinearProjectWithStatus[],
 ): LinearProjectGroup[] {
@@ -125,23 +179,24 @@ export function groupLinearProjectsByWorkflow(
   }
 
   const sortedStatuses = sortLinearProjectStatusesForDisplay(workspaceStatuses);
-  const statusIds = new Set(sortedStatuses.map((status) => status.id));
+  const { displayStatuses, resolveStatus } = canonicalizeProjectStatusesForGrouping(sortedStatuses);
   const projectsByStatusId = new Map<string, LinearProjectWithStatus[]>();
   const unmatchedProjects: LinearProjectWithStatus[] = [];
 
   for (const project of projects) {
-    const statusId = project.status?.id;
-    if (!statusId || !statusIds.has(statusId)) {
+    const matchedStatus = assignProjectToWorkflowStatus(project, sortedStatuses);
+    if (!matchedStatus) {
       unmatchedProjects.push(project);
       continue;
     }
 
-    const list = projectsByStatusId.get(statusId) ?? [];
+    const canonicalStatus = resolveStatus(matchedStatus);
+    const list = projectsByStatusId.get(canonicalStatus.id) ?? [];
     list.push(project);
-    projectsByStatusId.set(statusId, list);
+    projectsByStatusId.set(canonicalStatus.id, list);
   }
 
-  const workflowGroups: LinearProjectGroup[] = sortedStatuses.map((status) => ({
+  const workflowGroups: LinearProjectGroup[] = displayStatuses.map((status) => ({
     status,
     label: status.name,
     projects: sortProjectsInGroup(projectsByStatusId.get(status.id) ?? []),
@@ -151,5 +206,12 @@ export function groupLinearProjectsByWorkflow(
     return workflowGroups;
   }
 
-  return [...workflowGroups, ...groupLinearProjectsByStatus(unmatchedProjects)];
+  const workflowStatusNames = new Set(
+    workflowGroups.map((group) => normalizeProjectStatusName(group.label)),
+  );
+  const extraGroups = groupLinearProjectsByStatus(unmatchedProjects).filter(
+    (group) => !workflowStatusNames.has(normalizeProjectStatusName(group.label)),
+  );
+
+  return extraGroups.length > 0 ? [...workflowGroups, ...extraGroups] : workflowGroups;
 }

@@ -680,6 +680,7 @@ export function LinearDocumentView({
         className={[
           "app-resizable-panel-inset linear-issue-details-resizable",
           meetingsSection ? "linear-issue-details-resizable--meetings" : null,
+          inboxSection ? "linear-issue-details-resizable--inbox" : null,
         ]
           .filter(Boolean)
           .join(" ")}

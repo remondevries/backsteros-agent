@@ -453,6 +453,11 @@ function ContentPanelFrame({
     selectRelativeTab(1);
   }, [selectRelativeTab]);
 
+  const handleCloseActiveTab = useCallback(() => {
+    if (!activeTabId) return;
+    handleCloseTab(activeTabId);
+  }, [activeTabId, handleCloseTab]);
+
   const displayedBreadcrumbSegments = useMemo(() => {
     if (!narrowContentLayout || !activeVaultNavItem || hideSidebar || breadcrumbSegments.length === 0) {
       return breadcrumbSegments;
@@ -525,6 +530,7 @@ function ContentPanelFrame({
       <ContentPanelTabShortcuts
         enabled={!settingsOpen}
         onNewTab={handleAddTab}
+        onCloseActiveTab={handleCloseActiveTab}
         onPreviousTab={handlePreviousTab}
         onNextTab={handleNextTab}
       />

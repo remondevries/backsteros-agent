@@ -21,6 +21,7 @@ import {
   readPersistedSettingsTab,
   readPersistedShowSettings,
   readPersistedVaultNavItem,
+  readPersistedWorkspaceTeams,
   writePersistedAppState,
 } from "./hooks/usePersistedAppState";
 import type { SidebarNavItemId } from "./app/sidebarNavConfig";
@@ -67,10 +68,7 @@ import {
   showNativeNotification,
 } from "./platform/notifications";
 
-function defaultVaultNavItem(inboxLinearTeamId?: string | null): SidebarNavItemId {
-  if (isLinearProductMode()) {
-    return inboxLinearTeamId?.trim() ? "inbox" : "projects";
-  }
+function defaultVaultNavItem(): SidebarNavItemId {
   return "inbox";
 }
 
@@ -108,12 +106,25 @@ export default function App() {
   const [needsCalendarConnect, setNeedsCalendarConnect] = useState(false);
   const [whoopWarning, setWhoopWarning] = useState<string | null>(null);
   const [desktopReleaseWarning, setDesktopReleaseWarning] = useState<string | null>(null);
-  const [inboxLinearTeamId, setInboxLinearTeamId] = useState<string | null>(null);
-  const [dailyLinearTeamId, setDailyLinearTeamId] = useState<string | null>(null);
-  const [workoutsLinearTeamId, setWorkoutsLinearTeamId] = useState<string | null>(null);
-  const [lettersLinearTeamId, setLettersLinearTeamId] = useState<string | null>(null);
-  const [knowledgeBaseLinearTeamId, setKnowledgeBaseLinearTeamId] = useState<string | null>(null);
-  const [addressbookLinearTeamId, setAddressbookLinearTeamId] = useState<string | null>(null);
+  const persistedWorkspaceTeams = readPersistedWorkspaceTeams();
+  const [inboxLinearTeamId, setInboxLinearTeamId] = useState<string | null>(
+    () => persistedWorkspaceTeams.inboxLinearTeamId ?? null,
+  );
+  const [dailyLinearTeamId, setDailyLinearTeamId] = useState<string | null>(
+    () => persistedWorkspaceTeams.dailyLinearTeamId ?? null,
+  );
+  const [workoutsLinearTeamId, setWorkoutsLinearTeamId] = useState<string | null>(
+    () => persistedWorkspaceTeams.workoutsLinearTeamId ?? null,
+  );
+  const [lettersLinearTeamId, setLettersLinearTeamId] = useState<string | null>(
+    () => persistedWorkspaceTeams.lettersLinearTeamId ?? null,
+  );
+  const [knowledgeBaseLinearTeamId, setKnowledgeBaseLinearTeamId] = useState<string | null>(
+    () => persistedWorkspaceTeams.knowledgeBaseLinearTeamId ?? null,
+  );
+  const [addressbookLinearTeamId, setAddressbookLinearTeamId] = useState<string | null>(
+    () => persistedWorkspaceTeams.addressbookLinearTeamId ?? null,
+  );
   const [linearUserId, setLinearUserId] = useState<string | null>(null);
   const [workspaceTeamsLoaded, setWorkspaceTeamsLoaded] = useState(false);
   const [activeVaultNavItem, setActiveVaultNavItem] = useState<SidebarNavItemId | null>(
@@ -150,6 +161,36 @@ export default function App() {
       if (workspace.addressbookLinearTeamId !== undefined) {
         setAddressbookLinearTeamId(workspace.addressbookLinearTeamId?.trim() ?? null);
       }
+      const persistedTeams = readPersistedWorkspaceTeams();
+      const normalizeTeamId = (value: string | null | undefined) => value?.trim() ?? null;
+      writePersistedAppState({
+        workspaceTeams: {
+          inboxLinearTeamId:
+            workspace.inboxLinearTeamId !== undefined
+              ? normalizeTeamId(workspace.inboxLinearTeamId)
+              : persistedTeams.inboxLinearTeamId ?? null,
+          dailyLinearTeamId:
+            workspace.dailyLinearTeamId !== undefined
+              ? normalizeTeamId(workspace.dailyLinearTeamId)
+              : persistedTeams.dailyLinearTeamId ?? null,
+          workoutsLinearTeamId:
+            workspace.workoutsLinearTeamId !== undefined
+              ? normalizeTeamId(workspace.workoutsLinearTeamId)
+              : persistedTeams.workoutsLinearTeamId ?? null,
+          lettersLinearTeamId:
+            workspace.lettersLinearTeamId !== undefined
+              ? normalizeTeamId(workspace.lettersLinearTeamId)
+              : persistedTeams.lettersLinearTeamId ?? null,
+          knowledgeBaseLinearTeamId:
+            workspace.knowledgeBaseLinearTeamId !== undefined
+              ? normalizeTeamId(workspace.knowledgeBaseLinearTeamId)
+              : persistedTeams.knowledgeBaseLinearTeamId ?? null,
+          addressbookLinearTeamId:
+            workspace.addressbookLinearTeamId !== undefined
+              ? normalizeTeamId(workspace.addressbookLinearTeamId)
+              : persistedTeams.addressbookLinearTeamId ?? null,
+        },
+      });
       setWorkspaceTeamsLoaded(true);
     },
     [],
