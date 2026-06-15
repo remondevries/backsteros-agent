@@ -7,6 +7,7 @@ RUN bun run build:web
 
 WORKDIR /app/sidecar
 # @briangaoo/totem is installed from GitHub (not on the public npm registry).
+# postinstall compiles totem via bun; native deps (sqlite3, onnxruntime) need install scripts.
 RUN bun install --frozen-lockfile --trust-all
 
 FROM oven/bun:1

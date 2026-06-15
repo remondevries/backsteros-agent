@@ -6,11 +6,9 @@ import type { WhoopSnapshotEntity } from "../chat/types";
 import {
   DASHBOARD_CACHE_TTL_MS,
   fetchWhoopToday,
-  getWhoopSetup,
   peekCached,
   REQUEST_CACHE_KEYS,
 } from "../lib/api";
-import { openExternalUrl } from "../lib/openExternalUrl";
 import { useDashboardRefreshShortcut } from "../hooks/useDashboardRefreshShortcut";
 
 type WhoopTodayResult = Awaited<ReturnType<typeof fetchWhoopToday>>;
@@ -61,24 +59,6 @@ export function WhoopDashboard({ isActive = true }: { isActive?: boolean }) {
     void loadSnapshot();
   }, [loadSnapshot]);
 
-  async function handleWhoopSetup() {
-    try {
-      const setup = await getWhoopSetup();
-      const instructions = [
-        `Tokens file: ${setup.envPath}`,
-        "",
-        "1. Add WHOOP_EMAIL=your@email.com to that file",
-        `2. Run in Terminal: ${setup.authCommand}`,
-        "3. Copy WHOOP_IOS_BEARER_TOKEN, WHOOP_COGNITO_REFRESH_TOKEN, WHOOP_USER_ID, and WHOOP_INSTALLATION_ID into totem.env",
-        "4. Restart BacksterOS Agent or refresh this view",
-      ].join("\n");
-      await navigator.clipboard.writeText(instructions);
-      await openExternalUrl(setup.docsUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load Whoop setup info");
-    }
-  }
-
   const dateLabel = snapshot?.date ? formatWhoopSnapshotDate(snapshot.date) : "Today";
 
   return (
@@ -94,10 +74,7 @@ export function WhoopDashboard({ isActive = true }: { isActive?: boolean }) {
         <p className="app-dashboard-empty">Loading today&apos;s Whoop data…</p>
       ) : !authenticated ? (
         <div className="app-dashboard-empty-state">
-          <p>Whoop is not connected yet.</p>
-          <button type="button" className="app-dashboard-action" onClick={() => void handleWhoopSetup()}>
-            Whoop setup
-          </button>
+          <p>Whoop is not connected yet. Open Settings → Whoop and sign in with your account.</p>
         </div>
       ) : error && !snapshot ? (
         <div className="app-dashboard-empty-state">

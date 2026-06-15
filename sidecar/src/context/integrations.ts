@@ -37,12 +37,12 @@ Ask the user to connect Google Calendar before creating or updating events.`,
     if (!isWhoopConfigured()) {
       hints.push(
         `[Whoop setup]
-Whoop is not configured. Run \`npx -y @briangaoo/totem auth\` and save tokens to ~/.backsteros-agent/totem.env.`,
+Whoop is not configured. Open Settings → Whoop and sign in with your Whoop account.`,
       );
     } else if (!isWhoopAuthenticated()) {
       hints.push(
         `[Whoop setup]
-totem.env exists but Whoop tokens are missing. Re-run totem auth and update ~/.backsteros-agent/totem.env.`,
+totem.env exists but Whoop tokens are missing. Sign in again under Settings → Whoop.`,
       );
     }
   }

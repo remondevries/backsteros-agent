@@ -60,6 +60,9 @@ export function getSidecarConnection(): SidecarConnection {
 
 async function readErrorMessage(response: Response): Promise<string> {
   const text = await response.text();
+  if (response.status === 401) {
+    return "Unauthorized — sign in with your server access token first.";
+  }
   if (!text) {
     return `Request failed: ${response.status}`;
   }
@@ -331,10 +334,27 @@ export async function saveWhoopCredentials(body: {
 }
 
 export async function getWhoopSetup() {
-  return request<{ envPath: string; authCommand: string; docsUrl: string }>(
-    "/integrations/whoop/setup",
-    { method: "POST" },
-  );
+  return request<{ envPath: string; docsUrl: string }>("/integrations/whoop/setup", {
+    method: "POST",
+  });
+}
+
+export type WhoopAuthStartResult =
+  | { status: "connected" }
+  | { status: "mfa_required"; authSessionId: string; challengeName: string };
+
+export async function startWhoopAuth(email: string, password: string) {
+  return request<WhoopAuthStartResult>("/integrations/whoop/auth", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function completeWhoopAuthMfa(authSessionId: string, code: string) {
+  return request<{ status: "connected" }>("/integrations/whoop/auth/mfa", {
+    method: "POST",
+    body: JSON.stringify({ authSessionId, code }),
+  });
 }
 
 export async function fetchWhoopToday(options?: { force?: boolean }) {

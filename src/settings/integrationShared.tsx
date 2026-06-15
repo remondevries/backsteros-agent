@@ -317,7 +317,7 @@ export function ApiKeyField({
           )}
         </div>
       </div>
-      {(failed || (hideTestFeedbackOnSuccess && succeeded)) ? null : (
+      {(hideTestFeedbackOnSuccess && succeeded) ? null : (
         <IntegrationTestFeedback result={testResult} />
       )}
     </>

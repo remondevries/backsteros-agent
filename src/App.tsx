@@ -35,7 +35,6 @@ import {
   getAuthStatus,
   getHealth,
   getSettings,
-  getWhoopSetup,
   ensureVaultDailyNoteToday,
   invalidateDashboardRequestCache,
 } from "./lib/api";
@@ -92,6 +91,7 @@ export default function App() {
   const { isAdministrator, loading: administratorAccessLoading } = useAdministratorAccess();
   const [connectGateFocusStep, setConnectGateFocusStep] =
     useState<ConnectGateProgressStep>("cursor");
+  const [serverAccessRequired, setServerAccessRequired] = useState(false);
   const [showLinearOAuthSuccess, setShowLinearOAuthSuccess] = useState(false);
   const [cursorKeyConfigured, setCursorKeyConfigured] = useState(connectGateAccessCached);
   const [linearAccessReady, setLinearAccessReady] = useState(connectGateAccessCached);
@@ -310,12 +310,16 @@ export default function App() {
         if (!authStatus.authenticated) {
           clearConnectGateAccessCache();
           setAppReady(false);
+          setServerAccessRequired(true);
+          setConnectGateFocusStep("linear");
           setGateNotice(
             "Server access denied. Sign in with your server access token below, then retry.",
           );
           return { linearReady: true, hasApiKey: false, appReady: false };
         }
       }
+
+      setServerAccessRequired(false);
 
       const settings = await getSettings();
       if (!health.hasApiKey) {
@@ -344,7 +348,7 @@ export default function App() {
       setNeedsCalendarConnect(calendarWarningState.needsConnect);
       if (!health.hasWhoopAuth) {
         setWhoopWarning(
-          "Whoop is not connected. Open Settings → Extensions → Whoop to connect.",
+          "Whoop is not connected. Open Settings → Whoop to sign in.",
         );
       } else {
         setWhoopWarning(null);
@@ -399,6 +403,8 @@ export default function App() {
       const isUnauthorized =
         message.toLowerCase().includes("unauthorized") || message.includes("401");
       if (isUnauthorized) {
+        setServerAccessRequired(true);
+        setConnectGateFocusStep("linear");
         setGateNotice(
           "Server access denied. Sign in with your server access token below, then retry.",
         );
@@ -563,25 +569,10 @@ export default function App() {
     }
   }
 
-  async function handleWhoopSetup() {
-    try {
-      const setup = await getWhoopSetup();
-      const instructions = [
-        `Tokens file: ${setup.envPath}`,
-        "",
-        "1. Add WHOOP_EMAIL=your@email.com to that file",
-        `2. Run in Terminal: ${setup.authCommand}`,
-        "3. Copy WHOOP_IOS_BEARER_TOKEN, WHOOP_COGNITO_REFRESH_TOKEN, WHOOP_USER_ID, and WHOOP_INSTALLATION_ID into totem.env",
-        "4. Restart BacksterOS Agent or send a Whoop message to verify",
-      ].join("\n");
-      await navigator.clipboard.writeText(instructions);
-      await openExternalUrl(setup.docsUrl);
-      setWhoopWarning(
-        "Setup steps copied to clipboard. Finish auth in Terminal, paste tokens into totem.env, then restart the app.",
-      );
-    } catch (error) {
-      setWhoopWarning(error instanceof Error ? error.message : "Failed to load Whoop setup info");
-    }
+  function handleWhoopSetup() {
+    setWhoopWarning(null);
+    setShowSettings(true);
+    setActiveSettingsTab("whoop");
   }
 
   if (!appReady) {
@@ -597,6 +588,27 @@ export default function App() {
     }
 
     if (linearAccessReady) {
+      if (serverAccessRequired || connectGateFocusStep === "linear") {
+        return (
+          <LinearConnectGate
+            showCursorStepOption={!serverAccessRequired}
+            cursorStepComplete={cursorKeyConfigured}
+            bootstrapMessage={gateNotice}
+            bootstrapRetrying={bootstrapping}
+            onBootstrapRetry={() => {
+              void runBootstrap();
+            }}
+            onServerAccessSignedIn={() => runBootstrap()}
+            onAdvanceToCursor={() => {
+              setConnectGateFocusStep("cursor");
+            }}
+            onOAuthSuccess={() => {
+              void handleLinearOAuthSuccess();
+            }}
+          />
+        );
+      }
+
       if (connectGateFocusStep === "setup") {
         return (
           <SetupConnectGate
@@ -623,27 +635,6 @@ export default function App() {
               setShowLinearOAuthSuccess(false);
               awaitingSetupRef.current = true;
               setConnectGateFocusStep("setup");
-            }}
-          />
-        );
-      }
-
-      if (connectGateFocusStep === "linear") {
-        return (
-          <LinearConnectGate
-            showCursorStepOption
-            cursorStepComplete={cursorKeyConfigured}
-            bootstrapMessage={gateNotice}
-            bootstrapRetrying={bootstrapping}
-            onBootstrapRetry={() => {
-              void runBootstrap();
-            }}
-            onServerAccessSignedIn={() => runBootstrap()}
-            onAdvanceToCursor={() => {
-              setConnectGateFocusStep("cursor");
-            }}
-            onOAuthSuccess={() => {
-              void handleLinearOAuthSuccess();
             }}
           />
         );
@@ -724,7 +715,7 @@ export default function App() {
               void handleWhoopSetup();
             }}
           >
-            Whoop setup
+            Connect Whoop
           </button>
         </div>
       )}

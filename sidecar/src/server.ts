@@ -211,6 +211,7 @@ import { isDestructiveShellCommand } from "./shell-policy.ts";
 import { getWorkspaceCustomTools } from "./workspace-tools.ts";
 import { fetchWhoopTodaySnapshot } from "./morning-review-whoop.ts";
 import { getWhoopSetupInfo } from "./whoopAuth.ts";
+import { completeWhoopAuthMfa, startWhoopAuth } from "./whoop/server-auth.ts";
 import {
   getIntegrationsStatus,
   importGoogleCalendarCredentials,
@@ -2227,6 +2228,28 @@ app.post("/integrations/whoop/credentials", async (c) => {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save Whoop credentials";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/integrations/whoop/auth", async (c) => {
+  try {
+    const body = (await c.req.json()) as { email?: string; password?: string };
+    const result = await startWhoopAuth(body.email ?? "", body.password ?? "");
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Whoop sign-in failed";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.post("/integrations/whoop/auth/mfa", async (c) => {
+  try {
+    const body = (await c.req.json()) as { authSessionId?: string; code?: string };
+    const result = await completeWhoopAuthMfa(body.authSessionId ?? "", body.code ?? "");
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Whoop MFA verification failed";
     return c.json({ error: message }, 400);
   }
 });

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  completeWhoopAuthMfa,
   fetchWhoopToday,
   getIntegrationsStatus,
-  getWhoopSetup,
   saveWhoopCredentials,
+  startWhoopAuth,
   type IntegrationsStatus,
 } from "../lib/api";
-import { openExternalUrl } from "../lib/openExternalUrl";
 import { restartSidecarIfNeeded } from "../lib/restartSidecar";
 import {
   getWhoopStatusLabel,
@@ -19,33 +19,24 @@ import {
   IntegrationTestFeedback,
 } from "./integrationShared";
 
-function buildWhoopSetupInstructions(setup: {
-  envPath: string;
-  authCommand: string;
-}): string {
-  return [
-    `Tokens file: ${setup.envPath}`,
-    "",
-    "1. Add WHOOP_EMAIL=your@email.com to that file",
-    `2. Run in Terminal: ${setup.authCommand}`,
-    "3. Copy WHOOP_IOS_BEARER_TOKEN, WHOOP_COGNITO_REFRESH_TOKEN, WHOOP_USER_ID, and WHOOP_INSTALLATION_ID into totem.env",
-    "4. Restart BacksterOS Agent or test the connection below",
-  ].join("\n");
-}
-
 export function WhoopIntegrationSection({
   onSecretsUpdated,
 }: {
   onSecretsUpdated?: () => void | Promise<void>;
 }) {
   const [status, setStatus] = useState<IntegrationsStatus | null>(null);
-  const [setupBusy, setSetupBusy] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [verifyingMfa, setVerifyingMfa] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testOk, setTestOk] = useState<boolean | undefined>();
   const [testMessage, setTestMessage] = useState<string | undefined>();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [authSessionId, setAuthSessionId] = useState<string | null>(null);
+  const [showManualTokens, setShowManualTokens] = useState(false);
   const [iosBearerToken, setIosBearerToken] = useState("");
   const [cognitoRefreshToken, setCognitoRefreshToken] = useState("");
   const [userId, setUserId] = useState("");
@@ -65,7 +56,58 @@ export function WhoopIntegrationSection({
 
   const whoop = status?.whoop;
   const connected = whoop ? isWhoopConnected(whoop) : false;
-  const busy = setupBusy || testing || savingTokens;
+  const busy = signingIn || verifyingMfa || testing || savingTokens;
+
+  async function handleSignIn() {
+    setSigningIn(true);
+    setError(null);
+    setMessage(null);
+    setTestOk(undefined);
+    setTestMessage(undefined);
+    setAuthSessionId(null);
+    try {
+      const result = await startWhoopAuth(email, password);
+      setPassword("");
+      if (result.status === "connected") {
+        setMfaCode("");
+        await loadStatus();
+        await onSecretsUpdated?.();
+        setMessage("Whoop connected. Test the connection to load today's snapshot.");
+        return;
+      }
+      setAuthSessionId(result.authSessionId);
+      setMessage(
+        result.challengeName === "SMS_MFA"
+          ? "Enter the SMS code Whoop sent to your phone."
+          : "Enter the verification code from your authenticator app.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Whoop sign-in failed");
+    } finally {
+      setSigningIn(false);
+    }
+  }
+
+  async function handleVerifyMfa() {
+    if (!authSessionId) return;
+    setVerifyingMfa(true);
+    setError(null);
+    setMessage(null);
+    setTestOk(undefined);
+    setTestMessage(undefined);
+    try {
+      await completeWhoopAuthMfa(authSessionId, mfaCode);
+      setAuthSessionId(null);
+      setMfaCode("");
+      await loadStatus();
+      await onSecretsUpdated?.();
+      setMessage("Whoop connected. Test the connection to load today's snapshot.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Whoop MFA verification failed");
+    } finally {
+      setVerifyingMfa(false);
+    }
+  }
 
   async function handleSaveTokens() {
     setSavingTokens(true);
@@ -81,7 +123,6 @@ export function WhoopIntegrationSection({
         userId: userId || null,
         installationId: installationId || null,
       });
-      setEmail("");
       setIosBearerToken("");
       setCognitoRefreshToken("");
       setUserId("");
@@ -93,28 +134,6 @@ export function WhoopIntegrationSection({
       setError(err instanceof Error ? err.message : "Failed to save Whoop tokens");
     } finally {
       setSavingTokens(false);
-    }
-  }
-
-  async function handleSetup() {
-    setSetupBusy(true);
-    setError(null);
-    setMessage(null);
-    setTestOk(undefined);
-    setTestMessage(undefined);
-    try {
-      const setup = await getWhoopSetup();
-      await loadStatus();
-      const instructions = buildWhoopSetupInstructions(setup);
-      await navigator.clipboard.writeText(instructions);
-      await openExternalUrl(setup.docsUrl);
-      setMessage(
-        "Setup steps copied to clipboard. Finish auth in Terminal, paste tokens into totem.env, then restart the app or test the connection.",
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start Whoop setup");
-    } finally {
-      setSetupBusy(false);
     }
   }
 
@@ -141,7 +160,7 @@ export function WhoopIntegrationSection({
         return;
       }
       setTestOk(false);
-      setTestMessage("Whoop tokens are missing or invalid. Run setup and paste tokens into totem.env.");
+      setTestMessage("Whoop is not connected yet. Sign in above or paste tokens manually.");
     } catch (err) {
       setTestOk(false);
       setTestMessage(err instanceof Error ? err.message : "Whoop connection test failed");
@@ -153,25 +172,18 @@ export function WhoopIntegrationSection({
   return (
     <section className="settings-section">
       <p className="settings-hint settings-hint-spaced-top">
-        Connect Whoop through the Totem CLI. Tokens are stored in{" "}
+        Sign in with your Whoop account to load recovery, sleep, and strain in daily notes, morning
+        review, and chat. Tokens are stored in{" "}
         <code>{whoop?.envPath ?? "~/.backsteros-agent/totem.env"}</code>.
       </p>
       <p className="settings-hint settings-hint-spaced">
-        Run <code>npx -y @briangaoo/totem auth</code> on your machine, then paste the tokens below
-        (or into totem.env on the server). Whoop powers recovery, sleep, and strain in daily notes,
-        morning review, and chat tools.
+        Your password is used only for sign-in and is never saved. If your account uses MFA, you will
+        be prompted for the code after signing in.
       </p>
 
       <IntegrationStatusLine connected={connected} />
       {!connected && whoop ? (
         <p className="settings-hint settings-hint-spaced">{getWhoopStatusLabel(whoop)}</p>
-      ) : null}
-
-      {whoop?.configured && !connected ? (
-        <p className="settings-hint settings-hint-spaced">
-          Tokens file found at <code>{whoop.envPath}</code>. Add your Whoop tokens below or in that
-          file, then test the connection.
-        </p>
       ) : null}
 
       <div className="settings-hint-spaced">
@@ -182,79 +194,167 @@ export function WhoopIntegrationSection({
           configured={connected}
           unsetPlaceholder="you@example.com"
           inputType="text"
-          disabled={busy}
+          disabled={busy || Boolean(authSessionId)}
           onChange={setEmail}
         />
-        <IntegrationSecretInput
-          id="whoop-ios-bearer-token"
-          label="WHOOP_IOS_BEARER_TOKEN"
-          value={iosBearerToken}
-          configured={connected}
-          unsetPlaceholder="Paste from totem auth"
-          disabled={busy}
-          onChange={setIosBearerToken}
-        />
-        <IntegrationSecretInput
-          id="whoop-cognito-refresh-token"
-          label="WHOOP_COGNITO_REFRESH_TOKEN"
-          value={cognitoRefreshToken}
-          configured={connected}
-          unsetPlaceholder="Paste from totem auth"
-          disabled={busy}
-          onChange={setCognitoRefreshToken}
-        />
-        <IntegrationSecretInput
-          id="whoop-user-id"
-          label="WHOOP_USER_ID"
-          value={userId}
-          configured={connected}
-          unsetPlaceholder="Paste from totem auth"
-          disabled={busy}
-          onChange={setUserId}
-        />
-        <IntegrationSecretInput
-          id="whoop-installation-id"
-          label="WHOOP_INSTALLATION_ID"
-          value={installationId}
-          configured={connected}
-          unsetPlaceholder="Paste from totem auth"
-          disabled={busy}
-          onChange={setInstallationId}
-        />
+        {!connected && !authSessionId ? (
+          <IntegrationSecretInput
+            id="whoop-password"
+            label="Whoop password"
+            hint="Sent to the server only for sign-in — not stored."
+            value={password}
+            configured={false}
+            unsetPlaceholder="Your Whoop password"
+            disabled={busy}
+            onChange={setPassword}
+          />
+        ) : null}
+        {authSessionId ? (
+          <>
+            <IntegrationSecretInput
+              id="whoop-mfa-code"
+              label="Verification code"
+              value={mfaCode}
+              configured={false}
+              unsetPlaceholder="6-digit code"
+              inputType="text"
+              disabled={busy}
+              onChange={setMfaCode}
+            />
+            <div className="settings-row settings-row-profiles">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy || !mfaCode.trim()}
+                onClick={() => {
+                  void handleVerifyMfa();
+                }}
+              >
+                {verifyingMfa ? "Verifying…" : "Verify code"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy}
+                onClick={() => {
+                  setAuthSessionId(null);
+                  setMfaCode("");
+                  setMessage(null);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
 
-      <div className="settings-row settings-row-profiles settings-hint-spaced">
-        <button
-          type="button"
-          className="btn-secondary"
-          disabled={busy}
-          onClick={() => {
-            void handleSetup();
-          }}
-        >
-          {setupBusy ? "Opening setup…" : connected ? "View setup steps" : "Connect Whoop"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary"
-          disabled={busy || (!email.trim() && !iosBearerToken.trim() && !cognitoRefreshToken.trim())}
-          onClick={() => {
-            void handleSaveTokens();
-          }}
-        >
-          {savingTokens ? "Saving…" : "Save tokens"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary settings-integration-test-button"
-          disabled={busy || !whoop?.configured}
-          onClick={() => {
-            void handleTestConnection();
-          }}
-        >
-          {testing ? "Testing…" : "Test connection"}
-        </button>
-      </div>
+      {!connected && !authSessionId ? (
+        <div className="settings-row settings-row-profiles settings-hint-spaced">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={busy || !email.trim() || !password.trim()}
+            onClick={() => {
+              void handleSignIn();
+            }}
+          >
+            {signingIn ? "Signing in…" : "Sign in to Whoop"}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary settings-integration-test-button"
+            disabled={busy || !whoop?.configured}
+            onClick={() => {
+              void handleTestConnection();
+            }}
+          >
+            {testing ? "Testing…" : "Test connection"}
+          </button>
+        </div>
+      ) : null}
+
+      {connected ? (
+        <div className="settings-row settings-row-profiles settings-hint-spaced">
+          <button
+            type="button"
+            className="btn-secondary settings-integration-test-button"
+            disabled={busy}
+            onClick={() => {
+              void handleTestConnection();
+            }}
+          >
+            {testing ? "Testing…" : "Test connection"}
+          </button>
+        </div>
+      ) : null}
+
+      <details
+        className="settings-hint-spaced"
+        open={showManualTokens}
+        onToggle={(event) => {
+          setShowManualTokens((event.currentTarget as HTMLDetailsElement).open);
+        }}
+      >
+        <summary className="settings-hint">Advanced: paste tokens manually</summary>
+        <p className="settings-hint settings-hint-spaced">
+          Only if you already have tokens from another Totem install. Otherwise use sign-in above.
+        </p>
+        <div className="settings-hint-spaced">
+          <IntegrationSecretInput
+            id="whoop-ios-bearer-token"
+            label="WHOOP_IOS_BEARER_TOKEN"
+            value={iosBearerToken}
+            configured={connected}
+            unsetPlaceholder="Optional manual paste"
+            disabled={busy}
+            onChange={setIosBearerToken}
+          />
+          <IntegrationSecretInput
+            id="whoop-cognito-refresh-token"
+            label="WHOOP_COGNITO_REFRESH_TOKEN"
+            value={cognitoRefreshToken}
+            configured={connected}
+            unsetPlaceholder="Optional manual paste"
+            disabled={busy}
+            onChange={setCognitoRefreshToken}
+          />
+          <IntegrationSecretInput
+            id="whoop-user-id"
+            label="WHOOP_USER_ID"
+            value={userId}
+            configured={connected}
+            unsetPlaceholder="Optional"
+            disabled={busy}
+            onChange={setUserId}
+          />
+          <IntegrationSecretInput
+            id="whoop-installation-id"
+            label="WHOOP_INSTALLATION_ID"
+            value={installationId}
+            configured={connected}
+            unsetPlaceholder="Optional"
+            disabled={busy}
+            onChange={setInstallationId}
+          />
+        </div>
+        <div className="settings-row settings-row-profiles settings-hint-spaced">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={
+              busy ||
+              (!email.trim() && !iosBearerToken.trim() && !cognitoRefreshToken.trim())
+            }
+            onClick={() => {
+              void handleSaveTokens();
+            }}
+          >
+            {savingTokens ? "Saving…" : "Save tokens"}
+          </button>
+        </div>
+      </details>
 
       <IntegrationTestFeedback
         result={

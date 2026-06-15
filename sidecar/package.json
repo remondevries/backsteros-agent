@@ -6,7 +6,8 @@
     "dev": "bun run src/server.ts",
     "build": "bun run build.ts",
     "proof": "bun run src/proof.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "postinstall": "node scripts/build-totem.mjs"
   },
   "dependencies": {
     "@briangaoo/totem": "github:briangaoo/totem#v1.4.3",

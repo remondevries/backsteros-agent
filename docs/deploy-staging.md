@@ -125,21 +125,16 @@ To copy local dev data once:
 kamal app exec -c config/deploy.yml --interactive --reuse "ls /data"
 ```
 
-### Whoop (Totem)
+### Whoop
 
-Whoop uses the [@briangaoo/totem](https://github.com/briangaoo/totem) library (installed from GitHub in the Docker image). Tokens live in `/data/totem.env` on the server volume.
+Whoop sign-in runs on the server — no local CLI required.
 
-1. On your Mac, run `npx -y @briangaoo/totem auth` and sign in.
-2. In staging **Settings → Whoop**, paste `WHOOP_EMAIL`, `WHOOP_IOS_BEARER_TOKEN`, `WHOOP_COGNITO_REFRESH_TOKEN`, `WHOOP_USER_ID`, and `WHOOP_INSTALLATION_ID`, then **Save tokens** and **Test connection**.
+1. Open **Settings → Whoop** on staging.
+2. Enter your Whoop email and password, then **Sign in to Whoop**.
+3. If MFA is enabled, enter the SMS or authenticator code.
+4. Click **Test connection** to verify today's snapshot loads.
 
-Or copy your local file once:
-
-```bash
-scp ~/.backsteros-agent/totem.env backsteros.com:/tmp/totem.env
-kamal app exec -c config/deploy.yml --reuse "cp /tmp/totem.env /data/totem.env && chmod 600 /data/totem.env"
-```
-
-Redeploy after image changes so `@briangaoo/totem` is present in the container.
+Tokens are stored in `/data/totem.env` on the server volume. Re-sign in when tokens expire (~30 days).
 
 ## Desktop remote shell
 
