@@ -84,20 +84,24 @@ const DOCUMENT_BY_ID_QUERY = `
 `;
 
 const TEAM_DOCUMENTS_QUERY = `
-  query BacksterTeamDocuments($teamId: String!, $after: String, $first: Int!) {
-    team(id: $teamId) {
-      documents(first: $first, after: $after, includeArchived: false, orderBy: updatedAt) {
-        nodes {
-          ${DOCUMENT_LIST_FIELDS}
-          project {
-            id
-            name
-          }
+  query BacksterTeamDocuments($teamId: ID!, $after: String, $first: Int!) {
+    documents(
+      filter: { team: { id: { eq: $teamId } } }
+      first: $first
+      after: $after
+      includeArchived: false
+      orderBy: updatedAt
+    ) {
+      nodes {
+        ${DOCUMENT_LIST_FIELDS}
+        project {
+          id
+          name
         }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -395,15 +399,13 @@ export async function fetchLinearApiTeamDocuments(teamId: string): Promise<Linea
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const data = await linearGraphqlRequest<{
-      team?: {
-        documents?: {
-          nodes?: GraphqlDocumentNode[];
-          pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-        } | null;
+      documents?: {
+        nodes?: GraphqlDocumentNode[];
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       } | null;
     }>(TEAM_DOCUMENTS_QUERY, { teamId: id, first: PAGE_SIZE, after });
 
-    const connection = data.team?.documents;
+    const connection = data.documents;
 
     for (const node of connection?.nodes ?? []) {
       const document = normalizeDocument(node);
