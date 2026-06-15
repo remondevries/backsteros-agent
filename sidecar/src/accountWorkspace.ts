@@ -1,7 +1,7 @@
-import type { AccountWorkspace } from "../chat/types";
+import type { UserAccountWorkspace } from "./accounts.ts";
 
-export function isAccountSetupComplete(
-  workspace: AccountWorkspace,
+export function isUserAccountSetupComplete(
+  workspace: UserAccountWorkspace,
   options?: { isAdministrator?: boolean },
 ): boolean {
   if (workspace.setupCompletedAt) {

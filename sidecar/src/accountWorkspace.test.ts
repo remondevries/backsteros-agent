@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { isAccountSetupComplete } from "./accountWorkspace";
+import { isUserAccountSetupComplete } from "./accountWorkspace.ts";
 
-describe("isAccountSetupComplete", () => {
+describe("isUserAccountSetupComplete", () => {
   test("returns true when setupCompletedAt is set", () => {
     expect(
-      isAccountSetupComplete({
+      isUserAccountSetupComplete({
         inboxLinearTeamId: null,
         dailyLinearTeamId: null,
         workoutsLinearTeamId: null,
@@ -18,7 +18,7 @@ describe("isAccountSetupComplete", () => {
 
   test("returns true when all workspace ids are present", () => {
     expect(
-      isAccountSetupComplete({
+      isUserAccountSetupComplete({
         inboxLinearTeamId: "team-1",
         dailyLinearTeamId: "team-daily",
         workoutsLinearTeamId: "team-workouts",
@@ -32,7 +32,7 @@ describe("isAccountSetupComplete", () => {
 
   test("does not require workouts for non-administrators", () => {
     expect(
-      isAccountSetupComplete(
+      isUserAccountSetupComplete(
         {
           inboxLinearTeamId: "team-1",
           dailyLinearTeamId: "team-daily",
@@ -49,7 +49,7 @@ describe("isAccountSetupComplete", () => {
 
   test("returns false when setup is incomplete", () => {
     expect(
-      isAccountSetupComplete({
+      isUserAccountSetupComplete({
         inboxLinearTeamId: "team-1",
         dailyLinearTeamId: null,
         workoutsLinearTeamId: null,

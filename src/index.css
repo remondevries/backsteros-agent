@@ -80,8 +80,12 @@ textarea {
 
 .linear-connect-gate {
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 2rem;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .linear-connect-gate-stack {
@@ -90,6 +94,8 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  margin-block: auto;
+  flex-shrink: 0;
 }
 
 .connect-gate-progress {

@@ -18,6 +18,10 @@ import {
   CONNECT_GATE_PROGRESS_INCOMPLETE,
   connectGateProgressAfterLinearOAuth,
 } from "./connectGateProgressConfig.ts";
+import { loadUserAccountWorkspace } from "./accounts.ts";
+import { isUserAccountSetupComplete } from "./accountWorkspace.ts";
+import { fetchLinearViewer } from "./linear/viewer.ts";
+import { viewerHasAdministratorAccess } from "./admin-access.ts";
 
 interface OAuthCredentials {
   client_id: string;
@@ -275,20 +279,45 @@ export async function handleLinearOAuthCallback(
 
     const hasCursorApiKey = isUserCursorApiKeyConfigured();
     const appReturnBase = resolveAppReturnUrl(flow.appReturnUrl);
-    const successDashboardUrl = hasCursorApiKey
-      ? appendAppReturnQuery(appReturnBase, { connect: "setup" })
-      : appendAppReturnQuery(appReturnBase, { connect: "cursor" });
+
+    let setupComplete = false;
+    try {
+      const viewer = await fetchLinearViewer();
+      const isAdministrator = await viewerHasAdministratorAccess();
+      const workspace = loadUserAccountWorkspace(viewer.id);
+      setupComplete = isUserAccountSetupComplete(workspace, { isAdministrator });
+    } catch {
+      setupComplete = false;
+    }
+
+    let successDashboardUrl = appReturnBase;
+    let successDashboardLabel = "Open BacksterOS";
+    let successMessage = "Thank you for connecting. You're all set to use BacksterOS.";
+
+    if (!setupComplete) {
+      if (hasCursorApiKey) {
+        successDashboardUrl = appendAppReturnQuery(appReturnBase, { connect: "setup" });
+        successDashboardLabel = "Go to setup";
+        successMessage =
+          "Thank you for connecting. Answer a few quick questions to finish setup.";
+      } else {
+        successDashboardUrl = appendAppReturnQuery(appReturnBase, { connect: "cursor" });
+        successDashboardLabel = "Next step";
+        successMessage = "You're connected to Linear. Continue below to set up Cursor Agent.";
+      }
+    }
 
     const html = buildOAuthCallbackPageHtml({
       title: "Connected successfully",
-      message: hasCursorApiKey
-        ? "Thank you for connecting. You're all set to use BacksterOS."
-        : "You're connected to Linear. Continue below to set up Cursor Agent.",
+      message: successMessage,
       variant: "success",
       appReturnUrl: flow.appReturnUrl,
       successDashboardUrl,
-      successDashboardLabel: hasCursorApiKey ? "Go to setup" : "Next step",
-      connectProgress: connectGateProgressAfterLinearOAuth(hasCursorApiKey),
+      successDashboardLabel,
+      connectProgress: {
+        ...connectGateProgressAfterLinearOAuth(hasCursorApiKey),
+        setupComplete,
+      },
     });
 
     await stopLinearOAuthAuth();

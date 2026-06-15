@@ -371,22 +371,24 @@ export default function App() {
         }
       }
 
-      let needsSetup = awaitingSetupRef.current;
+      let needsSetup = false;
       try {
         const account = await getAccountWorkspace();
         setLinearUserId(account.linearUserId?.trim() ?? null);
         applyAccountWorkspaceTeams(account.workspace);
-        if (!needsSetup) {
-          needsSetup = !isAccountSetupComplete(account.workspace);
-        }
+        needsSetup = !isAccountSetupComplete(account.workspace, {
+          isAdministrator: account.isAdministrator,
+        });
       } catch {
         setLinearUserId(null);
         setWorkspaceTeamsLoaded(true);
-        // Keep existing gate state when account workspace cannot be loaded.
+        needsSetup = awaitingSetupRef.current;
       }
       if (needsSetup) {
         awaitingSetupRef.current = true;
         setConnectGateFocusStep("setup");
+      } else {
+        awaitingSetupRef.current = false;
       }
 
       setGateNotice(null);
