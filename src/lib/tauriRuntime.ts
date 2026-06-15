@@ -1,1 +1,7 @@
-export { isTauriRuntime, isTauriRemoteShell, isWebRuntime } from "../platform/runtime";
+export {
+  isRemoteSidecarBaseUrl,
+  isTauriRemoteShell,
+  isTauriRuntime,
+  isWebRuntime,
+  setTauriRemoteShell,
+} from "../platform/runtime";

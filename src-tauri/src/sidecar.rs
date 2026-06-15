@@ -52,8 +52,16 @@ fn read_env_value(key: &str) -> Option<String> {
 pub fn remote_server_url() -> Option<String> {
     std::env::var("BACKSTER_SERVER_URL")
         .ok()
+        .or_else(|| read_env_value("BACKSTER_SERVER_URL"))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn resolve_sidecar_token() -> String {
+    std::env::var("SIDECAR_TOKEN")
+        .ok()
+        .or_else(|| read_env_value("SIDECAR_TOKEN"))
+        .unwrap_or_else(|| DEFAULT_TOKEN.to_string())
 }
 
 pub fn should_embed_sidecar() -> bool {
@@ -62,10 +70,7 @@ pub fn should_embed_sidecar() -> bool {
 
 impl SidecarState {
     pub fn new() -> Self {
-        let token = std::env::var("SIDECAR_TOKEN")
-            .ok()
-            .or_else(|| read_env_value("SIDECAR_TOKEN"))
-            .unwrap_or_else(|| DEFAULT_TOKEN.to_string());
+        let token = resolve_sidecar_token();
 
         Self {
             port: DEFAULT_PORT,
@@ -79,7 +84,7 @@ impl SidecarState {
             let base_url = url.trim_end_matches('/').to_string();
             return SidecarConnection {
                 base_url,
-                token: String::new(),
+                token: resolve_sidecar_token(),
             };
         }
 

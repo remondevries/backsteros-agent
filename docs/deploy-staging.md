@@ -140,11 +140,36 @@ Tokens are stored in `/data/totem.env` on the server volume. Re-sign in when tok
 
 ## Desktop remote shell
 
-After staging works in the browser:
+Connect the desktop app to staging **without** embedding a local sidecar. The window keeps the **locally built UI** (terminal, file pickers, hotkeys); chat, Linear, and agent calls go to staging.
 
-```bash
-BACKSTER_SERVER_URL=https://staging.backsteros.com npm run tauri:dev
-```
+1. Deploy staging (or redeploy after CORS changes in `config/deploy.yml`).
+2. Add to `~/.backsteros-agent/.env`:
+
+   ```bash
+   BACKSTER_SERVER_URL=https://staging.backsteros.com
+   ```
+
+3. Build or run the desktop app from the **same commit** as the server deploy (for matching UI):
+
+   ```bash
+   npm run tauri:dev
+   # or: npm run tauri:build → open BacksterOS Agent.app
+   ```
+
+4. Complete setup in the app (Linear, Cursor key, etc.) — data lives on the **server** volume (`/data`), not your Mac’s embedded sidecar.
+
+**What works**
+
+- Same API, sessions, and integrations as the browser on staging
+- Integrated terminal (local PTY on your Mac)
+- Native notifications, global shortcut, opening Linear/Obsidian links
+
+**What differs from the browser**
+
+- UI version follows your **desktop build**, not every `kamal deploy` (rebuild the app to pick up UI changes)
+- Agent workspace for Cursor runs on the **server** unless you use fully local mode (unset `BACKSTER_SERVER_URL`)
+
+If API calls fail with CORS errors, confirm staging `ALLOWED_ORIGINS` includes `https://tauri.localhost,http://tauri.localhost` and redeploy.
 
 ## Config reference
 

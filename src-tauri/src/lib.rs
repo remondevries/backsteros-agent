@@ -62,16 +62,17 @@ pub fn run() {
                 )?;
             }
 
-            if let Some(remote_url) = sidecar::remote_server_url() {
-                if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
-                    if let Ok(parsed) = tauri::Url::parse(&remote_url) {
-                        let _ = window.navigate(parsed);
-                    } else {
-                        eprintln!("Invalid BACKSTER_SERVER_URL: {remote_url}");
-                    }
+            // Remote server mode keeps the locally bundled UI (Tauri APIs + PTY) and
+            // points API calls at BACKSTER_SERVER_URL via get_sidecar_connection.
+            if sidecar::remote_server_url().is_none() {
+                if let Err(error) = sidecar::start_sidecar(app.handle()) {
+                    eprintln!("Failed to start agent server: {error}");
                 }
-            } else if let Err(error) = sidecar::start_sidecar(app.handle()) {
-                eprintln!("Failed to start agent server: {error}");
+            } else {
+                log::info!(
+                    "Remote server mode: UI stays local; API base is {}",
+                    sidecar::remote_server_url().unwrap_or_default()
+                );
             }
             hotkeys::register_hotkeys(app.handle())?;
 

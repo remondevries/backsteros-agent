@@ -15,7 +15,7 @@ BacksterOS Agent is a **web UI + Bun sidecar** with an optional **Tauri desktop 
 **Local-only:**
 
 - Tauri window chrome, traffic lights, global shortcut
-- Embedded sidecar lifecycle in production `.app` (unless `BACKSTER_SERVER_URL` remote mode)
+- Embedded sidecar lifecycle in production `.app` (unless `BACKSTER_SERVER_URL` remote API mode)
 - PTY terminal (`src/editor/XTermView.tsx`)
 - Native notifications when app backgrounded
 - Full end-to-end with real OAuth popups and desktop file pickers

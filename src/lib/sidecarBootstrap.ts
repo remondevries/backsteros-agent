@@ -1,5 +1,6 @@
 import { getHealth, loginWithAccessToken, setSidecarConnection } from "./api";
 import { loadTauriSidecarConnection } from "../platform/sidecar";
+import { isRemoteSidecarBaseUrl, setTauriRemoteShell } from "../platform/runtime";
 
 /** Single health request on app load — fail fast if the agent server is down. */
 export const BOOTSTRAP_HEALTH_TIMEOUT_MS = 3_000;
@@ -12,8 +13,11 @@ export async function configureSidecarConnection(): Promise<void> {
       baseUrl: tauriConnection.baseUrl,
       token: tauriConnection.token,
     });
+    setTauriRemoteShell(isRemoteSidecarBaseUrl(tauriConnection.baseUrl));
     return;
   }
+
+  setTauriRemoteShell(false);
 
   if (import.meta.env.DEV) {
     setSidecarConnection({

@@ -57,7 +57,7 @@ npm run tauri:dev
 
 Runs sidecar + Vite (`dev:all`), then opens the desktop window. Global shortcut: **Cmd+Shift+A** toggles the window.
 
-**Remote server shell:** set `BACKSTER_SERVER_URL=https://your-server` before launching Tauri — the app loads that URL and skips embedding the sidecar.
+**Remote server shell:** add `BACKSTER_SERVER_URL=https://your-server` to `~/.backsteros-agent/.env` (or set it when launching). The desktop keeps its **local UI** (terminal, native dialogs) and sends API/agent requests to that server. It does **not** load the hosted web page in the webview.
 
 ## Build
 
@@ -70,7 +70,31 @@ npm run ci                 # sidecar tests + web build + smoke
 
 **Deploy** uses `sidecar/` + `dist/` only (`Dockerfile`). The copy under `src-tauri/resources/sidecar/` is build output for the Tauri bundle — not committed.
 
-**Desktop remote mode:** after server deploy, set `BACKSTER_SERVER_URL` so Tauri loads the hosted app and skips embedding the sidecar.
+### Desktop ↔ server (same repo, two deploy targets)
+
+| Surface | What runs | When to use |
+|---------|-----------|-------------|
+| **Browser** | Hosted UI + server sidecar | Default; shareable URL |
+| **Desktop (local)** | Local UI + embedded sidecar | Offline, full vault, local agent cwd |
+| **Desktop (remote API)** | Local UI + `BACKSTER_SERVER_URL` | Same agent/data as staging/prod; keep terminal & disk access |
+
+**UI parity:** build the desktop app from the **same git commit** you deployed to the server. The remote API mode updates agent behavior on the server immediately, but UI changes ship with a new desktop build (or reload only picks up server-side changes).
+
+**Server CORS:** when using desktop remote mode, `ALLOWED_ORIGINS` on the server must include `https://tauri.localhost` and `http://tauri.localhost` (already set in `config/deploy.yml` for staging).
+
+Example `~/.backsteros-agent/.env`:
+
+```bash
+BACKSTER_SERVER_URL=https://staging.backsteros.com
+# SIDECAR_TOKEN=...   # only if BACKSTER_SERVER_ACCESS_AUTH=1 on the server
+```
+
+Launch:
+
+```bash
+npm run tauri:dev    # dev: local Vite UI + remote API if BACKSTER_SERVER_URL is set
+npm run tauri:build  # then open the .app (reads ~/.backsteros-agent/.env)
+```
 
 ## Architecture
 
@@ -80,7 +104,7 @@ Browser / Tauri webview  →  Bun server (static SPA + Hono API + Cursor agent +
 
 - **Linear-first mode** (`PRODUCT_MODE=linear`, default): Projects UI + chat without a local Obsidian vault; agent cwd is `~/.backsteros-agent/workspace`.
 - **Full vault mode** (`PRODUCT_MODE=full`): local notes folder, vault nav, and Obsidian integrations as before.
-- **Tauri shell** — optional window, global hotkey, native notifications when backgrounded; can load a remote deployment.
+- **Tauri shell** — optional window, global hotkey, native notifications when backgrounded; can use a remote sidecar via `BACKSTER_SERVER_URL` while keeping local UI and PTY.
 
 ## Agent context
 
@@ -96,5 +120,5 @@ The sidecar injects service-specific guidance (Linear, Calendar, Whoop, vault to
 | `SIDECAR_PORT` | HTTP port (default 3847) |
 | `PRODUCT_MODE` | `linear` (default) or `full` |
 | `VITE_PRODUCT_MODE` | Client mirror of product mode |
-| `BACKSTER_SERVER_URL` | Tauri: load remote app URL |
+| `BACKSTER_SERVER_URL` | Desktop: API base URL for remote sidecar (local UI stays in the app) |
 | `ALLOWED_ORIGINS` | Extra CORS origins (dev Vite split) |
