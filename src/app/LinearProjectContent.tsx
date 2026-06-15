@@ -21,6 +21,7 @@ import { LinearProjectViewTabs } from "./LinearProjectViewTabs";
 import type { LinearProjectCollectionToggleOption } from "./LinearProjectListBoardToggle";
 import { useLinearProjectWatcherPollProgress } from "../hooks/useLinearProjectWatcherPollProgress";
 import { useIssuesWatcherBreadcrumbAction } from "../hooks/useIssuesWatcherBreadcrumbAction";
+import { isIosDevice } from "../platform/iosStandalone";
 import {
   defaultLinearWorkspaceViewId,
   isLinearWorkspaceViewIdForKind,
@@ -144,8 +145,11 @@ export function LinearProjectContent({
 
   useEnsureLinearWorkspaceVaultStructure(selection, vaultStructureEnabled);
   useLinearWorkspaceFocusSnapshot();
+  const iosDevice = isIosDevice();
+  const effectiveIssuesPanelMode = iosDevice ? "list" : issuesPanelMode;
 
-  const showCollectionModeToggle = selection.kind === "project" && activeView === "issues";
+  const showCollectionModeToggle =
+    !iosDevice && selection.kind === "project" && activeView === "issues";
   const showWatcherAction = selection.kind === "project";
   const collectionMode = issuesPanelMode;
   const collectionToggleOptions: readonly LinearProjectCollectionToggleOption[] = [
@@ -222,8 +226,10 @@ export function LinearProjectContent({
               setIssuesSettingsOpen(false);
               return;
             }
-            const nextMode = issuesPanelMode === "list" ? "board" : "list";
-            setIssuesPanelMode(nextMode);
+            if (!iosDevice) {
+              const nextMode = issuesPanelMode === "list" ? "board" : "list";
+              setIssuesPanelMode(nextMode);
+            }
             return;
           }
           setActiveView(nextView);
@@ -250,7 +256,7 @@ export function LinearProjectContent({
         <LinearWorkspaceDetailBody
           selection={selection}
           activeView={activeView}
-          issuesPanelMode={issuesPanelMode}
+          issuesPanelMode={effectiveIssuesPanelMode}
           issuesSettingsOpen={issuesSettingsOpen}
         />
       </div>

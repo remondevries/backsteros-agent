@@ -1,5 +1,15 @@
+const IOS_SIMULATE_QUERY = "ios";
+
+/** Dev-only: `?ios=1` on localhost makes the app behave like an iPhone Home Screen web app. */
+export function isDevIosSimulation(): boolean {
+  if (!import.meta.env.DEV || typeof window === "undefined") return false;
+  const value = new URLSearchParams(window.location.search).get(IOS_SIMULATE_QUERY)?.trim();
+  return value === "1" || value === "true" || value === "standalone";
+}
+
 /** iPhone / iPad (including iPadOS reporting as MacIntel). */
 export function isIosDevice(): boolean {
+  if (isDevIosSimulation()) return true;
   if (typeof navigator === "undefined") return false;
   return (
     /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
@@ -9,16 +19,9 @@ export function isIosDevice(): boolean {
 
 /** Home Screen web app on iOS (no Safari chrome). */
 export function isIosStandaloneWebApp(): boolean {
+  if (isDevIosSimulation()) return true;
   if (typeof window === "undefined") return false;
   const nav = navigator as Navigator & { standalone?: boolean };
   return nav.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
 }
 
-/**
- * Marks the document when running as an iOS Home Screen app so layout can use
- * safe-area insets (Dynamic Island, notch, or status bar — no device sniffing).
- */
-export function initIosStandaloneLayout(): void {
-  if (!isIosDevice() || !isIosStandaloneWebApp()) return;
-  document.documentElement.classList.add("ios-standalone");
-}

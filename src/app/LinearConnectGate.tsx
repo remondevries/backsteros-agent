@@ -11,6 +11,7 @@ import {
   getLinearOAuthRedirectUris,
   getLinearOAuthPrimaryRedirectUri,
   usesPublicLinearOAuthRedirect,
+  showsLocalLinearOAuthPortFallbacks,
 } from "../lib/linearOAuthRedirect";
 import { openExternalUrl } from "../lib/openExternalUrl";
 import { restartSidecarIfNeeded } from "../lib/restartSidecar";
@@ -328,11 +329,11 @@ export function LinearConnectGate({
               <p className="settings-hint settings-hint-spaced">
                 <code className="settings-inline-code">{getLinearOAuthPrimaryRedirectUri()}</code>
               </p>
-              {!usesPublicLinearOAuthRedirect() ? (
+              {!usesPublicLinearOAuthRedirect() && showsLocalLinearOAuthPortFallbacks() ? (
                 <>
                   <p className="settings-hint">
-                    If port 3510 is in use, BacksterOS may use 3511–3515. Register those URIs too if
-                    sign-in fails:
+                If port 3510 is in use, BacksterOS may use 3511–3515. Register those URIs too if
+                sign-in fails with an invalid redirect URI:
                   </p>
                   <ul className="settings-hint settings-linear-oauth-redirect-list">
                     {getLinearOAuthRedirectUris().map((redirectUri) => (

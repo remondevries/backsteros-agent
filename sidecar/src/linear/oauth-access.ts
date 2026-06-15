@@ -11,6 +11,10 @@ export function clearLinearOAuthAccessCache(): void {
   accessCache = null;
 }
 
+export function markLinearOAuthAccessInvalid(): void {
+  accessCache = { checkedAt: Date.now(), valid: false };
+}
+
 export async function isLinearOAuthAccessValid(): Promise<boolean> {
   if (!isLinearOAuthAuthenticated()) {
     accessCache = null;

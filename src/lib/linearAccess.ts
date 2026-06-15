@@ -1,4 +1,11 @@
 import type { HealthResponse } from "./api";
+import {
+  isLinearSessionExpiredError,
+  LINEAR_SESSION_EXPIRED_MESSAGE,
+  notifyLinearSessionExpired,
+} from "./linearSessionExpired";
+
+export { isLinearSessionExpiredError, LINEAR_SESSION_EXPIRED_MESSAGE } from "./linearSessionExpired";
 
 /** Linear OAuth session is active (browser sign-in completed). */
 export function isLinearOAuthAccessGranted(
@@ -15,13 +22,9 @@ export function isLinearAccessGranted(
 }
 
 export function formatLinearAccessError(message: string): string {
-  const lower = message.toLowerCase();
-  if (
-    lower.includes("authentication required") ||
-    lower.includes("not authenticated") ||
-    lower.includes("linear session expired")
-  ) {
-    return "Linear session expired. Sign in again on the connect screen or in Settings → Connections.";
+  if (!isLinearSessionExpiredError(message)) {
+    return message;
   }
-  return message;
+  notifyLinearSessionExpired(message);
+  return LINEAR_SESSION_EXPIRED_MESSAGE;
 }

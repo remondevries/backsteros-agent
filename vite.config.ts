@@ -97,6 +97,11 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ""),
         configure: configureSidecarProxy,
       },
+      "/linear/oauth/callback": {
+        target: "http://127.0.0.1:3847",
+        changeOrigin: true,
+        configure: configureSidecarProxy,
+      },
     },
   },
   envPrefix: ["VITE_", "TAURI_"],

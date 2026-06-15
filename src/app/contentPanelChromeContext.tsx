@@ -15,6 +15,13 @@ import type {
   ProjectsBrowseSearchBreadcrumbAction,
 } from "./contentPanelNavigation";
 
+export type IosMobileQuickAction = {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+};
+
 type ContentPanelChromeContextValue = {
   contentPanelBarState: ContentPanelBarState | null;
   setContentPanelBarState: (state: ContentPanelBarState | null) => void;
@@ -28,6 +35,8 @@ type ContentPanelChromeContextValue = {
   setProjectsBrowseSearchAction: (action: ProjectsBrowseSearchBreadcrumbAction | null) => void;
   projectDocumentsCreateAction: ProjectDocumentsTabCreateAction | null;
   setProjectDocumentsCreateAction: (action: ProjectDocumentsTabCreateAction | null) => void;
+  iosMobileQuickActions: IosMobileQuickAction[] | null;
+  setIosMobileQuickActions: (actions: IosMobileQuickAction[] | null) => void;
   clearChrome: () => void;
 };
 
@@ -47,6 +56,9 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     useState<ProjectsBrowseSearchBreadcrumbAction | null>(null);
   const [projectDocumentsCreateAction, setProjectDocumentsCreateActionState] =
     useState<ProjectDocumentsTabCreateAction | null>(null);
+  const [iosMobileQuickActions, setIosMobileQuickActionsState] = useState<IosMobileQuickAction[] | null>(
+    null,
+  );
 
   const setContentPanelBarState = useCallback((state: ContentPanelBarState | null) => {
     setContentPanelBarStateState(state);
@@ -78,6 +90,10 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     [],
   );
 
+  const setIosMobileQuickActions = useCallback((actions: IosMobileQuickAction[] | null) => {
+    setIosMobileQuickActionsState(actions);
+  }, []);
+
   const clearChrome = useCallback(() => {
     setContentPanelBarStateState(null);
     setIssuesWatcherActionState(null);
@@ -85,6 +101,7 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     setDocumentDeleteActionState(null);
     setProjectsBrowseSearchActionState(null);
     setProjectDocumentsCreateActionState(null);
+    setIosMobileQuickActionsState(null);
   }, []);
 
   const value = useMemo(
@@ -101,12 +118,15 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setProjectsBrowseSearchAction,
       projectDocumentsCreateAction,
       setProjectDocumentsCreateAction,
+      iosMobileQuickActions,
+      setIosMobileQuickActions,
       clearChrome,
     }),
     [
       clearChrome,
       contentPanelBarState,
       documentDeleteAction,
+      iosMobileQuickActions,
       issueViewModeAction,
       issuesWatcherAction,
       projectDocumentsCreateAction,
@@ -115,6 +135,7 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setDocumentDeleteAction,
       setIssueViewModeAction,
       setIssuesWatcherAction,
+      setIosMobileQuickActions,
       setProjectDocumentsCreateAction,
       setProjectsBrowseSearchAction,
     ],

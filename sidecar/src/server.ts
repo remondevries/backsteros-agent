@@ -1590,8 +1590,10 @@ app.get("/linear/teams/:teamId/documents", async (c) => {
     return c.json({ error: "teamId is required", documents: [] }, 400);
   }
 
+  const dailyOnly = c.req.query("dailyOnly") === "true";
+
   try {
-    const documents = await fetchLinearTeamDocuments(teamId);
+    const documents = await fetchLinearTeamDocuments(teamId, { dailyOnly });
     return c.json({ documents });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load team documents";

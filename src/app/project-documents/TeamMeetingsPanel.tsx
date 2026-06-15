@@ -141,13 +141,12 @@ export function TeamMeetingsPanel({
         <div className="workspace-status-list workspace-status-list--documents workspace-status-list--documents-flat">
           <ul className="workspace-status-list__list" role="list">
             {sortedDocuments.map((document) => (
-              <li key={document.id} className="workspace-status-list__item">
-                <ProjectDocumentRow
-                  document={document}
-                  grouped={false}
-                  onClick={() => openMeetingDocument(document, setActiveLinearDocument)}
-                />
-              </li>
+              <ProjectDocumentRow
+                key={document.id}
+                document={document}
+                grouped={false}
+                onClick={() => openMeetingDocument(document, setActiveLinearDocument)}
+              />
             ))}
           </ul>
         </div>

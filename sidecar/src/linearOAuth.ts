@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   appendAppReturnQuery,
+  isDevelopmentAuthMode,
   isUserCursorApiKeyConfigured,
   getLinearOAuthClientCredentials,
   getLinearOAuthPublicBaseUrl,
@@ -40,6 +41,8 @@ interface PendingAuthFlow {
 export const LINEAR_OAUTH_CALLBACK_PATH = "/linear/oauth/callback";
 const LINEAR_OAUTH_PORT = 3510;
 const PORT_RANGE = { start: LINEAR_OAUTH_PORT, end: 3515 };
+/** Vite dev server port — OAuth callback is proxied to the sidecar at this origin. */
+const VITE_DEV_PORTS = new Set(["5173"]);
 const AUTH_TIMEOUT_MS = 10 * 60 * 1000;
 const LINEAR_AUTHORIZE_URL = "https://linear.app/oauth/authorize";
 const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
@@ -107,6 +110,36 @@ function getLocalLinearOAuthRedirectUris(): string[] {
 
 export function usesPublicLinearOAuthCallback(): boolean {
   return Boolean(getLinearOAuthPublicBaseUrl());
+}
+
+/**
+ * When the UI runs on the Vite dev server (localhost:5173), OAuth callback is proxied to the
+ * sidecar so Linear can redirect to the same origin as the app.
+ */
+export function resolveLinearOAuthCallbackBase(appReturnUrl?: string): string | undefined {
+  const explicit = getLinearOAuthPublicBaseUrl();
+  if (explicit) {
+    return explicit;
+  }
+
+  if (!isDevelopmentAuthMode()) {
+    return undefined;
+  }
+
+  const resolvedReturnUrl = resolveAppReturnUrl(appReturnUrl);
+  try {
+    const url = new URL(resolvedReturnUrl);
+    if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+      return undefined;
+    }
+    const port = url.port || (url.protocol === "https:" ? "443" : "80");
+    if (!VITE_DEV_PORTS.has(port)) {
+      return undefined;
+    }
+    return url.origin;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getLinearOAuthRedirectUris(): string[] {
@@ -354,12 +387,12 @@ export async function startLinearOAuthAuth(options?: {
   const state = randomBytes(32).toString("hex");
   const appReturnUrl = resolveAppReturnUrl(options?.appReturnUrl);
 
-  const publicBase = getLinearOAuthPublicBaseUrl();
+  const redirectBase = resolveLinearOAuthCallbackBase(appReturnUrl);
   let redirectUri: string;
   let port = 0;
 
-  if (publicBase) {
-    redirectUri = buildPublicLinearOAuthRedirectUri(publicBase);
+  if (redirectBase) {
+    redirectUri = buildPublicLinearOAuthRedirectUri(redirectBase);
   } else {
     port = await findAvailablePort();
     redirectUri = buildLocalLinearOAuthRedirectUri(port);
@@ -382,7 +415,7 @@ export async function startLinearOAuthAuth(options?: {
   authUrl.searchParams.set("code_challenge", codeChallenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
 
-  if (!publicBase) {
+  if (!redirectBase) {
     const port = pendingAuth.port;
     authServer = createServer(async (req, res) => {
       try {

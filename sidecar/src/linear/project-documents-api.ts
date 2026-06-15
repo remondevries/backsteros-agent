@@ -36,10 +36,9 @@ type GraphqlDocumentNode = {
   issue?: { id?: string | null; identifier?: string | null } | null;
 };
 
-const DOCUMENT_FIELDS = `
+const DOCUMENT_LIST_FIELDS = `
   id
   title
-  content
   url
   icon
   createdAt
@@ -51,12 +50,17 @@ const DOCUMENT_FIELDS = `
   }
 `;
 
+const DOCUMENT_DETAIL_FIELDS = `
+  ${DOCUMENT_LIST_FIELDS}
+  content
+`;
+
 const PROJECT_DOCUMENTS_QUERY = `
   query BacksterProjectLinearDocuments($projectId: String!) {
     project(id: $projectId) {
       documents(first: 100, includeArchived: false) {
         nodes {
-          ${DOCUMENT_FIELDS}
+          ${DOCUMENT_LIST_FIELDS}
         }
       }
     }
@@ -66,7 +70,7 @@ const PROJECT_DOCUMENTS_QUERY = `
 const DOCUMENT_BY_ID_QUERY = `
   query BacksterLinearDocument($id: String!) {
     document(id: $id) {
-      ${DOCUMENT_FIELDS}
+      ${DOCUMENT_DETAIL_FIELDS}
       project {
         id
         name
@@ -80,29 +84,20 @@ const DOCUMENT_BY_ID_QUERY = `
 `;
 
 const TEAM_DOCUMENTS_QUERY = `
-  query BacksterTeamDocumentsFiltered($teamId: ID!, $after: String, $first: Int!) {
-    documents(
-      filter: {
-        or: [
-          { team: { id: { eq: $teamId } } }
-          { project: { accessibleTeams: { some: { id: { eq: $teamId } } } } }
-        ]
-      }
-      first: $first
-      after: $after
-      includeArchived: false
-      orderBy: updatedAt
-    ) {
-      nodes {
-        ${DOCUMENT_FIELDS}
-        project {
-          id
-          name
+  query BacksterTeamDocuments($teamId: String!, $after: String, $first: Int!) {
+    team(id: $teamId) {
+      documents(first: $first, after: $after, includeArchived: false, orderBy: updatedAt) {
+        nodes {
+          ${DOCUMENT_LIST_FIELDS}
+          project {
+            id
+            name
+          }
         }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
       }
     }
   }
@@ -246,7 +241,7 @@ const WORKSPACE_DOCUMENTS_PAGE_QUERY = `
       orderBy: updatedAt
     ) {
       nodes {
-        ${DOCUMENT_FIELDS}
+        ${DOCUMENT_LIST_FIELDS}
         project {
           id
           name
@@ -400,21 +395,25 @@ export async function fetchLinearApiTeamDocuments(teamId: string): Promise<Linea
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const data = await linearGraphqlRequest<{
-      documents?: {
-        nodes?: GraphqlDocumentNode[];
-        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+      team?: {
+        documents?: {
+          nodes?: GraphqlDocumentNode[];
+          pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+        } | null;
       } | null;
     }>(TEAM_DOCUMENTS_QUERY, { teamId: id, first: PAGE_SIZE, after });
 
-    for (const node of data.documents?.nodes ?? []) {
+    const connection = data.team?.documents;
+
+    for (const node of connection?.nodes ?? []) {
       const document = normalizeDocument(node);
       if (document) {
         documents.set(document.id, document);
       }
     }
 
-    if (!data.documents?.pageInfo?.hasNextPage) break;
-    const nextCursor = data.documents.pageInfo.endCursor?.trim();
+    if (!connection?.pageInfo?.hasNextPage) break;
+    const nextCursor = connection.pageInfo.endCursor?.trim();
     if (!nextCursor) break;
     after = nextCursor;
   }

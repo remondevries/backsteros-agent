@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
 import { createLinearTeamDocument } from "../lib/api";
 import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
 import {
@@ -54,6 +56,7 @@ export function LinearDailyExplorer({
   enabled: boolean;
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
+  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [creatingDocument, setCreatingDocument] = useState(false);
@@ -69,6 +72,7 @@ export function LinearDailyExplorer({
   } = useLinearProjectDocuments({
     teamId,
     enabled,
+    dailyOnly: true,
   });
   const keyboardFocusedId = useContentListKeyboardFocusedId();
   const keyboardNavActive = useContentListKeyboardNavActive();
@@ -120,11 +124,24 @@ export function LinearDailyExplorer({
   );
 
   useEffect(() => {
-    if (!enabled || loading || filteredDocuments.length === 0 || activeLinearDocument) {
+    if (
+      listFirstNavigationLayout ||
+      !enabled ||
+      loading ||
+      filteredDocuments.length === 0 ||
+      activeLinearDocument
+    ) {
       return;
     }
     openDocument(filteredDocuments[0]!);
-  }, [activeLinearDocument, enabled, filteredDocuments, loading, openDocument]);
+  }, [
+    activeLinearDocument,
+    enabled,
+    filteredDocuments,
+    listFirstNavigationLayout,
+    loading,
+    openDocument,
+  ]);
 
   const handleCreateDocument = useCallback(async () => {
     if (!enabled || creatingDocument || hasTodayDailyNote) return;
@@ -191,6 +208,21 @@ export function LinearDailyExplorer({
   });
 
   const showList = enabled && !loading && !error;
+
+  useIosMobileQuickActions(
+    enabled && showCreateTodayButton
+      ? [
+          {
+            id: "daily-create",
+            label: "New note",
+            disabled: !canCreateTodayDailyNote,
+            onClick: () => {
+              void handleCreateDocument();
+            },
+          },
+        ]
+      : null,
+  );
 
   return (
     <div className="vault-folder-explorer">

@@ -13,6 +13,7 @@ import {
   getLinearOAuthRedirectUris,
   getLinearOAuthPrimaryRedirectUri,
   usesPublicLinearOAuthRedirect,
+  showsLocalLinearOAuthPortFallbacks,
 } from "../lib/linearOAuthRedirect";
 import { openExternalUrl } from "../lib/openExternalUrl";
 import { restartSidecarIfNeeded } from "../lib/restartSidecar";
@@ -392,7 +393,7 @@ export function LinearIntegrationSection({
             Primary redirect URI:{" "}
             <code className="settings-inline-code">{getLinearOAuthPrimaryRedirectUri()}</code>
           </p>
-          {!usesPublicLinearOAuthRedirect() ? (
+          {!usesPublicLinearOAuthRedirect() && showsLocalLinearOAuthPortFallbacks() ? (
             <>
               <p className="settings-hint">
                 If port 3510 is already in use, BacksterOS may use 3511–3515 instead. Register these too if

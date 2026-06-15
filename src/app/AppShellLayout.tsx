@@ -17,6 +17,7 @@ import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
 import { isLetterComposeDraftDocumentId } from "../lib/letterComposeDraft";
 import { showTrafficLights } from "../platform/trafficLights";
 import { isTauriRuntime } from "../platform/runtime";
+import { IosMobileBottomNav } from "./IosMobileBottomNav";
 
 const LETTER_COMPOSE_CHAT_BLOCKED_MESSAGE =
   "The assistant is unavailable while you upload a letter.";
@@ -467,6 +468,10 @@ function AppMainShell({
         onOpenRightSidePanel={handleOpenRightSidePanel}
         rightSidePanelOpen={rightSidePanelOpen}
         rightPanelChatBlocked={letterComposeActive}
+      />
+      <IosMobileBottomNav
+        activeVaultNavItem={activeVaultNavItem}
+        onVaultNavItemChange={handleVaultNavItemChange}
       />
     </div>
   );

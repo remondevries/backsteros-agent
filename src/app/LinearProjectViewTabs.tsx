@@ -9,6 +9,7 @@ import {
   type LinearProjectCollectionToggleOption,
 } from "./LinearProjectListBoardToggle";
 import { useContentPanelChrome } from "./contentPanelChromeContext";
+import { isIosDevice } from "../platform/iosStandalone";
 import { GroupHeaderAddButton } from "./workspace-list/GroupHeaderAddButton";
 
 export function LinearProjectViewTabs({
@@ -34,7 +35,7 @@ export function LinearProjectViewTabs({
 }) {
   const views = linearWorkspaceViewsForKind(selectionKind);
   const { projectDocumentsCreateAction: workspaceTabCreateAction } = useContentPanelChrome();
-  const showTabCreateButton = workspaceTabCreateAction !== null;
+  const showTabCreateButton = workspaceTabCreateAction !== null && !isIosDevice();
   const showRightControls = showCollectionModeToggle || showTabCreateButton;
 
   return (

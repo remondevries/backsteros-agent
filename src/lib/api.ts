@@ -18,6 +18,7 @@ import type {
 import type { LetterFilingOptions } from "../chat/letterFiling";
 import type { LinearAgentSessionSnapshot } from "./linearAgentSessionTypes";
 import type { ProjectDocumentEntity } from "./documentStatusGroups";
+import { notifyLinearSessionExpired } from "./linearSessionExpired";
 import {
   cachedRequest,
   cacheKeyLinearIssues,
@@ -163,7 +164,9 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_
   }
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    const message = await readErrorMessage(response);
+    notifyLinearSessionExpired(message);
+    throw new Error(message);
   }
 
   const text = await response.text();
@@ -1485,9 +1488,13 @@ export async function fetchLinearProjectDocuments(projectId: string) {
   );
 }
 
-export async function fetchLinearTeamDocuments(teamId: string) {
+export async function fetchLinearTeamDocuments(
+  teamId: string,
+  options?: { dailyOnly?: boolean },
+) {
+  const query = options?.dailyOnly ? "?dailyOnly=true" : "";
   return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
-    `/linear/teams/${encodeURIComponent(teamId)}/documents`,
+    `/linear/teams/${encodeURIComponent(teamId)}/documents${query}`,
   );
 }
 

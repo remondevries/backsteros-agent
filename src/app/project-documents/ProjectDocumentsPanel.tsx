@@ -190,11 +190,7 @@ export function ProjectDocumentsPanel({
         ) : (
           <div className="workspace-status-list workspace-status-list--documents workspace-status-list--documents-flat">
             <ul className="workspace-status-list__list" role="list">
-              {sortedDocuments.map((document) => (
-                <li key={document.id} className="workspace-status-list__item">
-                  {renderDocumentRow(document)}
-                </li>
-              ))}
+              {sortedDocuments.map((document) => renderDocumentRow(document))}
             </ul>
           </div>
         )

@@ -1,5 +1,6 @@
 import { getLinearAuthToken, linearAuthorizationHeader } from "./auth-token.ts";
-import { formatLinearAuthErrorMessage } from "./auth-errors.ts";
+import { formatLinearAuthErrorMessage, isLinearAuthErrorMessage } from "./auth-errors.ts";
+import { markLinearOAuthAccessInvalid } from "./oauth-access.ts";
 
 export const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 
@@ -36,7 +37,11 @@ export async function linearGraphqlRequest<T>(
         ? " The grocery project belongs to a different Linear team than the one used to create the issue. Restart the sidecar after updating — it should resolve the project team automatically."
         : "";
     const message = detail ?? `Linear API request failed (${response.status})`;
-    throw new Error(formatLinearAuthErrorMessage(`${message}${hint}`));
+    const formatted = formatLinearAuthErrorMessage(`${message}${hint}`);
+    if (isLinearAuthErrorMessage(message)) {
+      markLinearOAuthAccessInvalid();
+    }
+    throw new Error(formatted);
   }
 
   if (!body.data) {

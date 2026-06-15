@@ -43,6 +43,7 @@ import { isAccountSetupComplete } from "./lib/accountWorkspace";
 import { connectGoogleCalendarAndWait } from "./lib/googleCalendarConnect";
 import { getCalendarStartupWarning } from "./lib/integrationWarnings";
 import { isLinearAccessGranted } from "./lib/linearAccess";
+import { subscribeLinearSessionExpired } from "./lib/linearSessionExpired";
 import {
   clearConnectGateAccessCache,
   isConnectGateAccessCached,
@@ -517,6 +518,20 @@ export default function App() {
     }
     void runBootstrap();
   }, [runBootstrap]);
+
+  useEffect(() => {
+    return subscribeLinearSessionExpired(() => {
+      clearConnectGateAccessCache();
+      invalidateDashboardRequestCache();
+      awaitingSetupRef.current = false;
+      setShowSettings(false);
+      setShowLinearOAuthSuccess(false);
+      setConnectGateFocusStep("linear");
+      setLinearAccessReady(true);
+      setAppReady(false);
+      setGateNotice(null);
+    });
+  }, []);
 
   useEffect(() => {
     if (!appReady || !linearAccessReady) return;

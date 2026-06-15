@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useContentPanelChrome } from "../app/contentPanelChromeContext";
+import { useIosMobileQuickActions } from "./useIosMobileQuickActions";
 
 export function useLinearWorkspaceTabCreateAction(
   action: { disabled: boolean; label: string; onCreate: () => void } | null,
@@ -11,6 +12,19 @@ export function useLinearWorkspaceTabCreateAction(
   const visible = action !== null;
   const disabled = action?.disabled ?? false;
   const label = action?.label ?? "Create";
+
+  useIosMobileQuickActions(
+    visible
+      ? [
+          {
+            id: "linear-workspace-tab-create",
+            label,
+            disabled,
+            onClick: () => onCreateRef.current?.(),
+          },
+        ]
+      : null,
+  );
 
   useEffect(() => {
     if (!visible) {

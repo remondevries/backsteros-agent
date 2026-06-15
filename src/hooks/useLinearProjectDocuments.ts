@@ -10,10 +10,13 @@ export function useLinearProjectDocuments({
   projectId,
   teamId,
   enabled,
+  dailyOnly,
 }: {
   projectId?: string | null;
   teamId?: string | null;
   enabled: boolean;
+  /** When loading team documents, return only YYYY-MM-DD daily journal titles. */
+  dailyOnly?: boolean;
 }) {
   const [documents, setDocuments] = useState<ProjectDocumentEntity[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +43,7 @@ export function useLinearProjectDocuments({
       try {
         const result = projectId
           ? await fetchLinearProjectDocuments(projectId)
-          : await fetchLinearTeamDocuments(teamId!);
+          : await fetchLinearTeamDocuments(teamId!, { dailyOnly });
 
         if (result.error) {
           setError(result.error);
@@ -56,7 +59,7 @@ export function useLinearProjectDocuments({
         setRefreshing(false);
       }
     },
-    [enabled, projectId, teamId],
+    [enabled, projectId, teamId, dailyOnly],
   );
 
   useEffect(() => {

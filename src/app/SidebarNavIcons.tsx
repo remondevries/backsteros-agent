@@ -285,3 +285,14 @@ export function SidebarContactsIcon({ className }: { className?: string }) {
     </NavIconShell>
   );
 }
+
+export function SidebarMoreIcon({ className }: { className?: string }) {
+  return (
+    <NavIconShell className={className}>
+      <path
+        d="M3.25 8a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm4.75 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm4.75 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z"
+        fill="currentColor"
+      />
+    </NavIconShell>
+  );
+}

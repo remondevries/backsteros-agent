@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   getLinearOAuthPrimaryRedirectUri,
   getLinearOAuthRedirectUris,
+  resolveLinearOAuthCallbackBase,
   usesPublicLinearOAuthCallback,
 } from "./linearOAuth.ts";
 
@@ -21,6 +22,19 @@ describe("linearOAuth redirect URIs", () => {
       "http://localhost:3514/linear/oauth/callback",
       "http://localhost:3515/linear/oauth/callback",
     ]);
+  });
+
+  test("uses Vite dev origin when app return URL is localhost:5173", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    try {
+      expect(resolveLinearOAuthCallbackBase("http://localhost:5173")).toBe(
+        "http://localhost:5173",
+      );
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 
   test("uses public callback URL when ALLOWED_ORIGINS is HTTPS in production", () => {

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { resolveTodayDailyNoteDocument } from "../lib/resolveTodayDailyNoteDocument";
 import { resolveLatestKnowledgeBaseDocument } from "../lib/resolveLatestKnowledgeBaseDocument";
@@ -78,8 +78,24 @@ export function ContentPanelSidebar({
     (linearContactsEnabled && activeVaultNavItem === "contacts") ||
     (linearOrganizationsEnabled && activeVaultNavItem === "organizations");
 
+  const previousPrimaryNavItemRef = useRef<SidebarNavItemId | null | undefined>(undefined);
+
   useEffect(() => {
-    if (!activeVaultNavItem) return;
+    if (!activeVaultNavItem) {
+      previousPrimaryNavItemRef.current = null;
+      return;
+    }
+
+    if (previousPrimaryNavItemRef.current === undefined) {
+      previousPrimaryNavItemRef.current = activeVaultNavItem;
+      return;
+    }
+
+    if (previousPrimaryNavItemRef.current === activeVaultNavItem) {
+      return;
+    }
+
+    previousPrimaryNavItemRef.current = activeVaultNavItem;
 
     if (isSidebarPrimaryNavItem(activeVaultNavItem)) {
       setLinearSelection(null);

@@ -6,6 +6,8 @@ import {
   createLinearTeamProject,
 } from "../lib/api";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
+import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamProjects } from "../hooks/useLinearTeamProjects";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
@@ -51,6 +53,7 @@ export function LinearKnowledgeBaseExplorer({
   enabled: boolean;
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
+  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
@@ -207,11 +210,26 @@ export function LinearKnowledgeBaseExplorer({
   );
 
   useEffect(() => {
-    if (!enabled || loading || !selectedProjectKey || visibleDocuments.length === 0 || activeLinearDocument) {
+    if (
+      listFirstNavigationLayout ||
+      !enabled ||
+      loading ||
+      !selectedProjectKey ||
+      visibleDocuments.length === 0 ||
+      activeLinearDocument
+    ) {
       return;
     }
     openDocument(visibleDocuments[0]!);
-  }, [activeLinearDocument, enabled, loading, openDocument, selectedProjectKey, visibleDocuments]);
+  }, [
+    activeLinearDocument,
+    enabled,
+    listFirstNavigationLayout,
+    loading,
+    openDocument,
+    selectedProjectKey,
+    visibleDocuments,
+  ]);
 
   useEffect(() => {
     return registerContentPanelLocalBack(() => {
@@ -280,6 +298,29 @@ export function LinearKnowledgeBaseExplorer({
     : selectedProjectKey
       ? "No documents in this project."
       : "No folders yet.";
+
+  useIosMobileQuickActions(
+    enabled
+      ? [
+          {
+            id: "kb-create-document",
+            label: "Create document",
+            disabled: creating,
+            onClick: () => {
+              void handleCreateDocument();
+            },
+          },
+          {
+            id: "kb-create-folder",
+            label: "Create folder",
+            disabled: creating,
+            onClick: () => {
+              void handleCreateFolder();
+            },
+          },
+        ]
+      : null,
+  );
 
   return (
     <div className="vault-folder-explorer">

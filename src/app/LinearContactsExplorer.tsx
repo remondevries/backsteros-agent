@@ -13,6 +13,8 @@ import {
 } from "../lib/linearIssueDetailSeed";
 import { groupByLetter } from "../lib/alphabeticalLetterGroups";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
+import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
 import {
   contentListGroupHeaderId,
@@ -62,6 +64,7 @@ export function LinearContactsExplorer({
 }) {
   const { activeLinearIssue, setActiveLinearIssue, clearActiveLinearIssue } =
     useContentPanelNavigation();
+  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -145,7 +148,7 @@ export function LinearContactsExplorer({
   }, [collapsedGroups, letterGroups]);
 
   useEffect(() => {
-    if (!enabled || loading || !firstVisibleIssue) {
+    if (listFirstNavigationLayout || !enabled || loading || !firstVisibleIssue) {
       return;
     }
     if (
@@ -155,7 +158,15 @@ export function LinearContactsExplorer({
       return;
     }
     openIssue(firstVisibleIssue);
-  }, [activeLinearIssue, enabled, filteredIssues, firstVisibleIssue, loading, openIssue]);
+  }, [
+    activeLinearIssue,
+    enabled,
+    filteredIssues,
+    firstVisibleIssue,
+    listFirstNavigationLayout,
+    loading,
+    openIssue,
+  ]);
 
   const handleCreateIssue = useCallback(async () => {
     if (!enabled) return;
@@ -270,6 +281,20 @@ export function LinearContactsExplorer({
   });
 
   const showList = enabled && !loading && !error;
+
+  useIosMobileQuickActions(
+    enabled
+      ? [
+          {
+            id: "contacts-create",
+            label: "New contact",
+            onClick: () => {
+              void handleCreateIssue();
+            },
+          },
+        ]
+      : null,
+  );
 
   return (
     <div className="vault-folder-explorer">

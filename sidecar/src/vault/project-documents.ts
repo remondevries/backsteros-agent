@@ -122,11 +122,19 @@ export async function fetchLinearProjectDocuments(
     .sort(compareDocumentsNewestFirst);
 }
 
-export async function fetchLinearTeamDocuments(teamId: string): Promise<ProjectDocumentRecord[]> {
+export async function fetchLinearTeamDocuments(
+  teamId: string,
+  options?: { dailyOnly?: boolean },
+): Promise<ProjectDocumentRecord[]> {
   const id = teamId.trim();
   if (!id) return [];
 
-  const linearDocuments = await fetchLinearApiTeamDocuments(id);
+  let linearDocuments = await fetchLinearApiTeamDocuments(id);
+  if (options?.dailyOnly) {
+    linearDocuments = linearDocuments.filter((document) =>
+      isDailyJournalDocumentTitle(document.title),
+    );
+  }
   return linearDocuments
     .map((document) =>
       mapLinearDocumentToRecord(

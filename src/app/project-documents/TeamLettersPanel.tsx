@@ -115,14 +115,13 @@ export function TeamLettersPanel({
         <div className="workspace-status-list workspace-status-list--documents workspace-status-list--documents-flat">
           <ul className="workspace-status-list__list" role="list">
             {sortedDocuments.map((document) => (
-              <li key={document.id} className="workspace-status-list__item">
-                <ProjectDocumentRow
-                  document={document}
-                  grouped={false}
-                  iconFallback="letter"
-                  onClick={() => openLetterDocument(document, setActiveLinearDocument)}
-                />
-              </li>
+              <ProjectDocumentRow
+                key={document.id}
+                document={document}
+                grouped={false}
+                iconFallback="letter"
+                onClick={() => openLetterDocument(document, setActiveLinearDocument)}
+              />
             ))}
           </ul>
         </div>

@@ -13,6 +13,7 @@ import {
   seedLinearIssueDetailFromEntity,
 } from "../lib/linearIssueDetailSeed";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
 import { useBinaryContentModeShortcuts } from "../hooks/useBinaryContentModeShortcuts";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
@@ -368,6 +369,25 @@ export function LinearInboxExplorer({
     : debouncedSearchQuery
       ? "No matching documents."
       : "No inbox documents yet.";
+
+  useIosMobileQuickActions(
+    enabled
+      ? [
+          {
+            id: "inbox-create",
+            label: createLabel,
+            disabled: !showingIssues && creatingDocument,
+            onClick: () => {
+              if (showingIssues) {
+                void handleCreateIssue();
+                return;
+              }
+              void handleCreateDocument();
+            },
+          },
+        ]
+      : null,
+  );
 
   return (
     <div className="vault-folder-explorer">

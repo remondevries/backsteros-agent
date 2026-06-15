@@ -23,6 +23,7 @@ import { resolveLinearIssueTabLabel } from "../lib/inboxDraftIssue";
 import { formatVaultWorkoutDocumentLabel } from "../lib/workouts/workoutsBreadcrumb";
 import { WorkoutsPeriodViewProvider } from "./workouts/WorkoutsPeriodViewContext";
 import { ContentPanelTabShortcuts } from "../shortcuts/ContentPanelTabShortcuts";
+import { isIosDevice } from "../platform/iosStandalone";
 
 const CONTENT_PANEL_SIDEBAR_WIDTH_KEY = "backsteros.layout.contentPanelWidth";
 const DEFAULT_CONTENT_TAB_LABEL = "Workspace";
@@ -182,16 +183,28 @@ function ContentPanelFrame({
   } = useContentPanelNavigation();
   const { flushFocusContentSnapshot } = useFocusContent();
 
-  const sidebarFolderKey = sidebarSegments.map((segment) => segment.id).join("/");
+  const contentSelectionKey = useMemo(
+    () =>
+      [
+        activeVaultNavItem ?? "",
+        linearSelection ? `${linearSelection.kind}:${linearSelection.id}` : "",
+        activeVaultDocument?.path ?? "",
+        activeLinearDocument?.id ?? "",
+        activeLinearIssue?.id ?? "",
+      ].join("|"),
+    [
+      activeLinearDocument?.id,
+      activeLinearIssue?.id,
+      activeVaultDocument?.path,
+      activeVaultNavItem,
+      linearSelection,
+    ],
+  );
 
-  const currentSelectionKey = [
-    activeVaultNavItem ?? "",
-    linearSelection ? `${linearSelection.kind}:${linearSelection.id}` : "",
-    activeVaultDocument?.path ?? "",
-    activeLinearDocument?.id ?? "",
-    activeLinearIssue?.id ?? "",
-    sidebarFolderKey,
-  ].join("|");
+  const listOnlyContentSelectionKey = useMemo(
+    () => [activeVaultNavItem ?? "", "", "", "", ""].join("|"),
+    [activeVaultNavItem],
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 720px)");
@@ -209,16 +222,35 @@ function ContentPanelFrame({
 
   useEffect(() => {
     if (!narrowContentSidebar || narrowSidebarInitialSelectionKey === null) return;
-    if (currentSelectionKey === narrowSidebarInitialSelectionKey) return;
+    if (contentSelectionKey === narrowSidebarInitialSelectionKey) return;
     setNarrowContentSidebar(false);
     setNarrowSidebarInitialSelectionKey(null);
-  }, [currentSelectionKey, narrowContentSidebar, narrowSidebarInitialSelectionKey]);
+  }, [contentSelectionKey, narrowContentSidebar, narrowSidebarInitialSelectionKey]);
 
   const openNarrowContentSidebar = useCallback(() => {
     if (!narrowContentLayout || !activeVaultNavItem || hideSidebar) return;
-    setNarrowSidebarInitialSelectionKey(currentSelectionKey);
+    setNarrowSidebarInitialSelectionKey(contentSelectionKey);
     setNarrowContentSidebar(true);
-  }, [activeVaultNavItem, currentSelectionKey, hideSidebar, narrowContentLayout]);
+  }, [activeVaultNavItem, contentSelectionKey, hideSidebar, narrowContentLayout]);
+
+  useEffect(() => {
+    if (!isIosDevice() || hideSidebar || settingsOpen || !narrowContentLayout) {
+      return;
+    }
+    if (!activeVaultNavItem) {
+      setNarrowContentSidebar(false);
+      setNarrowSidebarInitialSelectionKey(null);
+      return;
+    }
+    setNarrowSidebarInitialSelectionKey(listOnlyContentSelectionKey);
+    setNarrowContentSidebar(true);
+  }, [
+    activeVaultNavItem,
+    hideSidebar,
+    listOnlyContentSelectionKey,
+    narrowContentLayout,
+    settingsOpen,
+  ]);
 
   const closeNarrowContentSidebar = useCallback(() => {
     setNarrowContentSidebar(false);
@@ -493,15 +525,17 @@ function ContentPanelFrame({
   const sidebarElement =
     narrowContentSidebar && !hideSidebar ? (
       <div className="content-panel-narrow-sidebar">
-        <div className="content-panel-narrow-sidebar-header">
-          <button
-            type="button"
-            className="content-panel-narrow-sidebar-done"
-            onClick={closeNarrowContentSidebar}
-          >
-            Done
-          </button>
-        </div>
+        {!isIosDevice() ? (
+          <div className="content-panel-narrow-sidebar-header">
+            <button
+              type="button"
+              className="content-panel-narrow-sidebar-done"
+              onClick={closeNarrowContentSidebar}
+            >
+              Done
+            </button>
+          </div>
+        ) : null}
         <ContentPanelSidebar {...sidebarPanelProps} />
       </div>
     ) : !hideSidebar ? (
@@ -524,36 +558,42 @@ function ContentPanelFrame({
       {!narrowContentSidebar ? <div className="content-panel-content">{children}</div> : null}
     </>
   );
+  const showContentPanelTabsBar = !isIosDevice();
+  const showContentPanelBreadcrumbBar = !isIosDevice();
 
   return (
     <div className="content-panel-shell">
       <ContentPanelTabShortcuts
-        enabled={!settingsOpen}
+        enabled={!settingsOpen && showContentPanelTabsBar}
         onNewTab={handleAddTab}
         onCloseActiveTab={handleCloseActiveTab}
         onPreviousTab={handlePreviousTab}
         onNextTab={handleNextTab}
       />
-      <ContentPanelTabsBar
-        tabs={tabs.map((tab) => {
-          const isActiveTab = tab.id === activeTabId;
-          const icon = resolveContentTabIcon({
-            activeVaultNavItem: isActiveTab ? activeVaultNavItem : tab.activeVaultNavItem,
-            linearSelection: isActiveTab ? linearSelection : tab.snapshot.linearSelection,
-            activeLinearDocument: isActiveTab ? activeLinearDocument : tab.snapshot.activeLinearDocument,
-            activeLinearIssue: isActiveTab ? activeLinearIssue : tab.snapshot.activeLinearIssue,
-          });
-          return { id: tab.id, label: tab.label, icon };
-        })}
-        activeTabId={activeTabId}
-        onSelectTab={handleSelectTab}
-        onAddTab={handleAddTab}
-        onCloseTab={handleCloseTab}
-        navigationCollapsed={navigationCollapsed}
-        onOpenNavigation={onOpenNavigation}
-      />
+      {showContentPanelTabsBar ? (
+        <ContentPanelTabsBar
+          tabs={tabs.map((tab) => {
+            const isActiveTab = tab.id === activeTabId;
+            const icon = resolveContentTabIcon({
+              activeVaultNavItem: isActiveTab ? activeVaultNavItem : tab.activeVaultNavItem,
+              linearSelection: isActiveTab ? linearSelection : tab.snapshot.linearSelection,
+              activeLinearDocument: isActiveTab ? activeLinearDocument : tab.snapshot.activeLinearDocument,
+              activeLinearIssue: isActiveTab ? activeLinearIssue : tab.snapshot.activeLinearIssue,
+            });
+            return { id: tab.id, label: tab.label, icon };
+          })}
+          activeTabId={activeTabId}
+          onSelectTab={handleSelectTab}
+          onAddTab={handleAddTab}
+          onCloseTab={handleCloseTab}
+          navigationCollapsed={navigationCollapsed}
+          onOpenNavigation={onOpenNavigation}
+        />
+      ) : null}
       <div className="content-panel">
-        <ContentPanelBreadcrumbBar segments={displayedBreadcrumbSegments} />
+        {showContentPanelBreadcrumbBar ? (
+          <ContentPanelBreadcrumbBar segments={displayedBreadcrumbSegments} />
+        ) : null}
         <div className="content-panel-main">
           {mainPanelBody}
         </div>
