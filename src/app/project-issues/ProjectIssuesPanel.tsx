@@ -127,13 +127,7 @@ export function ProjectIssuesPanel({
   });
 
   if (loading && issues.length === 0) {
-    return (
-      <div className="workspace-status-list-scroll">
-        <div className="workspace-status-list-loading">
-          <p>Loading issues…</p>
-        </div>
-      </div>
-    );
+    return <div className="workspace-status-list-scroll" aria-busy="true" />;
   }
 
   const panelError = moveError ?? error;

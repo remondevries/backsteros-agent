@@ -427,7 +427,6 @@ export function LinearInboxExplorer({
           </button>
         </div>
       </div>
-      {loading ? <p className="vault-folder-explorer-status">Loading…</p> : null}
       {error ? (
         <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{error}</p>
       ) : null}

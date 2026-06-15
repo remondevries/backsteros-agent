@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useLinearProjects } from "../hooks/useLinearProjects";
 import { useLinearTeams } from "../hooks/useLinearTeams";
 import { useWorkspaceSetupTeamProjectIds } from "../hooks/useWorkspaceSetupTeamProjectIds";
@@ -83,6 +84,30 @@ export function LinearWorkspacePanel({
     () => excludeWorkspaceSetupTeamProjects(projectsQuery.projects, excludedProjectIds),
     [excludedProjectIds, projectsQuery.projects],
   );
+
+  const teamsInitialLoading = enabled && view === "teams" && teamsQuery.loading && browseTeams.length === 0;
+  const projectsInitialLoading =
+    enabled &&
+    view === "projects" &&
+    (projectsQuery.loading || workspaceExclusionsLoading) &&
+    browseProjects.length === 0;
+
+  useContentPanelBarState({
+    error:
+      view === "teams"
+        ? teamsQuery.error
+        : projectsQuery.error ?? workspaceExclusionsError,
+    loading: view === "teams" ? teamsInitialLoading : projectsInitialLoading,
+    loadingMessage: view === "teams" ? "Loading teams…" : "Loading projects…",
+    refreshing: view === "teams" ? teamsQuery.refreshing : false,
+    onRefresh: () => {
+      if (view === "teams") {
+        void teamsQuery.refresh();
+        return;
+      }
+      void projectsQuery.refresh();
+    },
+  });
 
   const filteredProjects = useMemo(() => {
     if (!normalizedSearch) return browseProjects;
@@ -191,9 +216,6 @@ export function LinearWorkspacePanel({
           </p>
         ) : view === "teams" ? (
           <>
-            {teamsQuery.loading ? (
-              <p className="vault-folder-explorer-status">Loading teams…</p>
-            ) : null}
             {teamsQuery.error ? (
               <p className="vault-folder-explorer-status vault-folder-explorer-status-error">
                 {teamsQuery.error}
@@ -242,9 +264,6 @@ export function LinearWorkspacePanel({
           </>
         ) : (
           <>
-            {projectsQuery.loading || workspaceExclusionsLoading ? (
-              <p className="vault-folder-explorer-status">Loading projects…</p>
-            ) : null}
             {projectsQuery.error || workspaceExclusionsError ? (
               <p className="vault-folder-explorer-status vault-folder-explorer-status-error">
                 {projectsQuery.error ?? workspaceExclusionsError}

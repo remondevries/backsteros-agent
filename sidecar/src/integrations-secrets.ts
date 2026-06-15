@@ -20,6 +20,7 @@ import {
   getTotemEnvPath,
 } from "./config.ts";
 import { getEnvFilePath, getTotemEnvFilePath, mergeEnvFile, readEnvFile, reloadEnvFromDisk } from "./env-file.ts";
+import { invalidateCursorApiKeyValidityCache } from "./cursor-api-key.ts";
 import { ensureTotemEnvTemplate } from "./whoopAuth.ts";
 import { stopLinearOAuthAuth } from "./linearOAuth.ts";
 
@@ -193,6 +194,9 @@ export function updateIntegrationSecrets(body: {
       }
     }
     reloadEnvFromDisk();
+    if (body.cursorApiKey !== undefined) {
+      invalidateCursorApiKeyValidityCache();
+    }
   }
 
   return getIntegrationsStatus();

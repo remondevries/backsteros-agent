@@ -36,6 +36,10 @@ import {
   resetSessionAgent,
 } from "./agent.ts";
 import {
+  checkCursorApiKeyValidity,
+  cursorApiKeyErrorResponse,
+} from "./cursor-api-key.ts";
+import {
   createApprovalRequest,
   listPendingApprovals,
   resolveApproval,
@@ -553,10 +557,15 @@ app.onError((err, c) => {
 });
 
 app.get("/healthz", async (c) => {
-  const hasLinearOAuthAuth = await isLinearOAuthAccessValid();
+  const hasApiKey = isUserCursorApiKeyConfigured();
+  const [hasLinearOAuthAuth, cursorApiKeyValid] = await Promise.all([
+    isLinearOAuthAccessValid(),
+    hasApiKey ? checkCursorApiKeyValidity() : Promise.resolve(null),
+  ]);
   return c.json({
     ok: true,
-    hasApiKey: isUserCursorApiKeyConfigured(),
+    hasApiKey,
+    cursorApiKeyValid,
     hasGeminiApiKey: Boolean(getGeminiApiKey()),
     hasLinearOAuthCredentials: isLinearOAuthConfigured(),
     hasLinearOAuthAuth,
@@ -3549,16 +3558,26 @@ app.post("/sessions", async (c) => {
   migrateLegacySessionIfNeeded(notesPath);
 
   const record = createSessionRecord(notesPath);
-  const agent = await createAgentForSessionRecord(record.sessionId, notesPath);
+  try {
+    const agent = await createAgentForSessionRecord(record.sessionId, notesPath);
 
-  return c.json({
-    sessionId: record.sessionId,
-    agentId: agent.agentId,
-    notesPath,
-    title: record.title,
-    messages: record.messages,
-    runs: record.runs,
-  });
+    return c.json({
+      sessionId: record.sessionId,
+      agentId: agent.agentId,
+      notesPath,
+      title: record.title,
+      messages: record.messages,
+      runs: record.runs,
+    });
+  } catch (error) {
+    deleteSessionRecord(record.sessionId);
+    const message =
+      error instanceof CursorAgentError || error instanceof Error
+        ? error.message
+        : "Failed to create assistant session";
+    const response = cursorApiKeyErrorResponse(message);
+    return c.json(response.body, response.status);
+  }
 });
 
 app.delete("/sessions/:sessionId", async (c) => {
@@ -3574,18 +3593,28 @@ app.delete("/sessions/:sessionId", async (c) => {
     const notesPath = resolveNotesPath();
     prepareWorkspace(notesPath, port, token);
     const record = createSessionRecord(notesPath);
-    const agent = await createAgentForSessionRecord(record.sessionId, notesPath);
-    return c.json({
-      activeSessionId: record.sessionId,
-      createdSession: {
-        sessionId: record.sessionId,
-        agentId: agent.agentId,
-        notesPath,
-        title: record.title,
-        messages: record.messages,
-        runs: record.runs,
-      },
-    });
+    try {
+      const agent = await createAgentForSessionRecord(record.sessionId, notesPath);
+      return c.json({
+        activeSessionId: record.sessionId,
+        createdSession: {
+          sessionId: record.sessionId,
+          agentId: agent.agentId,
+          notesPath,
+          title: record.title,
+          messages: record.messages,
+          runs: record.runs,
+        },
+      });
+    } catch (error) {
+      deleteSessionRecord(record.sessionId);
+      const message =
+        error instanceof CursorAgentError || error instanceof Error
+          ? error.message
+          : "Failed to create assistant session";
+      const response = cursorApiKeyErrorResponse(message);
+      return c.json(response.body, response.status);
+    }
   }
 
   return c.json({

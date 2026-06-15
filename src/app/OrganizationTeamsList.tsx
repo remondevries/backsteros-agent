@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { fetchLinearTeams, type LinearTeamSummary } from "../lib/api";
 import {
   excludeWorkspaceSetupLinearTeams,
@@ -32,6 +33,12 @@ export function OrganizationTeamsList({
   );
 
   useContentPanelSidebarBreadcrumbs(EMPTY_BREADCRUMB_SEGMENTS, enabled);
+
+  useContentPanelBarState({
+    error,
+    loading: enabled && loading && visibleTeams.length === 0,
+    loadingMessage: "Loading teams…",
+  });
 
   useEffect(() => {
     if (!enabled) return;
@@ -67,7 +74,6 @@ export function OrganizationTeamsList({
 
   return (
     <div className="vault-folder-explorer">
-      {loading ? <p className="vault-folder-explorer-status">Loading…</p> : null}
       {error ? (
         <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{error}</p>
       ) : null}

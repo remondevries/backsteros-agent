@@ -24,6 +24,7 @@ import { WorkoutsPeriodViewProvider } from "./workouts/WorkoutsPeriodViewContext
 import { ContentPanelTabShortcuts } from "../shortcuts/ContentPanelTabShortcuts";
 import { isIosDevice } from "../platform/iosStandalone";
 import { IosPullToRefreshIndicator } from "./IosPullToRefreshIndicator";
+import { ContentPanelChromeStatus } from "./ContentPanelChromeStatus";
 import { useIosHorizontalSwipe } from "../hooks/useIosHorizontalSwipe";
 import { useNarrowContentLayout } from "../hooks/useNarrowContentLayout";
 import {
@@ -606,6 +607,9 @@ function ContentPanelFrame({
   return (
     <div className="content-panel-shell" ref={contentPanelShellRef}>
       {isIosDevice() ? <IosPullToRefreshIndicator contentRootRef={contentPanelShellRef} /> : null}
+      {isIosDevice() ? (
+        <ContentPanelChromeStatus className="content-panel-chrome-status--ios" />
+      ) : null}
       <ContentPanelTabShortcuts
         enabled={!settingsOpen && showContentPanelTabsBar}
         onNewTab={handleAddTab}

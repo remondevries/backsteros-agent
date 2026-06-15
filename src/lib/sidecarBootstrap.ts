@@ -3,7 +3,7 @@ import { loadTauriSidecarConnection } from "../platform/sidecar";
 import { isRemoteSidecarBaseUrl, isTauriRuntime, setTauriRemoteShell } from "../platform/runtime";
 
 /** Single health request on app load — fail fast if the agent server is down. */
-export const BOOTSTRAP_HEALTH_TIMEOUT_MS = 3_000;
+export const BOOTSTRAP_HEALTH_TIMEOUT_MS = 5_000;
 export const BOOTSTRAP_CHECKING_MESSAGE = "Checking connection…";
 
 export async function configureSidecarConnection(): Promise<void> {

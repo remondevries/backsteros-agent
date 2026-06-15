@@ -6,10 +6,12 @@ export function CursorConnectGate({
   onGoToSetup,
   onLinearStepClick,
   cursorStepComplete = false,
+  bootstrapNotice = null,
 }: {
   onGoToSetup: () => void | Promise<void>;
   onLinearStepClick?: () => void;
   cursorStepComplete?: boolean;
+  bootstrapNotice?: string | null;
 }) {
   const integration = useApiKeyIntegration("cursor", undefined, { stayOnSuccess: true });
   const canGoToSetup = integration.configured || integration.testState === "success";
@@ -53,7 +55,10 @@ export function CursorConnectGate({
             void onGoToSetup();
           }}
         />
-        <IntegrationStatusMessages message={integration.message} error={integration.error} />
+        <IntegrationStatusMessages
+          message={integration.message}
+          error={bootstrapNotice ?? integration.error}
+        />
       </div>
     </ConnectGateShell>
   );

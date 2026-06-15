@@ -702,9 +702,7 @@ export function LinearIssueWatchersConfigPanel({
       >
         <div className="linear-issue-details-shell">
           <div className="linear-issue-details-scroll">
-            {loading ? (
-              <p className="linear-issue-watchers-config__status">Loading watcher settings…</p>
-            ) : (
+            {loading ? null : (
               <WatcherConfigSettingsPanel
                 config={config}
                 saving={saving}

@@ -267,13 +267,7 @@ export function WorkoutsDashboard({
   }
 
   if (loading && sessionCount === 0) {
-    return (
-      <div className="workspace-status-list-scroll">
-        <div className="workspace-status-list-loading">
-          <p>Loading workouts…</p>
-        </div>
-      </div>
-    );
+    return <div className="workspace-status-list-scroll" aria-busy="true" />;
   }
 
   return (

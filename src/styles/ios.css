@@ -227,8 +227,14 @@ html.ios-device
   .content-panel-slot
   .linear-project-view-tabs-controls
   .linear-project-list-board-toggle
-  .model-mode-indicator {
+  .model-mode-indicator,
+html.ios-device .content-panel-slot .inbox-content-toggle .model-mode-indicator,
+html.ios-device .content-panel-slot .organizations-content-toggle .model-mode-indicator {
   background: var(--ios-frosted-surface-active-bg);
+}
+
+html.ios-device .content-panel-slot .model-mode-toggle[data-active-index="1"] .model-mode-indicator {
+  transform: translateX(calc(100% + var(--ios-segmented-control-padding)));
 }
 
 /* iOS: 44pt touch targets for segmented toggles and pill tabs in content areas */

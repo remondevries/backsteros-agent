@@ -322,7 +322,6 @@ export function LinearKnowledgeBaseExplorer({
         />
         <KnowledgeBaseCreateMenu disabled={!enabled || creating} onSelect={handleCreateAction} />
       </div>
-      {listLoading ? <p className="vault-folder-explorer-status">Loading…</p> : null}
       {listError ? (
         <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{listError}</p>
       ) : null}

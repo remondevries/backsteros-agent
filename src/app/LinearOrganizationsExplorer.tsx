@@ -273,7 +273,6 @@ export function LinearOrganizationsExplorer({
           disabled={!enabled}
         />
       </div>
-      {activeLoading ? <p className="vault-folder-explorer-status">Loading…</p> : null}
       {activeError ? (
         <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{activeError}</p>
       ) : null}

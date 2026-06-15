@@ -32,7 +32,7 @@ export function useContentPanelBarState(options: {
   ]);
 
   const tone = options.error ? "error" : "default";
-  const refreshing = Boolean(options.refreshing || options.loading);
+  const refreshing = Boolean(options.refreshing);
   const showRefresh = Boolean(options.onRefresh);
 
   useEffect(() => {

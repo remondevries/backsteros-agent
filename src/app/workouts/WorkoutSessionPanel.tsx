@@ -624,13 +624,7 @@ export function WorkoutSessionPanel({
   }
 
   if (loading && groupSets.length === 0) {
-    return (
-      <div className="workspace-status-list-scroll">
-        <div className="workspace-status-list-loading">
-          <p>Loading session…</p>
-        </div>
-      </div>
-    );
+    return <div className="workspace-status-list-scroll" aria-busy="true" />;
   }
 
   return (

@@ -570,6 +570,7 @@ export async function submitGoodNightReflection(answers: string[]) {
 export type HealthResponse = {
   ok: boolean;
   hasApiKey: boolean;
+  cursorApiKeyValid?: boolean | null;
   hasGeminiApiKey: boolean;
   hasLinearOAuthCredentials: boolean;
   hasLinearOAuthAuth: boolean;

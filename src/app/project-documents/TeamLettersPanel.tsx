@@ -86,13 +86,7 @@ export function TeamLettersPanel({
   });
 
   if (loading && documents.length === 0) {
-    return (
-      <div className="workspace-status-list-scroll">
-        <div className="workspace-status-list-loading">
-          <p>Loading letters…</p>
-        </div>
-      </div>
-    );
+    return <div className="workspace-status-list-scroll" aria-busy="true" />;
   }
 
   if (error) {

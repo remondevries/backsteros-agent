@@ -382,6 +382,17 @@ export default function App() {
         return { linearReady: true, hasApiKey: false, appReady: false };
       }
 
+      if (health.cursorApiKeyValid === false) {
+        clearConnectGateAccessCache();
+        setCursorKeyConfigured(false);
+        setAppReady(false);
+        setGateNotice(
+          "Your Cursor API key is invalid or expired. Update it below, then continue.",
+        );
+        setConnectGateFocusStep("cursor");
+        return { linearReady: true, hasApiKey: false, appReady: false };
+      }
+
       setCursorKeyConfigured(true);
 
       const serverVaultEnabled =
@@ -719,9 +730,11 @@ export default function App() {
       return (
         <CursorConnectGate
           cursorStepComplete={cursorKeyConfigured}
-            onGoToSetup={() => {
+          bootstrapNotice={gateNotice}
+            onGoToSetup={async () => {
               awaitingSetupRef.current = true;
               setConnectGateFocusStep("setup");
+              await runBootstrap();
             }}
           onLinearStepClick={() => {
             setConnectGateFocusStep("linear");

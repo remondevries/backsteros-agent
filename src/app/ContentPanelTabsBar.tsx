@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { useContentPanelChrome } from "./contentPanelChromeContext";
-import { RefreshIcon } from "./RefreshIcon";
+import { ContentPanelChromeStatus } from "./ContentPanelChromeStatus";
 
 type ContentPanelTab = {
   id: string;
@@ -39,12 +38,6 @@ export function ContentPanelTabsBar({
   navigationCollapsed?: boolean;
   onOpenNavigation?: () => void;
 }) {
-  const { contentPanelBarState } = useContentPanelChrome();
-  const refreshing = contentPanelBarState?.refreshing ?? false;
-  const onRefresh = contentPanelBarState?.onRefresh ?? null;
-  const message = contentPanelBarState?.message ?? null;
-  const tone = contentPanelBarState?.tone ?? "default";
-
   return (
     <header className="content-panel-tabs-bar">
       {navigationCollapsed && onOpenNavigation ? (
@@ -123,30 +116,7 @@ export function ContentPanelTabsBar({
         >
           +
         </button>
-        {message ? (
-          <span
-            className={[
-              "content-panel-tabs-status",
-              tone === "error" ? "content-panel-tabs-status--error" : null,
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            role={tone === "error" ? "alert" : "status"}
-            title={message}
-          >
-            {message}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className="content-panel-tab-refresh"
-          onClick={onRefresh ?? undefined}
-          disabled={!onRefresh || refreshing}
-          aria-label="Refresh"
-          title="Refresh"
-        >
-          <RefreshIcon spinning={refreshing} />
-        </button>
+        <ContentPanelChromeStatus className="content-panel-chrome-status--tabs" />
       </div>
     </header>
   );

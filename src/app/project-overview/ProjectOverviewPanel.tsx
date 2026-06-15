@@ -34,8 +34,6 @@ export function ProjectOverviewPanel({
     saving: editorBar.saving,
     dirty: editorBar.dirty,
     error: editorBar.error ?? error,
-    loading: loading && !overview,
-    loadingMessage: "Loading overview…",
     refreshing,
     onRefresh: refresh,
   });
