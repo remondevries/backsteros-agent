@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
-import { createLinearTeamDocument } from "../lib/api";
-import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
-import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
+import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
 import {
@@ -56,7 +52,6 @@ export function LinearDailyExplorer({
   enabled: boolean;
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
-  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [creatingDocument, setCreatingDocument] = useState(false);
@@ -123,25 +118,12 @@ export function LinearDailyExplorer({
     [setActiveLinearDocument],
   );
 
-  useEffect(() => {
-    if (
-      listFirstNavigationLayout ||
-      !enabled ||
-      loading ||
-      filteredDocuments.length === 0 ||
-      activeLinearDocument
-    ) {
-      return;
-    }
-    openDocument(filteredDocuments[0]!);
-  }, [
-    activeLinearDocument,
+  useAutoOpenFirstListItem({
     enabled,
-    filteredDocuments,
-    listFirstNavigationLayout,
-    loading,
-    openDocument,
-  ]);
+    loading: enabled && loading && documents.length === 0,
+    shouldOpen: filteredDocuments.length > 0 && !activeLinearDocument,
+    onOpenFirst: () => openDocument(filteredDocuments[0]!),
+  });
 
   const handleCreateDocument = useCallback(async () => {
     if (!enabled || creatingDocument || hasTodayDailyNote) return;
@@ -209,7 +191,7 @@ export function LinearDailyExplorer({
 
   const showList = enabled && !loading && !error;
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled && showCreateTodayButton
       ? [
           {

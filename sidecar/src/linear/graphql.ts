@@ -21,6 +21,7 @@ export async function linearGraphqlRequest<T>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(20_000),
   });
 
   const body = (await response.json()) as {

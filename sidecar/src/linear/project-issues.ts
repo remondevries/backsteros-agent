@@ -1,4 +1,6 @@
 import { linearGraphqlRequest } from "./graphql.ts";
+import { cachedLinearList, linearListCacheKeys } from "./list-cache.ts";
+import { invalidateLinearIssueListCaches } from "./list-cache-invalidate.ts";
 import { fetchLinearTeamContext, resolveWorkflowStateId, seedLinearTeamContextCache } from "./project-context.ts";
 
 export type LinearProjectIssue = {
@@ -313,101 +315,118 @@ function mapWorkflowStateNode(
   return { id, name, type, color, position };
 }
 
-export async function fetchLinearProjectIssues(projectId: string): Promise<LinearProjectIssuesResult> {
+export async function fetchLinearProjectIssues(
+  projectId: string,
+  options?: { force?: boolean },
+): Promise<LinearProjectIssuesResult> {
   const id = projectId.trim();
   if (!id) return { issues: [], workflowStates: [] };
 
-  const items: LinearProjectIssue[] = [];
-  const workflowStates = new Map<string, LinearProjectWorkflowState>();
-  let after: string | undefined;
+  return cachedLinearList(
+    linearListCacheKeys.projectIssues(id),
+    async () => {
+      const items: LinearProjectIssue[] = [];
+      const workflowStates = new Map<string, LinearProjectWorkflowState>();
+      let after: string | undefined;
 
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const response = await linearGraphqlRequest<GraphqlProjectIssuesResponse>(PROJECT_ISSUES_QUERY, {
-      projectId: id,
-      first: PAGE_SIZE,
-      after,
-    });
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const response = await linearGraphqlRequest<GraphqlProjectIssuesResponse>(PROJECT_ISSUES_QUERY, {
+          projectId: id,
+          first: PAGE_SIZE,
+          after,
+        });
 
-    const projectName = (response.project?.name ?? "").trim() || "—";
-    const connection = response.project?.issues;
+        const projectName = (response.project?.name ?? "").trim() || "—";
+        const connection = response.project?.issues;
 
-    for (const teamNode of response.project?.teams?.nodes ?? []) {
-      for (const stateNode of teamNode?.states?.nodes ?? []) {
-        const mappedState = mapWorkflowStateNode(stateNode);
-        if (mappedState) {
-          workflowStates.set(mappedState.id, mappedState);
+        for (const teamNode of response.project?.teams?.nodes ?? []) {
+          for (const stateNode of teamNode?.states?.nodes ?? []) {
+            const mappedState = mapWorkflowStateNode(stateNode);
+            if (mappedState) {
+              workflowStates.set(mappedState.id, mappedState);
+            }
+          }
         }
+
+        for (const node of connection?.nodes ?? []) {
+          const item = mapGraphqlProjectIssueNode(node, projectName, "Unknown");
+          if (item) items.push(item);
+        }
+
+        if (!connection?.pageInfo?.hasNextPage) break;
+        const nextCursor = connection.pageInfo.endCursor?.trim();
+        if (!nextCursor) break;
+        after = nextCursor;
       }
-    }
 
-    for (const node of connection?.nodes ?? []) {
-      const item = mapGraphqlProjectIssueNode(node, projectName, "Unknown");
-      if (item) items.push(item);
-    }
-
-    if (!connection?.pageInfo?.hasNextPage) break;
-    const nextCursor = connection.pageInfo.endCursor?.trim();
-    if (!nextCursor) break;
-    after = nextCursor;
-  }
-
-  return { issues: items, workflowStates: sortWorkflowStates([...workflowStates.values()]) };
+      return { issues: items, workflowStates: sortWorkflowStates([...workflowStates.values()]) };
+    },
+    { force: options?.force },
+  );
 }
 
 export async function fetchLinearTeamIssues(
   teamId: string,
-  options?: { excludeSubIssues?: boolean },
+  options?: { excludeSubIssues?: boolean; force?: boolean },
 ): Promise<LinearProjectIssuesResult> {
   const id = teamId.trim();
   if (!id) return { issues: [], workflowStates: [] };
 
-  const issuesQuery = options?.excludeSubIssues ? TEAM_ROOT_ISSUES_QUERY : TEAM_ISSUES_QUERY;
-  const items: LinearProjectIssue[] = [];
-  const workflowStates = new Map<string, LinearProjectWorkflowState>();
-  let after: string | undefined;
+  const excludeSubIssues = options?.excludeSubIssues ?? false;
 
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const response = await linearGraphqlRequest<GraphqlTeamIssuesResponse>(issuesQuery, {
-      teamId: id,
-      first: PAGE_SIZE,
-      after,
-    });
+  return cachedLinearList(
+    linearListCacheKeys.teamIssues(id, excludeSubIssues),
+    async () => {
+      const issuesQuery = excludeSubIssues ? TEAM_ROOT_ISSUES_QUERY : TEAM_ISSUES_QUERY;
+      const items: LinearProjectIssue[] = [];
+      const workflowStates = new Map<string, LinearProjectWorkflowState>();
+      let after: string | undefined;
 
-    const connection = response.team?.issues;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const response = await linearGraphqlRequest<GraphqlTeamIssuesResponse>(issuesQuery, {
+          teamId: id,
+          first: PAGE_SIZE,
+          after,
+        });
 
-    for (const stateNode of response.team?.states?.nodes ?? []) {
-      const mappedState = mapWorkflowStateNode(stateNode);
-      if (mappedState) {
-        workflowStates.set(mappedState.id, mappedState);
+        const connection = response.team?.issues;
+
+        for (const stateNode of response.team?.states?.nodes ?? []) {
+          const mappedState = mapWorkflowStateNode(stateNode);
+          if (mappedState) {
+            workflowStates.set(mappedState.id, mappedState);
+          }
+        }
+
+        if (page === 0 && workflowStates.size > 0) {
+          seedLinearTeamContextCache(
+            id,
+            [...workflowStates.values()].map((state) => ({
+              id: state.id,
+              name: state.name,
+              type: state.type,
+            })),
+          );
+        }
+
+        for (const node of connection?.nodes ?? []) {
+          const item = mapGraphqlProjectIssueNode(node, "—", "Unknown");
+          if (item) items.push(item);
+        }
+
+        if (!connection?.pageInfo?.hasNextPage) break;
+        const nextCursor = connection.pageInfo.endCursor?.trim();
+        if (!nextCursor) break;
+        after = nextCursor;
       }
-    }
 
-    if (page === 0 && workflowStates.size > 0) {
-      seedLinearTeamContextCache(
-        id,
-        [...workflowStates.values()].map((state) => ({
-          id: state.id,
-          name: state.name,
-          type: state.type,
-        })),
-      );
-    }
-
-    for (const node of connection?.nodes ?? []) {
-      const item = mapGraphqlProjectIssueNode(node, "—", "Unknown");
-      if (item) items.push(item);
-    }
-
-    if (!connection?.pageInfo?.hasNextPage) break;
-    const nextCursor = connection.pageInfo.endCursor?.trim();
-    if (!nextCursor) break;
-    after = nextCursor;
-  }
-
-  return {
-    issues: items,
-    workflowStates: sortWorkflowStates([...workflowStates.values()]),
-  };
+      return {
+        issues: items,
+        workflowStates: sortWorkflowStates([...workflowStates.values()]),
+      };
+    },
+    { force: options?.force },
+  );
 }
 
 export async function createLinearTeamIssue(
@@ -454,5 +473,6 @@ export async function createLinearTeamIssue(
     throw new Error("Linear returned an invalid inbox issue");
   }
 
+  invalidateLinearIssueListCaches();
   return issue;
 }

@@ -38,6 +38,10 @@
   caret-color: transparent !important;
 }
 
+html.ios-device .tiptap-editor-content.markdown-body {
+  font-size: 16px;
+}
+
 .tiptap-editor-content:not(.markdown-body) p {
   margin: 0;
 }

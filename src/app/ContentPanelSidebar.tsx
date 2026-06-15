@@ -13,6 +13,9 @@ import { LinearMeetingsExplorer } from "./LinearMeetingsExplorer";
 import { LinearContactsExplorer } from "./LinearContactsExplorer";
 import { LinearOrganizationsExplorer } from "./LinearOrganizationsExplorer";
 import { LinearWorkspacePanel } from "./LinearWorkspacePanel";
+import { isIosDevice } from "../platform/iosStandalone";
+import { LinearProjectsTableView } from "./projects/LinearProjectsTableView";
+import { isIosNavAreaRestoring } from "../lib/iosNavAreaMemory";
 import { OrganizationTeamsList } from "./OrganizationTeamsList";
 import { VaultFolderExplorer } from "./VaultFolderExplorer";
 import { useContentPanelNavigation } from "./contentPanelNavigation";
@@ -27,6 +30,7 @@ export function ContentPanelSidebar({
   addressbookLinearTeamId,
   linearWorkspaceEnabled,
   vaultExplorerEnabled,
+  iosOverlay = false,
 }: {
   activeVaultNavItem: SidebarNavItemId | null;
   inboxLinearTeamId: string | null;
@@ -37,6 +41,7 @@ export function ContentPanelSidebar({
   addressbookLinearTeamId: string | null;
   linearWorkspaceEnabled: boolean;
   vaultExplorerEnabled: boolean;
+  iosOverlay?: boolean;
 }) {
   const {
     clearActiveVaultDocument,
@@ -97,6 +102,10 @@ export function ContentPanelSidebar({
 
     previousPrimaryNavItemRef.current = activeVaultNavItem;
 
+    if (isIosDevice() && isIosNavAreaRestoring()) {
+      return;
+    }
+
     if (isSidebarPrimaryNavItem(activeVaultNavItem)) {
       setLinearSelection(null);
       clearActiveLinearDocument();
@@ -111,6 +120,8 @@ export function ContentPanelSidebar({
 
   useEffect(() => {
     if (!navSidebarEnabled || !activeVaultNavItem) return;
+
+    if (isIosDevice() && isIosNavAreaRestoring()) return;
 
     if (activeVaultNavItem === "daily") {
       if (linearDailyEnabled) {
@@ -208,59 +219,89 @@ export function ContentPanelSidebar({
     navSidebarEnabled,
   ]);
 
-  return (
-    <div className="content-panel-sidebar">
-      <div className="content-panel-sidebar-body">
-        {SIDEBAR_VAULT_NAV_ITEM_IDS.map((itemId) =>
-          activeVaultNavItem === itemId ? (
-            <div key={itemId} className="content-panel-sidebar-pane">
-              {itemId === "inbox" && linearInboxEnabled ? (
-                <LinearInboxExplorer teamId={linearInboxTeamId} enabled={linearInboxEnabled} />
-              ) : itemId === "daily" && linearDailyEnabled ? (
-                <LinearDailyExplorer teamId={linearDailyTeamId} enabled={linearDailyEnabled} />
-              ) : itemId === "letters" && linearLettersEnabled ? (
-                <LinearLettersExplorer teamId={linearLettersTeamId} enabled={linearLettersEnabled} />
-              ) : itemId === "meetings" && linearMeetingsEnabled ? (
-                <LinearMeetingsExplorer teamId={linearDailyTeamId} enabled={linearMeetingsEnabled} />
-              ) : itemId === "knowledge-base" && linearKnowledgeBaseEnabled ? (
-                <LinearKnowledgeBaseExplorer
-                  teamId={linearKnowledgeBaseTeamId}
-                  enabled={linearKnowledgeBaseEnabled}
-                />
-              ) : itemId === "organizations" && linearOrganizationsEnabled ? (
-                <LinearOrganizationsExplorer
-                  enabled={linearOrganizationsEnabled}
-                  workspaceTeamConfig={workspaceTeamConfig}
-                />
-              ) : itemId === "contacts" && linearContactsEnabled ? (
-                <LinearContactsExplorer teamId={linearAddressbookTeamId} enabled={linearContactsEnabled} />
-              ) : itemId === "organizations" ? (
-                <OrganizationTeamsList
-                  enabled={vaultExplorerEnabled}
-                  workspaceTeamConfig={workspaceTeamConfig}
-                />
-              ) : (
-                <VaultFolderExplorer activeNavItem={itemId} enabled={vaultExplorerEnabled} />
-              )}
-            </div>
-          ) : null,
-        )}
+  const sidebarBody = (
+    <>
+      {SIDEBAR_VAULT_NAV_ITEM_IDS.map((itemId) =>
+        activeVaultNavItem === itemId ? (
+          <div key={itemId} className="content-panel-sidebar-pane">
+            {itemId === "inbox" && linearInboxEnabled ? (
+              <LinearInboxExplorer teamId={linearInboxTeamId} enabled={linearInboxEnabled} />
+            ) : itemId === "daily" && linearDailyEnabled ? (
+              <LinearDailyExplorer teamId={linearDailyTeamId} enabled={linearDailyEnabled} />
+            ) : itemId === "letters" && linearLettersEnabled ? (
+              <LinearLettersExplorer teamId={linearLettersTeamId} enabled={linearLettersEnabled} />
+            ) : itemId === "meetings" && linearMeetingsEnabled ? (
+              <LinearMeetingsExplorer teamId={linearDailyTeamId} enabled={linearMeetingsEnabled} />
+            ) : itemId === "knowledge-base" && linearKnowledgeBaseEnabled ? (
+              <LinearKnowledgeBaseExplorer
+                teamId={linearKnowledgeBaseTeamId}
+                enabled={linearKnowledgeBaseEnabled}
+              />
+            ) : itemId === "organizations" && linearOrganizationsEnabled ? (
+              <LinearOrganizationsExplorer
+                enabled={linearOrganizationsEnabled}
+                workspaceTeamConfig={workspaceTeamConfig}
+              />
+            ) : itemId === "contacts" && linearContactsEnabled ? (
+              <LinearContactsExplorer teamId={linearAddressbookTeamId} enabled={linearContactsEnabled} />
+            ) : itemId === "organizations" ? (
+              <OrganizationTeamsList
+                enabled={vaultExplorerEnabled}
+                workspaceTeamConfig={workspaceTeamConfig}
+              />
+            ) : (
+              <VaultFolderExplorer activeNavItem={itemId} enabled={vaultExplorerEnabled} />
+            )}
+          </div>
+        ) : null,
+      )}
 
-        {activeVaultNavItem === "projects" ? (
-          <div className="content-panel-sidebar-pane">
+      {activeVaultNavItem === "projects" ? (
+        <div
+          className={[
+            "content-panel-sidebar-pane",
+            isIosDevice() ? "ios-projects-sidebar-panel" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {isIosDevice() ? (
+            <LinearProjectsTableView
+              enabled={linearWorkspaceEnabled}
+              workspaceTeamConfig={workspaceTeamConfig}
+              listNavigationRegion="sidebar"
+            />
+          ) : (
             <LinearWorkspacePanel
               enabled={linearWorkspaceEnabled}
               workspaceTeamConfig={workspaceTeamConfig}
             />
-          </div>
-        ) : null}
+          )}
+        </div>
+      ) : null}
 
-        {showEmptyState ? (
-          <p className="content-panel-sidebar-empty">
-            Choose a section in the left navigation to browse vault files or Linear workspace items.
-          </p>
-        ) : null}
-      </div>
+      {showEmptyState ? (
+        <p className="content-panel-sidebar-empty">
+          Choose a section in the left navigation to browse vault files or Linear workspace items.
+        </p>
+      ) : null}
+    </>
+  );
+
+  const rootClassName = [
+    "content-panel-sidebar",
+    iosOverlay ? "content-panel-ios-sidebar-overlay" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (iosOverlay) {
+    return <div className={rootClassName}>{sidebarBody}</div>;
+  }
+
+  return (
+    <div className={rootClassName}>
+      <div className="content-panel-sidebar-body">{sidebarBody}</div>
     </div>
   );
 }

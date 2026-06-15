@@ -42,7 +42,7 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
       }
       setError(null);
       try {
-        const result = await fetchLinearProjectIssues(projectId);
+        const result = await fetchLinearProjectIssues(projectId, { force: isBackgroundRefresh });
         if (result.error) {
           setError(result.error);
           setIssues([]);
@@ -69,6 +69,11 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
 
   useEffect(() => {
     return onLinearIssueListChange((change) => {
+      if (change.type === "refresh") {
+        void refresh({ background: true });
+        return;
+      }
+
       if (change.type === "remove") {
         setIssues((current) => current.filter((issue) => issue.id !== change.issueId));
         return;
@@ -80,7 +85,7 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
         ),
       );
     });
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     if (!enabled || !projectId) return undefined;

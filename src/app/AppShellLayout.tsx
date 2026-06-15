@@ -13,6 +13,14 @@ import { CommandPalette } from "../command-palette/CommandPalette";
 import { CommandPaletteProvider, useCommandPalette } from "../command-palette/CommandPaletteContext";
 import { AppUrlSync } from "./AppUrlSync";
 import { AppShellShortcuts } from "../shortcuts/AppShellShortcuts";
+import { isIosDevice } from "../platform/iosStandalone";
+import {
+  beginIosNavAreaRestore,
+  clearIosNavAreaSnapshot,
+  endIosNavAreaRestore,
+  readIosNavAreaSnapshot,
+  saveIosNavAreaSnapshot,
+} from "../lib/iosNavAreaMemory";
 import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
 import { isLetterComposeDraftDocumentId } from "../lib/letterComposeDraft";
 import { showTrafficLights } from "../platform/trafficLights";
@@ -101,8 +109,14 @@ function AppMainShell({
   toggleContentPanelSidebar: () => void;
   openRightSidePanel: () => void;
 }) {
-  const { activeLinearDocument, clearActiveVaultDocument, resetProjectsOverview } =
-    useContentPanelNavigation();
+  const {
+    activeLinearDocument,
+    clearActiveVaultDocument,
+    resetProjectsOverview,
+    captureNavAreaContentSnapshot,
+    restoreContentPanelTabSnapshot,
+    resetNavAreaContent,
+  } = useContentPanelNavigation();
   const { open: commandPaletteOpen } = useCommandPalette();
   const letterComposeActive =
     activeLinearDocument != null &&
@@ -139,36 +153,69 @@ function AppMainShell({
     ],
   );
 
+  const restoreIosNavArea = useCallback(
+    (item: SidebarNavItemId) => {
+      const saved = readIosNavAreaSnapshot(item);
+      beginIosNavAreaRestore();
+      if (saved) {
+        restoreContentPanelTabSnapshot(saved);
+      } else {
+        resetNavAreaContent();
+      }
+      window.requestAnimationFrame(() => endIosNavAreaRestore());
+    },
+    [resetNavAreaContent, restoreContentPanelTabSnapshot],
+  );
+
   const handleVaultNavItemChange = useCallback(
     (item: SidebarNavItemId | null) => {
       const reclickingCurrent = item !== null && item === activeVaultNavItem;
-      if (item !== activeVaultNavItem || reclickingCurrent) {
-        // Reset focused content when moving between nav destinations, and also
-        // when re-selecting the current one, so the area opens at its start.
+      const iosMemory = isIosDevice();
+
+      if (reclickingCurrent) {
+        if (iosMemory && item) {
+          clearIosNavAreaSnapshot(item);
+        }
         clearActiveVaultDocument();
         resetProjectsOverview();
-      }
-      if (reclickingCurrent) {
-        // Re-clicking the active nav item sends the user all the way back to the
-        // start of that area (e.g. Projects). Toggle through null so the
-        // destination panes remount even though the nav id is unchanged.
         onVaultNavItemChange(null);
         window.requestAnimationFrame(() => onVaultNavItemChange(item));
         setLeftNavigationOverlayOpen(false);
         if (narrowNavigation) closeLeftSidePanel();
         return;
       }
-      onVaultNavItemChange(item);
+
+      if (item !== activeVaultNavItem) {
+        if (iosMemory && activeVaultNavItem) {
+          saveIosNavAreaSnapshot(activeVaultNavItem, captureNavAreaContentSnapshot());
+        }
+
+        if (!iosMemory) {
+          clearActiveVaultDocument();
+          resetProjectsOverview();
+        }
+
+        onVaultNavItemChange(item);
+
+        if (iosMemory && item) {
+          restoreIosNavArea(item);
+        }
+      } else {
+        onVaultNavItemChange(item);
+      }
+
       setLeftNavigationOverlayOpen(false);
       if (narrowNavigation) closeLeftSidePanel();
     },
     [
       activeVaultNavItem,
+      captureNavAreaContentSnapshot,
       clearActiveVaultDocument,
       closeLeftSidePanel,
       narrowNavigation,
       onVaultNavItemChange,
       resetProjectsOverview,
+      restoreIosNavArea,
     ],
   );
 
@@ -181,11 +228,28 @@ function AppMainShell({
   const switchVaultNavItemQuiet = useCallback(
     (item: SidebarNavItemId) => {
       if (item === activeVaultNavItem) return;
-      onVaultNavItemChange(item);
+
+      if (isIosDevice()) {
+        if (activeVaultNavItem) {
+          saveIosNavAreaSnapshot(activeVaultNavItem, captureNavAreaContentSnapshot());
+        }
+        onVaultNavItemChange(item);
+        restoreIosNavArea(item);
+      } else {
+        onVaultNavItemChange(item);
+      }
+
       setLeftNavigationOverlayOpen(false);
       if (narrowNavigation) closeLeftSidePanel();
     },
-    [activeVaultNavItem, closeLeftSidePanel, narrowNavigation, onVaultNavItemChange],
+    [
+      activeVaultNavItem,
+      captureNavAreaContentSnapshot,
+      closeLeftSidePanel,
+      narrowNavigation,
+      onVaultNavItemChange,
+      restoreIosNavArea,
+    ],
   );
 
   useEffect(() => {
@@ -381,7 +445,11 @@ function AppMainShell({
       <div className="content-panel-slot">
         <ContentPanel
           sidebarOpen={showContentPanelSidebar}
-          hideSidebar={settingsOpen || activeVaultNavItem === "projects" || activeVaultNavItem === "workouts"}
+          hideSidebar={
+            settingsOpen ||
+            activeVaultNavItem === "workouts" ||
+            (activeVaultNavItem === "projects" && !isIosDevice())
+          }
           activeVaultNavItem={activeVaultNavItem}
           onVaultNavItemChange={handleVaultNavItemChange}
           inboxLinearTeamId={inboxLinearTeamId}

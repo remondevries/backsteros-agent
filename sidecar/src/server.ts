@@ -682,7 +682,8 @@ app.get("/linear/documents/meetings", async (c) => {
   }
 
   try {
-    const documents = await fetchLinearMeetingDocuments();
+    const force = c.req.query("force") === "1";
+    const documents = await fetchLinearMeetingDocuments({ force });
     return c.json({ documents });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load meeting documents";
@@ -923,7 +924,8 @@ app.get("/linear/projects/:projectId/issues", async (c) => {
   }
 
   try {
-    const result = await fetchLinearProjectIssues(projectId);
+    const force = c.req.query("force") === "1";
+    const result = await fetchLinearProjectIssues(projectId, { force });
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load project issues";
@@ -1510,7 +1512,8 @@ app.get("/linear/projects/:projectId/documents", async (c) => {
   }
 
   try {
-    const documents = await fetchLinearProjectDocuments(projectId);
+    const force = c.req.query("force") === "1";
+    const documents = await fetchLinearProjectDocuments(projectId, { force });
     return c.json({ documents });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load project documents";
@@ -1591,9 +1594,10 @@ app.get("/linear/teams/:teamId/documents", async (c) => {
   }
 
   const dailyOnly = c.req.query("dailyOnly") === "true";
+  const force = c.req.query("force") === "1";
 
   try {
-    const documents = await fetchLinearTeamDocuments(teamId, { dailyOnly });
+    const documents = await fetchLinearTeamDocuments(teamId, { dailyOnly, force });
     return c.json({ documents });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load team documents";
@@ -1840,7 +1844,8 @@ app.get("/linear/teams/:teamId/issues", async (c) => {
 
   try {
     const rootOnly = c.req.query("rootOnly") === "1";
-    const result = await fetchLinearTeamIssues(teamId, { excludeSubIssues: rootOnly });
+    const force = c.req.query("force") === "1";
+    const result = await fetchLinearTeamIssues(teamId, { excludeSubIssues: rootOnly, force });
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load team issues";
@@ -1955,7 +1960,8 @@ app.get("/linear/teams/:teamId/projects", async (c) => {
   }
 
   try {
-    const projects = await fetchLinearTeamProjects(teamId);
+    const force = c.req.query("force") === "1";
+    const projects = await fetchLinearTeamProjects(teamId, { force });
     return c.json({ projects });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load team projects";

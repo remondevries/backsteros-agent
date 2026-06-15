@@ -2,8 +2,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContentPanelBreadcrumbBar } from "./ContentPanelBreadcrumbBar";
 import { ContentPanelTabsBar } from "./ContentPanelTabsBar";
-import { ContentPanelSidebar } from "./ContentPanelSidebar";
-import { ResizablePanel } from "./ResizablePanel";
+import { ContentPanelSidebarSlot } from "./ContentPanelSidebarSlot";
 import { linearWorkspaceViewLabel } from "./linearProjectViews";
 import { buildContentPanelBreadcrumbSegments } from "./contentPanelBreadcrumbModel";
 import {
@@ -24,8 +23,19 @@ import { formatVaultWorkoutDocumentLabel } from "../lib/workouts/workoutsBreadcr
 import { WorkoutsPeriodViewProvider } from "./workouts/WorkoutsPeriodViewContext";
 import { ContentPanelTabShortcuts } from "../shortcuts/ContentPanelTabShortcuts";
 import { isIosDevice } from "../platform/iosStandalone";
+import { IosPullToRefreshIndicator } from "./IosPullToRefreshIndicator";
+import { useIosHorizontalSwipe } from "../hooks/useIosHorizontalSwipe";
+import { useNarrowContentLayout } from "../hooks/useNarrowContentLayout";
+import {
+  isIosListSwipeNavItem,
+  isIosProjectsTableSidebarLayout,
+} from "../lib/iosListSidebarNav";
+import {
+  resolveContentPanelSidebarPresentation,
+  shouldMountIosSidebarOverlay,
+  shouldShowContentPanelMainSlot,
+} from "../lib/contentPanelSidebarPresentation";
 
-const CONTENT_PANEL_SIDEBAR_WIDTH_KEY = "backsteros.layout.contentPanelWidth";
 const DEFAULT_CONTENT_TAB_LABEL = "Workspace";
 
 function buildContentTabLabel({
@@ -163,13 +173,13 @@ function ContentPanelFrame({
   settingsOpen?: boolean;
   children: ReactNode;
 }) {
+  const contentPanelShellRef = useRef<HTMLDivElement>(null);
+  const contentPanelMainRef = useRef<HTMLDivElement>(null);
   const [narrowContentSidebar, setNarrowContentSidebar] = useState(false);
   const [narrowSidebarInitialSelectionKey, setNarrowSidebarInitialSelectionKey] = useState<string | null>(
     null,
   );
-  const [narrowContentLayout, setNarrowContentLayout] = useState(() =>
-    typeof window === "undefined" ? false : window.matchMedia("(max-width: 720px)").matches,
-  );
+  const narrowContentLayout = useNarrowContentLayout();
   const {
     sidebarSegments,
     linearSelection,
@@ -206,19 +216,40 @@ function ContentPanelFrame({
     [activeVaultNavItem],
   );
 
+  const hasDetailView = contentSelectionKey !== listOnlyContentSelectionKey;
+  const iosDevice = isIosDevice();
+  const iosListNavEnabled =
+    iosDevice && narrowContentLayout && isIosListSwipeNavItem(activeVaultNavItem) && !hideSidebar;
+  const iosProjectsTableLayout = isIosProjectsTableSidebarLayout(
+    activeVaultNavItem,
+    iosListNavEnabled,
+  );
+  const iosSidebarOverlayLayer = shouldMountIosSidebarOverlay({
+    iosListNavEnabled,
+    hasDetailView,
+  });
+  const sidebarPresentation = resolveContentPanelSidebarPresentation({
+    hideSidebar,
+    narrowContentLayout,
+    iosListNavEnabled,
+    hasDetailView,
+    narrowContentSidebar,
+    iosProjectsTableLayout,
+  });
+  const showMainContent = shouldShowContentPanelMainSlot({ presentation: sidebarPresentation });
+  const iosSidebarOverlayOpen =
+    iosListNavEnabled &&
+    narrowContentSidebar &&
+    hasDetailView &&
+    narrowSidebarInitialSelectionKey != null &&
+    contentSelectionKey === narrowSidebarInitialSelectionKey;
+
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 720px)");
-    const handleChange = () => {
-      setNarrowContentLayout(mediaQuery.matches);
-      if (!mediaQuery.matches) {
-        setNarrowContentSidebar(false);
-        setNarrowSidebarInitialSelectionKey(null);
-      }
-    };
-    handleChange();
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
+    if (!narrowContentLayout) {
+      setNarrowContentSidebar(false);
+      setNarrowSidebarInitialSelectionKey(null);
+    }
+  }, [narrowContentLayout]);
 
   useEffect(() => {
     if (!narrowContentSidebar || narrowSidebarInitialSelectionKey === null) return;
@@ -234,36 +265,44 @@ function ContentPanelFrame({
   }, [activeVaultNavItem, contentSelectionKey, hideSidebar, narrowContentLayout]);
 
   useEffect(() => {
-    if (!isIosDevice() || hideSidebar || settingsOpen || !narrowContentLayout) {
+    if (!iosListNavEnabled || settingsOpen) {
       return;
     }
     if (!activeVaultNavItem) {
       setNarrowContentSidebar(false);
       setNarrowSidebarInitialSelectionKey(null);
-      return;
     }
-    setNarrowSidebarInitialSelectionKey(listOnlyContentSelectionKey);
-    setNarrowContentSidebar(true);
-  }, [
-    activeVaultNavItem,
-    hideSidebar,
-    listOnlyContentSelectionKey,
-    narrowContentLayout,
-    settingsOpen,
-  ]);
+  }, [activeVaultNavItem, iosListNavEnabled, settingsOpen]);
 
   const closeNarrowContentSidebar = useCallback(() => {
     setNarrowContentSidebar(false);
     setNarrowSidebarInitialSelectionKey(null);
   }, []);
 
+  useIosHorizontalSwipe({
+    targetRef: contentPanelMainRef,
+    enabled: iosListNavEnabled && hasDetailView,
+    onSwipeRight: openNarrowContentSidebar,
+    allowSwipeRight: !narrowContentSidebar,
+    allowSwipeLeft: false,
+  });
+
+  useIosHorizontalSwipe({
+    targetRef: contentPanelMainRef,
+    enabled: iosListNavEnabled && iosSidebarOverlayOpen,
+    onSwipeLeft: closeNarrowContentSidebar,
+    allowSwipeLeft: true,
+    allowSwipeRight: false,
+  });
+
   useEffect(() => {
     return registerContentPanelLocalBack(() => {
       if (!narrowContentSidebar) return false;
+      if (iosListNavEnabled && !hasDetailView) return false;
       closeNarrowContentSidebar();
       return true;
     });
-  }, [closeNarrowContentSidebar, narrowContentSidebar]);
+  }, [closeNarrowContentSidebar, hasDetailView, iosListNavEnabled, narrowContentSidebar]);
 
   const captureSnapshot = useCallback((): ContentPanelTabSnapshot => {
     flushFocusContentSnapshot();
@@ -522,47 +561,51 @@ function ContentPanelFrame({
     linearWorkspaceEnabled,
     vaultExplorerEnabled,
   };
-  const sidebarElement =
-    narrowContentSidebar && !hideSidebar ? (
-      <div className="content-panel-narrow-sidebar">
-        {!isIosDevice() ? (
-          <div className="content-panel-narrow-sidebar-header">
-            <button
-              type="button"
-              className="content-panel-narrow-sidebar-done"
-              onClick={closeNarrowContentSidebar}
-            >
-              Done
-            </button>
-          </div>
-        ) : null}
-        <ContentPanelSidebar {...sidebarPanelProps} />
-      </div>
-    ) : !hideSidebar ? (
-      <ResizablePanel
-        side="left"
-        className="app-resizable-panel-inset"
-        storageKey={CONTENT_PANEL_SIDEBAR_WIDTH_KEY}
-        defaultWidth={240}
-        minWidth={180}
-        maxWidth={400}
-        ariaLabel="Content panel sidebar"
-        collapsed={!sidebarOpen}
-      >
-        <ContentPanelSidebar {...sidebarPanelProps} />
-      </ResizablePanel>
-    ) : null;
   const mainPanelBody = (
     <>
-      {sidebarElement}
-      {!narrowContentSidebar ? <div className="content-panel-content">{children}</div> : null}
+      {iosSidebarOverlayLayer ? (
+        <button
+          type="button"
+          className="content-panel-ios-sidebar-backdrop"
+          onClick={closeNarrowContentSidebar}
+          aria-label="Close list"
+          tabIndex={iosSidebarOverlayOpen ? 0 : -1}
+        />
+      ) : null}
+      {sidebarPresentation === "desktop-resizable" ? (
+        <ContentPanelSidebarSlot
+          presentation="desktop-resizable"
+          sidebarProps={sidebarPanelProps}
+          sidebarOpen={sidebarOpen}
+          onCloseNarrow={closeNarrowContentSidebar}
+        />
+      ) : null}
+      {sidebarPresentation === "ios-overlay" || sidebarPresentation === "narrow-done" ? (
+        <ContentPanelSidebarSlot
+          presentation={sidebarPresentation}
+          sidebarProps={sidebarPanelProps}
+          sidebarOpen={sidebarOpen}
+          onCloseNarrow={closeNarrowContentSidebar}
+        />
+      ) : null}
+      {sidebarPresentation === "ios-inline" ? (
+        <ContentPanelSidebarSlot
+          presentation="ios-inline"
+          sidebarProps={sidebarPanelProps}
+          sidebarOpen={sidebarOpen}
+          onCloseNarrow={closeNarrowContentSidebar}
+        />
+      ) : showMainContent ? (
+        <div className="content-panel-content">{children}</div>
+      ) : null}
     </>
   );
   const showContentPanelTabsBar = !isIosDevice();
   const showContentPanelBreadcrumbBar = !isIosDevice();
 
   return (
-    <div className="content-panel-shell">
+    <div className="content-panel-shell" ref={contentPanelShellRef}>
+      {isIosDevice() ? <IosPullToRefreshIndicator contentRootRef={contentPanelShellRef} /> : null}
       <ContentPanelTabShortcuts
         enabled={!settingsOpen && showContentPanelTabsBar}
         onNewTab={handleAddTab}
@@ -594,7 +637,16 @@ function ContentPanelFrame({
         {showContentPanelBreadcrumbBar ? (
           <ContentPanelBreadcrumbBar segments={displayedBreadcrumbSegments} />
         ) : null}
-        <div className="content-panel-main">
+        <div
+          ref={contentPanelMainRef}
+          className={[
+            "content-panel-main",
+            iosSidebarOverlayLayer ? "content-panel-main--ios-sidebar-active" : null,
+            iosSidebarOverlayOpen ? "content-panel-main--ios-sidebar-overlay-open" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {mainPanelBody}
         </div>
       </div>

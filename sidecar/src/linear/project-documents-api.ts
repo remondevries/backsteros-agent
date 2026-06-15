@@ -3,6 +3,8 @@ import {
   LINEAR_MEETING_DOCUMENT_ICON,
   normalizeLinearDocumentIcon,
 } from "./linear-document-icons.ts";
+import { cachedLinearList, linearListCacheKeys } from "./list-cache.ts";
+import { invalidateLinearDocumentListCaches } from "./list-cache-invalidate.ts";
 import { fetchLinearProjectContext } from "./project-context.ts";
 import { linearGraphqlRequest } from "./graphql.ts";
 
@@ -55,12 +57,16 @@ const DOCUMENT_DETAIL_FIELDS = `
   content
 `;
 
-const PROJECT_DOCUMENTS_QUERY = `
-  query BacksterProjectLinearDocuments($projectId: String!) {
+const PROJECT_DOCUMENTS_PAGE_QUERY = `
+  query BacksterProjectLinearDocumentsPage($projectId: String!, $after: String, $first: Int!) {
     project(id: $projectId) {
-      documents(first: 100, includeArchived: false) {
+      documents(first: $first, after: $after, includeArchived: false, orderBy: updatedAt) {
         nodes {
           ${DOCUMENT_LIST_FIELDS}
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
         }
       }
     }
@@ -263,21 +269,52 @@ const WORKSPACE_DOCUMENTS_PAGE_QUERY = `
   }
 `;
 
+const PAGE_SIZE = 100;
+const MAX_PAGES = 10;
+const WORKSPACE_ICON_MAX_PAGES = 20;
+
 export async function fetchLinearApiProjectDocuments(
   projectId: string,
+  options?: { force?: boolean },
 ): Promise<LinearApiDocument[]> {
   const id = projectId.trim();
   if (!id) return [];
 
-  const data = await linearGraphqlRequest<{
-    project?: {
-      documents?: { nodes?: GraphqlDocumentNode[] } | null;
-    } | null;
-  }>(PROJECT_DOCUMENTS_QUERY, { projectId: id });
+  return cachedLinearList(
+    linearListCacheKeys.projectApiDocuments(id),
+    async () => {
+      const documents = new Map<string, LinearApiDocument>();
+      let after: string | undefined;
 
-  return (data.project?.documents?.nodes ?? [])
-    .map((node) => normalizeDocument(node, { id, name: undefined }))
-    .filter((document): document is LinearApiDocument => document != null);
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const data = await linearGraphqlRequest<{
+          project?: {
+            documents?: {
+              nodes?: GraphqlDocumentNode[];
+              pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+            } | null;
+          } | null;
+        }>(PROJECT_DOCUMENTS_PAGE_QUERY, { projectId: id, first: PAGE_SIZE, after });
+
+        const connection = data.project?.documents;
+
+        for (const node of connection?.nodes ?? []) {
+          const document = normalizeDocument(node, { id, name: undefined });
+          if (document) {
+            documents.set(document.id, document);
+          }
+        }
+
+        if (!connection?.pageInfo?.hasNextPage) break;
+        const nextCursor = connection.pageInfo.endCursor?.trim();
+        if (!nextCursor) break;
+        after = nextCursor;
+      }
+
+      return [...documents.values()];
+    },
+    { force: options?.force },
+  );
 }
 
 export async function fetchLinearApiDocumentById(
@@ -295,10 +332,6 @@ export async function fetchLinearApiDocumentById(
   if (!document) return null;
   return enrichDocumentTeamFromProject(document);
 }
-
-const PAGE_SIZE = 100;
-const MAX_PAGES = 10;
-const WORKSPACE_ICON_MAX_PAGES = 20;
 
 async function fetchLinearApiWorkspaceDocumentsPage(
   after: string | undefined,
@@ -322,33 +355,49 @@ async function fetchLinearApiWorkspaceDocumentsPage(
 }
 
 /** Workspace-wide documents whose Linear `icon` matches exactly (Linear has no icon DocumentFilter). */
-export async function fetchLinearApiDocumentsByIcon(icon: string): Promise<LinearApiDocument[]> {
+export async function fetchLinearApiDocumentsByIcon(
+  icon: string,
+  options?: { force?: boolean },
+): Promise<LinearApiDocument[]> {
   const targetIcon = icon.trim();
   if (!targetIcon) return [];
 
-  const documents = new Map<string, LinearApiDocument>();
-  let after: string | undefined;
+  const cacheKey =
+    targetIcon === LINEAR_MEETING_DOCUMENT_ICON
+      ? linearListCacheKeys.meetingDocuments()
+      : `documents-by-icon:${targetIcon}`;
 
-  for (let page = 0; page < WORKSPACE_ICON_MAX_PAGES; page++) {
-    const pageResult = await fetchLinearApiWorkspaceDocumentsPage(after);
+  return cachedLinearList(
+    cacheKey,
+    async () => {
+      const documents = new Map<string, LinearApiDocument>();
+      let after: string | undefined;
 
-    for (const node of pageResult.nodes) {
-      const document = normalizeDocument(node);
-      if (document && linearDocumentIconMatches(document.icon, targetIcon)) {
-        documents.set(document.id, document);
+      for (let page = 0; page < WORKSPACE_ICON_MAX_PAGES; page++) {
+        const pageResult = await fetchLinearApiWorkspaceDocumentsPage(after);
+
+        for (const node of pageResult.nodes) {
+          const document = normalizeDocument(node);
+          if (document && linearDocumentIconMatches(document.icon, targetIcon)) {
+            documents.set(document.id, document);
+          }
+        }
+
+        if (!pageResult.hasNextPage) break;
+        if (!pageResult.endCursor) break;
+        after = pageResult.endCursor;
       }
-    }
 
-    if (!pageResult.hasNextPage) break;
-    if (!pageResult.endCursor) break;
-    after = pageResult.endCursor;
-  }
-
-  return [...documents.values()];
+      return [...documents.values()];
+    },
+    { force: options?.force },
+  );
 }
 
-export async function fetchLinearApiMeetingDocuments(): Promise<LinearApiDocument[]> {
-  return fetchLinearApiDocumentsByIcon(LINEAR_MEETING_DOCUMENT_ICON);
+export async function fetchLinearApiMeetingDocuments(options?: {
+  force?: boolean;
+}): Promise<LinearApiDocument[]> {
+  return fetchLinearApiDocumentsByIcon(LINEAR_MEETING_DOCUMENT_ICON, options);
 }
 
 /** Meeting documents (`Calendar` icon) attached to a single Linear project. */
@@ -390,37 +439,46 @@ export async function fetchLinearApiWorkspaceDocuments(): Promise<LinearApiDocum
   });
 }
 
-export async function fetchLinearApiTeamDocuments(teamId: string): Promise<LinearApiDocument[]> {
+export async function fetchLinearApiTeamDocuments(
+  teamId: string,
+  options?: { force?: boolean },
+): Promise<LinearApiDocument[]> {
   const id = teamId.trim();
   if (!id) return [];
 
-  const documents = new Map<string, LinearApiDocument>();
-  let after: string | undefined;
+  return cachedLinearList(
+    linearListCacheKeys.teamApiDocuments(id),
+    async () => {
+      const documents = new Map<string, LinearApiDocument>();
+      let after: string | undefined;
 
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const data = await linearGraphqlRequest<{
-      documents?: {
-        nodes?: GraphqlDocumentNode[];
-        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-      } | null;
-    }>(TEAM_DOCUMENTS_QUERY, { teamId: id, first: PAGE_SIZE, after });
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const data = await linearGraphqlRequest<{
+          documents?: {
+            nodes?: GraphqlDocumentNode[];
+            pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+          } | null;
+        }>(TEAM_DOCUMENTS_QUERY, { teamId: id, first: PAGE_SIZE, after });
 
-    const connection = data.documents;
+        const connection = data.documents;
 
-    for (const node of connection?.nodes ?? []) {
-      const document = normalizeDocument(node);
-      if (document) {
-        documents.set(document.id, document);
+        for (const node of connection?.nodes ?? []) {
+          const document = normalizeDocument(node);
+          if (document) {
+            documents.set(document.id, document);
+          }
+        }
+
+        if (!connection?.pageInfo?.hasNextPage) break;
+        const nextCursor = connection.pageInfo.endCursor?.trim();
+        if (!nextCursor) break;
+        after = nextCursor;
       }
-    }
 
-    if (!connection?.pageInfo?.hasNextPage) break;
-    const nextCursor = connection.pageInfo.endCursor?.trim();
-    if (!nextCursor) break;
-    after = nextCursor;
-  }
-
-  return [...documents.values()];
+      return [...documents.values()];
+    },
+    { force: options?.force },
+  );
 }
 
 export async function createLinearApiDocument(
@@ -452,6 +510,7 @@ export async function createLinearApiDocument(
     throw new Error("Linear returned no document");
   }
 
+  invalidateLinearDocumentListCaches();
   return document;
 }
 
@@ -485,6 +544,7 @@ export async function createLinearApiTeamDocument(
     throw new Error("Linear returned no document");
   }
 
+  invalidateLinearDocumentListCaches();
   return document;
 }
 
@@ -575,4 +635,6 @@ export async function deleteLinearApiDocument(documentId: string): Promise<void>
   if (!response.documentDelete?.success) {
     throw new Error("Linear rejected document deletion");
   }
+
+  invalidateLinearDocumentListCaches();
 }

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createLinearTeamMeetingDocument } from "../lib/api";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
-import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
+import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useLinearMeetingDocuments } from "../hooks/useLinearMeetingDocuments";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
 import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
@@ -54,7 +53,6 @@ export function LinearMeetingsExplorer({
   enabled: boolean;
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
-  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [creatingDocument, setCreatingDocument] = useState(false);
@@ -147,19 +145,12 @@ export function LinearMeetingsExplorer({
     return groupedDocuments[0]?.entries[0] ?? null;
   }, [collapsedGroups, groupedDocuments]);
 
-  useEffect(() => {
-    if (listFirstNavigationLayout || !enabled || loading || !firstVisibleDocument || activeLinearDocument) {
-      return;
-    }
-    openDocument(firstVisibleDocument);
-  }, [
-    activeLinearDocument,
+  useAutoOpenFirstListItem({
     enabled,
-    firstVisibleDocument,
-    listFirstNavigationLayout,
-    loading,
-    openDocument,
-  ]);
+    loading: enabled && loading && documents.length === 0,
+    shouldOpen: Boolean(firstVisibleDocument) && !activeLinearDocument,
+    onOpenFirst: () => openDocument(firstVisibleDocument!),
+  });
 
   const listNavItems = useMemo(() => {
     const items: Array<{ id: string; select: () => void }> = [];
@@ -193,7 +184,7 @@ export function LinearMeetingsExplorer({
 
   const showList = enabled && !loading && !error;
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled
       ? [
           {

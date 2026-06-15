@@ -25,6 +25,7 @@ export const REQUEST_CACHE_KEYS = {
   linearCustomersAll: "linear-customers-all",
   linearProjectsAll: "linear-projects-all",
   linearProjectStatuses: "linear-project-statuses",
+  linearMeetingDocuments: "linear-meeting-documents",
   vaultSearchIndex: "vault-search-index",
 } as const;
 
@@ -34,6 +35,7 @@ export const SETTINGS_CACHE_TTL_MS = 60_000;
 export const VAULT_LIST_CACHE_TTL_MS = 20_000;
 export const LINEAR_PROJECT_CACHE_TTL_MS = 60_000;
 export const LINEAR_ISSUES_CACHE_TTL_MS = 45_000;
+export const LINEAR_LIST_CACHE_TTL_MS = 45_000;
 
 export function cacheKeyLinearOverview(projectId: string) {
   return `linear-overview:${projectId}`;
@@ -41,6 +43,26 @@ export function cacheKeyLinearOverview(projectId: string) {
 
 export function cacheKeyLinearIssues(projectId: string) {
   return `linear-issues:${projectId}`;
+}
+
+export function cacheKeyLinearProjectDocuments(projectId: string) {
+  return `linear-project-documents:${projectId}`;
+}
+
+export function cacheKeyLinearTeamDocuments(teamId: string, dailyOnly: boolean) {
+  return `linear-team-documents:${teamId}:${dailyOnly ? "daily" : "all"}`;
+}
+
+export function cacheKeyLinearTeamIssues(teamId: string, rootOnly: boolean) {
+  return `linear-team-issues:${teamId}:${rootOnly ? "root" : "all"}`;
+}
+
+export function cacheKeyLinearTeamProjects(teamId: string) {
+  return `linear-team-projects:${teamId}`;
+}
+
+export function cacheKeyLinearMeetingDocuments() {
+  return "linear-meeting-documents";
 }
 
 export function cacheKeyVaultDirectory(path: string) {
@@ -96,6 +118,15 @@ export function invalidateDashboardRequestCache(): void {
   invalidateRequestCache(REQUEST_CACHE_KEYS.linearTeams);
   invalidateRequestCache(REQUEST_CACHE_KEYS.linearCustomersAll);
   invalidateRequestCache(REQUEST_CACHE_KEYS.linearProjectsAll);
+}
+
+export function invalidateLinearContentListCaches(): void {
+  invalidateRequestCacheByPrefix("linear-project-documents:");
+  invalidateRequestCacheByPrefix("linear-team-documents:");
+  invalidateRequestCacheByPrefix("linear-team-issues:");
+  invalidateRequestCacheByPrefix("linear-team-projects:");
+  invalidateRequestCache(REQUEST_CACHE_KEYS.linearMeetingDocuments);
+  invalidateRequestCacheByPrefix("linear-issues:");
 }
 
 export async function cachedRequest<T>(

@@ -2,7 +2,15 @@ import { useEffect, useState } from "react";
 import { fetchDocumentPdfBlob } from "../../lib/api";
 import { DocumentPdfViewer } from "./DocumentPdfViewer";
 
-export function DocumentPdfPreviewPanel({ url }: { url: string }) {
+export function DocumentPdfPreviewPanel({
+  url,
+  iosFullscreen = false,
+  onClose,
+}: {
+  url: string;
+  iosFullscreen?: boolean;
+  onClose?: () => void;
+}) {
   const [file, setFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +53,9 @@ export function DocumentPdfPreviewPanel({ url }: { url: string }) {
       {!loading && error ? (
         <div className="document-pdf-viewer-status document-pdf-viewer-status--error">{error}</div>
       ) : null}
-      {!loading && file ? <DocumentPdfViewer file={file} /> : null}
+      {!loading && file ? (
+        <DocumentPdfViewer file={file} iosFullscreen={iosFullscreen} onClose={onClose} />
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { linearGraphqlRequest } from "./graphql.ts";
+import { cachedLinearList, invalidateLinearListCacheByPrefix, linearListCacheKeys } from "./list-cache.ts";
 
 export type LinearTeamProjectSummary = {
   id: string;
@@ -30,25 +31,34 @@ function normalizeTeamProjectNode(node: GraphqlTeamProjectNode): LinearTeamProje
   return { id, name };
 }
 
-export async function fetchLinearTeamProjects(teamId: string): Promise<LinearTeamProjectSummary[]> {
+export async function fetchLinearTeamProjects(
+  teamId: string,
+  options?: { force?: boolean },
+): Promise<LinearTeamProjectSummary[]> {
   const id = teamId.trim();
   if (!id) return [];
 
-  const data = await linearGraphqlRequest<{
-    team?: {
-      projects?: {
-        nodes?: GraphqlTeamProjectNode[] | null;
-      } | null;
-    } | null;
-  }>(TEAM_PROJECTS_QUERY, { teamId: id });
+  return cachedLinearList(
+    linearListCacheKeys.teamProjects(id),
+    async () => {
+      const data = await linearGraphqlRequest<{
+        team?: {
+          projects?: {
+            nodes?: GraphqlTeamProjectNode[] | null;
+          } | null;
+        } | null;
+      }>(TEAM_PROJECTS_QUERY, { teamId: id });
 
-  const projects: LinearTeamProjectSummary[] = [];
-  for (const node of data.team?.projects?.nodes ?? []) {
-    const project = normalizeTeamProjectNode(node);
-    if (project) projects.push(project);
-  }
+      const projects: LinearTeamProjectSummary[] = [];
+      for (const node of data.team?.projects?.nodes ?? []) {
+        const project = normalizeTeamProjectNode(node);
+        if (project) projects.push(project);
+      }
 
-  return projects.sort((left, right) => left.name.localeCompare(right.name));
+      return projects.sort((left, right) => left.name.localeCompare(right.name));
+    },
+    { force: options?.force },
+  );
 }
 
 const PROJECT_CREATE_MUTATION = `
@@ -106,5 +116,6 @@ export async function createLinearTeamProject(
     throw new Error("Failed to create folder");
   }
 
+  invalidateLinearListCacheByPrefix("team-projects:");
   return project;
 }

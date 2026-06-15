@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LinearStatusIcon } from "../chat/LinearStatusIcon";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
-import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
+import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
@@ -55,7 +54,6 @@ export function LinearLettersExplorer({
   enabled: boolean;
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
-  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
@@ -143,19 +141,12 @@ export function LinearLettersExplorer({
     return groupedDocuments[0]?.documents[0] ?? null;
   }, [collapsedGroups, groupedDocuments]);
 
-  useEffect(() => {
-    if (listFirstNavigationLayout || !enabled || loading || !firstVisibleDocument || activeLinearDocument) {
-      return;
-    }
-    openDocument(firstVisibleDocument);
-  }, [
-    activeLinearDocument,
+  useAutoOpenFirstListItem({
     enabled,
-    firstVisibleDocument,
-    listFirstNavigationLayout,
     loading,
-    openDocument,
-  ]);
+    shouldOpen: Boolean(firstVisibleDocument) && !activeLinearDocument,
+    onOpenFirst: () => openDocument(firstVisibleDocument!),
+  });
 
   const handleCreateDocument = useCallback(() => {
     if (!enabled) return;
@@ -195,7 +186,7 @@ export function LinearLettersExplorer({
 
   const showList = enabled && !loading && !error;
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled
       ? [
           {

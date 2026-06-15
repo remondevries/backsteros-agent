@@ -4,6 +4,14 @@ import type { EditorView } from "@tiptap/pm/view";
 
 const BLOCK_CARET_WIDTH_PX = 3;
 
+function getVisualViewportOffset(): { offsetX: number; offsetY: number } {
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    return { offsetX: 0, offsetY: 0 };
+  }
+  return { offsetX: viewport.offsetLeft, offsetY: viewport.offsetTop };
+}
+
 function collectScrollTargets(editorView: EditorView): Array<HTMLElement | Window> {
   const targets = new Set<HTMLElement | Window>();
   targets.add(window);
@@ -35,10 +43,11 @@ function updateBlockCaretPosition(editorView: EditorView, caret: HTMLElement) {
 
   const coords = editorView.coordsAtPos(from, -1);
   const height = Math.max(coords.bottom - coords.top, 14);
+  const { offsetX, offsetY } = getVisualViewportOffset();
 
   caret.hidden = false;
-  caret.style.left = `${coords.left}px`;
-  caret.style.top = `${coords.top}px`;
+  caret.style.left = `${coords.left + offsetX}px`;
+  caret.style.top = `${coords.top + offsetY}px`;
   caret.style.height = `${height}px`;
   caret.style.width = `${BLOCK_CARET_WIDTH_PX}px`;
 }
@@ -72,6 +81,8 @@ function createBlockCaretPlugin() {
         target.addEventListener("scroll", handleScroll, { passive: true });
       }
       window.addEventListener("resize", handleScroll, { passive: true });
+      window.visualViewport?.addEventListener("resize", handleScroll, { passive: true });
+      window.visualViewport?.addEventListener("scroll", handleScroll, { passive: true });
 
       scheduleUpdate();
 
@@ -86,6 +97,8 @@ function createBlockCaretPlugin() {
             target.removeEventListener("scroll", handleScroll);
           }
           window.removeEventListener("resize", handleScroll);
+          window.visualViewport?.removeEventListener("resize", handleScroll);
+          window.visualViewport?.removeEventListener("scroll", handleScroll);
           caret.remove();
           root?.classList.remove("tiptap-editor-root--block-caret");
         },

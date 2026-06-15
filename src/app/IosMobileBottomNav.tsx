@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  IOS_BOTTOM_NAV_MORE_ITEM_IDS,
+  IOS_BOTTOM_NAV_TRAY_ITEM_IDS,
+  isIosBottomNavMoreItem,
+} from "../lib/iosNavConfig";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 import { isIosDevice } from "../platform/iosStandalone";
 import { useContentPanelChrome } from "./contentPanelChromeContext";
-import {
-  SidebarContactsIcon,
-  SidebarDailyIcon,
-  SidebarInboxIcon,
-  SidebarLettersIcon,
-  SidebarMeetingsIcon,
-  SidebarMoreIcon,
-  SidebarOrganizationsIcon,
-  SidebarProjectsIcon,
-  SidebarWorkoutsIcon,
-} from "./SidebarNavIcons";
+import { sidebarNavItemIcon } from "./sidebarNavConfig";
+import { SidebarMoreIcon } from "./SidebarNavIcons";
 
 type MobileNavTrayItem =
   | {
@@ -26,32 +22,20 @@ type MobileNavTrayItem =
       icon: ReactNode;
     };
 
-type MoreMenuItem = {
-  id: SidebarNavItemId;
-  label: string;
-  icon: ReactNode;
-};
-
 const MOBILE_NAV_TRAY_ITEMS: MobileNavTrayItem[] = [
-  { id: "daily", label: sidebarNavItemLabel("daily"), icon: <SidebarDailyIcon /> },
-  { id: "meetings", label: sidebarNavItemLabel("meetings"), icon: <SidebarMeetingsIcon /> },
-  { id: "projects", label: sidebarNavItemLabel("projects"), icon: <SidebarProjectsIcon /> },
-  { id: "letters", label: sidebarNavItemLabel("letters"), icon: <SidebarLettersIcon /> },
+  ...IOS_BOTTOM_NAV_TRAY_ITEM_IDS.map((id) => ({
+    id,
+    label: sidebarNavItemLabel(id),
+    icon: sidebarNavItemIcon(id),
+  })),
   { id: "more", label: "More", icon: <SidebarMoreIcon /> },
 ];
 
-const MORE_MENU_ITEMS: MoreMenuItem[] = [
-  { id: "inbox", label: sidebarNavItemLabel("inbox"), icon: <SidebarInboxIcon /> },
-  { id: "workouts", label: sidebarNavItemLabel("workouts"), icon: <SidebarWorkoutsIcon /> },
-  {
-    id: "organizations",
-    label: sidebarNavItemLabel("organizations"),
-    icon: <SidebarOrganizationsIcon />,
-  },
-  { id: "contacts", label: sidebarNavItemLabel("contacts"), icon: <SidebarContactsIcon /> },
-];
-
-const MORE_MENU_ITEM_IDS = MORE_MENU_ITEMS.map((item) => item.id);
+const MORE_MENU_ITEMS = IOS_BOTTOM_NAV_MORE_ITEM_IDS.map((id) => ({
+  id,
+  label: sidebarNavItemLabel(id),
+  icon: sidebarNavItemIcon(id),
+}));
 
 function IosMobileQuickActionPlusIcon() {
   return (
@@ -111,8 +95,7 @@ export function IosMobileBottomNav({
         <div className="ios-mobile-bottom-nav-bar" role="toolbar" aria-label="Primary">
           {MOBILE_NAV_TRAY_ITEMS.map((item) => {
             if (item.id === "more") {
-              const isMoreSectionActive =
-                activeVaultNavItem !== null && MORE_MENU_ITEM_IDS.includes(activeVaultNavItem);
+              const isMoreSectionActive = isIosBottomNavMoreItem(activeVaultNavItem);
               return (
                 <div
                   key={item.id}
@@ -206,40 +189,25 @@ export function IosMobileBottomNav({
             );
           })}
         </div>
-        <div className="ios-mobile-bottom-nav-actions" aria-label="Quick actions">
-          {quickActions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              className="ios-mobile-bottom-nav-action ios-mobile-bottom-nav-action--quick"
-              aria-label={action.label}
-              title={action.label}
-              disabled={action.disabled}
-              onClick={action.onClick}
-            >
-              <span className="ios-mobile-bottom-nav-action-icon" aria-hidden="true">
-                <IosMobileQuickActionPlusIcon />
-              </span>
-            </button>
-          ))}
-          <button
-            type="button"
-            className={[
-              "ios-mobile-bottom-nav-action",
-              "ios-mobile-bottom-nav-action--anchor",
-              quickActions.length === 0 ? "ios-mobile-bottom-nav-action--placeholder" : null,
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            aria-label="Quick action menu"
-            aria-disabled={quickActions.length === 0 ? true : undefined}
-            tabIndex={quickActions.length === 0 ? -1 : undefined}
-          >
-            <span className="ios-mobile-bottom-nav-action-icon" aria-hidden="true">
-              <SidebarMoreIcon />
-            </span>
-          </button>
-        </div>
+        {quickActions.length > 0 ? (
+          <div className="ios-mobile-bottom-nav-actions" aria-label="Quick actions">
+            {quickActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                className="ios-mobile-bottom-nav-action ios-mobile-bottom-nav-action--quick"
+                aria-label={action.label}
+                title={action.label}
+                disabled={action.disabled}
+                onClick={action.onClick}
+              >
+                <span className="ios-mobile-bottom-nav-action-icon" aria-hidden="true">
+                  <IosMobileQuickActionPlusIcon />
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </nav>
   );

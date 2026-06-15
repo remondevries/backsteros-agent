@@ -42,8 +42,8 @@ export function useLinearProjectDocuments({
       setError(null);
       try {
         const result = projectId
-          ? await fetchLinearProjectDocuments(projectId)
-          : await fetchLinearTeamDocuments(teamId!, { dailyOnly });
+          ? await fetchLinearProjectDocuments(projectId, { force: isBackgroundRefresh })
+          : await fetchLinearTeamDocuments(teamId!, { dailyOnly, force: isBackgroundRefresh });
 
         if (result.error) {
           setError(result.error);

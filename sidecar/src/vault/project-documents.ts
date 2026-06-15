@@ -108,13 +108,14 @@ function mapLinearDocumentToRecord(
 
 export async function fetchLinearProjectDocuments(
   projectId: string,
+  options?: { force?: boolean },
 ): Promise<ProjectDocumentRecord[]> {
   const id = projectId.trim();
   if (!id) return [];
 
   const [{ projectName }, linearDocuments] = await Promise.all([
     resolveProjectContext(id),
-    fetchLinearApiProjectDocuments(id),
+    fetchLinearApiProjectDocuments(id, options),
   ]);
 
   return linearDocuments
@@ -124,12 +125,12 @@ export async function fetchLinearProjectDocuments(
 
 export async function fetchLinearTeamDocuments(
   teamId: string,
-  options?: { dailyOnly?: boolean },
+  options?: { dailyOnly?: boolean; force?: boolean },
 ): Promise<ProjectDocumentRecord[]> {
   const id = teamId.trim();
   if (!id) return [];
 
-  let linearDocuments = await fetchLinearApiTeamDocuments(id);
+  let linearDocuments = await fetchLinearApiTeamDocuments(id, options);
   if (options?.dailyOnly) {
     linearDocuments = linearDocuments.filter((document) =>
       isDailyJournalDocumentTitle(document.title),
@@ -146,9 +147,11 @@ export async function fetchLinearTeamDocuments(
     .sort(compareDailyJournalDocumentsNewestFirst);
 }
 
-export async function fetchLinearMeetingDocuments(): Promise<ProjectDocumentRecord[]> {
+export async function fetchLinearMeetingDocuments(options?: {
+  force?: boolean;
+}): Promise<ProjectDocumentRecord[]> {
   const linearDocuments = await enrichLinearApiDocumentsTeamFromProjects(
-    await fetchLinearApiMeetingDocuments(),
+    await fetchLinearApiMeetingDocuments(options),
   );
   return linearDocuments
     .map((document) =>

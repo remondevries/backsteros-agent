@@ -26,7 +26,7 @@ export function useLinearTeamProjects(teamId: string | null, enabled: boolean) {
       setError(null);
 
       try {
-        const result = await fetchLinearTeamProjects(teamId);
+        const result = await fetchLinearTeamProjects(teamId, { force: isBackgroundRefresh });
         if (result.error) {
           setError(result.error);
           setProjects([]);

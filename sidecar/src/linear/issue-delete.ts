@@ -1,4 +1,5 @@
 import { linearGraphqlRequest } from "./graphql.ts";
+import { invalidateLinearIssueListCaches } from "./list-cache-invalidate.ts";
 
 const ISSUE_CHILDREN_QUERY = `
   query BacksterIssueChildren($id: String!) {
@@ -56,4 +57,5 @@ export async function deleteLinearIssue(issueId: string): Promise<void> {
   }
 
   await deleteLinearIssueMutation(id);
+  invalidateLinearIssueListCaches();
 }

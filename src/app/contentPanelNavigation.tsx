@@ -287,6 +287,8 @@ type ContentPanelNavigationContextValue = {
   watchersPanelMode: LinearProjectCollectionMode;
   setWatchersPanelMode: (mode: LinearProjectCollectionMode) => void;
   restoreContentPanelTabSnapshot: (snapshot: ContentPanelTabSnapshot) => void;
+  captureNavAreaContentSnapshot: () => ContentPanelTabSnapshot;
+  resetNavAreaContent: () => void;
   linearIssueRefreshNonce: number;
   requestLinearIssueRefresh: () => void;
   resetProjectsOverview: () => void;
@@ -459,6 +461,31 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
     getFocusContentController()?.setSnapshot(snapshot.focusContentSnapshot);
   }, [clearChrome, linearSelection]);
 
+  const captureNavAreaContentSnapshot = useCallback((): ContentPanelTabSnapshot => {
+    getFocusContentController()?.flush();
+    const focusContentSnapshot = getFocusContentController()?.getSnapshot() ?? null;
+    return {
+      sidebarSegments: sidebarSegments.map((segment) => ({ ...segment })),
+      linearSelection: linearSelection ? { ...linearSelection } : null,
+      activeVaultDocument: activeVaultDocument ? { ...activeVaultDocument } : null,
+      activeLinearDocument: activeLinearDocument ? { ...activeLinearDocument } : null,
+      activeLinearIssue: activeLinearIssue ? { ...activeLinearIssue } : null,
+      focusContentSnapshot: focusContentSnapshot ? { ...focusContentSnapshot } : null,
+      linearWorkspaceView,
+      issuesPanelMode,
+      watchersPanelMode,
+    };
+  }, [
+    activeLinearDocument,
+    activeLinearIssue,
+    activeVaultDocument,
+    issuesPanelMode,
+    linearSelection,
+    linearWorkspaceView,
+    sidebarSegments,
+    watchersPanelMode,
+  ]);
+
   const requestLinearIssueRefresh = useCallback(() => {
     setLinearIssueRefreshNonce((current) => current + 1);
   }, []);
@@ -479,6 +506,11 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
     setWatchersPanelModeState("board");
     clearChrome();
   }, [clearChrome]);
+
+  const resetNavAreaContent = useCallback(() => {
+    clearActiveVaultDocument();
+    resetProjectsOverview();
+  }, [clearActiveVaultDocument, resetProjectsOverview]);
 
   const openLinearProjectDocument = useCallback(
     (document: ActiveLinearDocument, selection: LinearWorkspaceSelection | null) => {
@@ -555,6 +587,8 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       watchersPanelMode,
       setWatchersPanelMode,
       restoreContentPanelTabSnapshot,
+      captureNavAreaContentSnapshot,
+      resetNavAreaContent,
       linearIssueRefreshNonce,
       requestLinearIssueRefresh,
       resetProjectsOverview,
@@ -577,6 +611,8 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       watchersPanelMode,
       requestLinearIssueRefresh,
       resetProjectsOverview,
+      resetNavAreaContent,
+      captureNavAreaContentSnapshot,
       openLinearProjectDocument,
       restoreContentPanelTabSnapshot,
       setActiveLinearDocument,

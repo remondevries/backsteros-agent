@@ -46,7 +46,10 @@ export function useLinearTeamIssues(
       }
       setError(null);
       try {
-        const result = await fetchLinearTeamIssues(teamId, { excludeSubIssues });
+        const result = await fetchLinearTeamIssues(teamId, {
+          excludeSubIssues,
+          force: isBackgroundRefresh,
+        });
         if (result.error) {
           setError(result.error);
           setIssues([]);
@@ -91,7 +94,7 @@ export function useLinearTeamIssues(
         ),
       );
     });
-  }, [applyIssueFilter]);
+  }, [applyIssueFilter, refresh]);
 
   const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);
 

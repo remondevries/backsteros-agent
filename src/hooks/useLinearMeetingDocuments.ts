@@ -27,7 +27,7 @@ export function useLinearMeetingDocuments({ enabled }: { enabled: boolean }) {
       }
       setError(null);
       try {
-        const result = await fetchLinearMeetingDocuments();
+        const result = await fetchLinearMeetingDocuments({ force: isBackgroundRefresh });
 
         if (result.error) {
           setError(result.error);

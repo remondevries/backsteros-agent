@@ -6,8 +6,7 @@ import {
   createLinearTeamProject,
 } from "../lib/api";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
-import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
+import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamProjects } from "../hooks/useLinearTeamProjects";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
@@ -53,7 +52,6 @@ export function LinearKnowledgeBaseExplorer({
   enabled: boolean;
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
-  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
@@ -209,27 +207,15 @@ export function LinearKnowledgeBaseExplorer({
     [handleCreateDocument, handleCreateFolder],
   );
 
-  useEffect(() => {
-    if (
-      listFirstNavigationLayout ||
-      !enabled ||
-      loading ||
-      !selectedProjectKey ||
-      visibleDocuments.length === 0 ||
-      activeLinearDocument
-    ) {
-      return;
-    }
-    openDocument(visibleDocuments[0]!);
-  }, [
-    activeLinearDocument,
+  useAutoOpenFirstListItem({
     enabled,
-    listFirstNavigationLayout,
-    loading,
-    openDocument,
-    selectedProjectKey,
-    visibleDocuments,
-  ]);
+    loading: enabled && loading && knowledgeBaseDocuments.length === 0,
+    shouldOpen:
+      Boolean(selectedProjectKey) &&
+      visibleDocuments.length > 0 &&
+      !activeLinearDocument,
+    onOpenFirst: () => openDocument(visibleDocuments[0]!),
+  });
 
   useEffect(() => {
     return registerContentPanelLocalBack(() => {
@@ -299,7 +285,7 @@ export function LinearKnowledgeBaseExplorer({
       ? "No documents in this project."
       : "No folders yet.";
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled
       ? [
           {

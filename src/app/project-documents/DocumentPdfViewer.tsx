@@ -135,13 +135,21 @@ function DocumentPdfViewerSurface({
   );
 }
 
-export function DocumentPdfViewer({ file }: { file: string | Blob | ArrayBuffer }) {
+export function DocumentPdfViewer({
+  file,
+  iosFullscreen = false,
+  onClose,
+}: {
+  file: string | Blob | ArrayBuffer;
+  iosFullscreen?: boolean;
+  onClose?: () => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   useLayoutEffect(() => {
-    if (!modalOpen) return undefined;
+    if (iosFullscreen || !modalOpen) return undefined;
     setDocumentPdfModalOpen(true);
     const unregisterLocalBack = registerContentPanelLocalBack(() => {
       setModalOpen(false);
@@ -151,10 +159,10 @@ export function DocumentPdfViewer({ file }: { file: string | Blob | ArrayBuffer 
       setDocumentPdfModalOpen(false);
       unregisterLocalBack();
     };
-  }, [modalOpen]);
+  }, [iosFullscreen, modalOpen]);
 
   useEffect(() => {
-    if (!modalOpen) return undefined;
+    if (iosFullscreen || !modalOpen) return undefined;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -171,7 +179,19 @@ export function DocumentPdfViewer({ file }: { file: string | Blob | ArrayBuffer 
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [modalOpen]);
+  }, [iosFullscreen, modalOpen]);
+
+  if (iosFullscreen) {
+    return (
+      <DocumentPdfViewerSurface
+        file={file}
+        containerRef={containerRef}
+        shellClassName="document-pdf-viewer-shell--modal"
+        buttonMode="close"
+        onButtonClick={() => onClose?.()}
+      />
+    );
+  }
 
   return (
     <>

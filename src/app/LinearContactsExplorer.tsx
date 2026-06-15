@@ -13,8 +13,7 @@ import {
 } from "../lib/linearIssueDetailSeed";
 import { groupByLetter } from "../lib/alphabeticalLetterGroups";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
-import { useListFirstNavigationLayout } from "../hooks/useNarrowContentLayout";
+import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
 import {
   contentListGroupHeaderId,
@@ -64,7 +63,6 @@ export function LinearContactsExplorer({
 }) {
   const { activeLinearIssue, setActiveLinearIssue, clearActiveLinearIssue } =
     useContentPanelNavigation();
-  const listFirstNavigationLayout = useListFirstNavigationLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -147,26 +145,17 @@ export function LinearContactsExplorer({
     return letterGroups[0]?.items[0] ?? null;
   }, [collapsedGroups, letterGroups]);
 
-  useEffect(() => {
-    if (listFirstNavigationLayout || !enabled || loading || !firstVisibleIssue) {
-      return;
-    }
-    if (
-      activeLinearIssue &&
-      filteredIssues.some((issue) => issue.id === activeLinearIssue.id)
-    ) {
-      return;
-    }
-    openIssue(firstVisibleIssue);
-  }, [
-    activeLinearIssue,
+  useAutoOpenFirstListItem({
     enabled,
-    filteredIssues,
-    firstVisibleIssue,
-    listFirstNavigationLayout,
-    loading,
-    openIssue,
-  ]);
+    loading: enabled && loading && issues.length === 0,
+    shouldOpen:
+      Boolean(firstVisibleIssue) &&
+      !(
+        activeLinearIssue &&
+        filteredIssues.some((issue) => issue.id === activeLinearIssue.id)
+      ),
+    onOpenFirst: () => openIssue(firstVisibleIssue!),
+  });
 
   const handleCreateIssue = useCallback(async () => {
     if (!enabled) return;
@@ -282,7 +271,7 @@ export function LinearContactsExplorer({
 
   const showList = enabled && !loading && !error;
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled
       ? [
           {

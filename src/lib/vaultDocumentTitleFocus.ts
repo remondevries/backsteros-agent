@@ -1,3 +1,4 @@
+import { isIosDevice } from "../platform/iosStandalone";
 import { focusPageTiptapEditor } from "./tiptapEditorFocus";
 
 export type VaultDocumentTitleFocusRegistration = {
@@ -34,5 +35,10 @@ export function handleVaultDocumentTitleEnter(
 
   event.preventDefault();
   event.currentTarget.blur();
+  if (isIosDevice()) {
+    // Defer focus so iOS can settle the viewport after blurring the title field.
+    window.setTimeout(() => focusVaultDocumentBodyEditor(), 120);
+    return;
+  }
   focusVaultDocumentBodyEditor();
 }

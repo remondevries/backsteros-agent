@@ -13,7 +13,7 @@ import {
   seedLinearIssueDetailFromEntity,
 } from "../lib/linearIssueDetailSeed";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
+import { useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useBinaryContentModeShortcuts } from "../hooks/useBinaryContentModeShortcuts";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
@@ -78,6 +78,7 @@ export function LinearInboxExplorer({
   const [creatingDocument, setCreatingDocument] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const activeLinearIssueIdRef = useRef<string | null>(null);
+  const showingIssues = contentMode === "issues";
   const {
     issues,
     loading: issuesLoading,
@@ -87,7 +88,7 @@ export function LinearInboxExplorer({
     prependIssue,
     replaceIssue,
     removeIssue,
-  } = useLinearTeamIssues(teamId, enabled);
+  } = useLinearTeamIssues(teamId, enabled && showingIssues);
   const {
     documents,
     loading: documentsLoading,
@@ -97,22 +98,23 @@ export function LinearInboxExplorer({
     prependDocument,
   } = useLinearProjectDocuments({
     teamId,
-    enabled,
+    enabled: enabled && !showingIssues,
   });
 
   const handleRefresh = useCallback(() => {
-    refreshIssues();
-    refreshDocuments();
-  }, [refreshDocuments, refreshIssues]);
+    if (showingIssues) {
+      refreshIssues();
+    } else {
+      refreshDocuments();
+    }
+  }, [refreshDocuments, refreshIssues, showingIssues]);
 
   const loading =
     enabled &&
-    (issuesLoading || documentsLoading) &&
-    issues.length === 0 &&
-    documents.length === 0;
-  const refreshing = issuesRefreshing || documentsRefreshing;
-  const error = issuesError ?? documentsError;
-  const showingIssues = contentMode === "issues";
+    (showingIssues ? issuesLoading : documentsLoading) &&
+    (showingIssues ? issues.length === 0 : documents.length === 0);
+  const refreshing = showingIssues ? issuesRefreshing : documentsRefreshing;
+  const error = showingIssues ? issuesError : documentsError;
 
   useBinaryContentModeShortcuts({
     enabled,
@@ -370,7 +372,7 @@ export function LinearInboxExplorer({
       ? "No matching documents."
       : "No inbox documents yet.";
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled
       ? [
           {

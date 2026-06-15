@@ -22,14 +22,21 @@ import { notifyLinearSessionExpired } from "./linearSessionExpired";
 import {
   cachedRequest,
   cacheKeyLinearIssues,
+  cacheKeyLinearMeetingDocuments,
   cacheKeyLinearOverview,
+  cacheKeyLinearProjectDocuments,
+  cacheKeyLinearTeamDocuments,
+  cacheKeyLinearTeamIssues,
+  cacheKeyLinearTeamProjects,
   cacheKeyVaultDirectory,
   cacheKeyVaultDocument,
   DASHBOARD_CACHE_TTL_MS,
   HEALTH_CACHE_TTL_MS,
+  invalidateLinearContentListCaches,
   invalidateRequestCache,
   invalidateVaultContentCaches,
   LINEAR_ISSUES_CACHE_TTL_MS,
+  LINEAR_LIST_CACHE_TTL_MS,
   LINEAR_PROJECT_CACHE_TTL_MS,
   peekCached,
   REQUEST_CACHE_KEYS,
@@ -40,6 +47,7 @@ import {
 export {
   DASHBOARD_CACHE_TTL_MS,
   invalidateDashboardRequestCache,
+  invalidateLinearContentListCaches,
   invalidateRequestCache,
   invalidateVaultContentCaches,
   peekCached,
@@ -76,8 +84,20 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
+const LINEAR_LIST_REQUEST_TIMEOUT_MS = 30_000;
 const HEALTH_REQUEST_TIMEOUT_MS = 8_000;
 const SETTINGS_REQUEST_TIMEOUT_MS = 15_000;
+
+function linearListQuery(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      search.set(key, value);
+    }
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
 
 function sidecarConnectionHint(baseUrl: string, message: string): string {
   if (message.includes("npm run")) {
@@ -1232,7 +1252,13 @@ export async function fetchLinearProjectIssues(projectId: string, options?: { fo
         issues: LinearIssueEntity[];
         workflowStates: { id: string; name: string; type: string; color?: string; position?: number }[];
         error?: string;
-      }>(`/linear/projects/${encodeURIComponent(projectId)}/issues`),
+      }>(
+        `/linear/projects/${encodeURIComponent(projectId)}/issues${linearListQuery({
+          force: options?.force ? "1" : undefined,
+        })}`,
+        undefined,
+        LINEAR_LIST_REQUEST_TIMEOUT_MS,
+      ),
     { ttlMs: LINEAR_ISSUES_CACHE_TTL_MS, force: options?.force },
   );
 }
@@ -1474,33 +1500,67 @@ export async function deleteLinearIssueCommentThread(issueId: string, threadId: 
 }
 
 export async function deleteLinearIssue(issueId: string) {
-  return request<{ success: boolean; error?: string }>(
+  const result = await request<{ success: boolean; error?: string }>(
     `/linear/issues/${encodeURIComponent(issueId)}`,
     {
       method: "DELETE",
     },
   );
+  if (result.success) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
-export async function fetchLinearProjectDocuments(projectId: string) {
-  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
-    `/linear/projects/${encodeURIComponent(projectId)}/documents`,
+export async function fetchLinearProjectDocuments(
+  projectId: string,
+  options?: { force?: boolean },
+) {
+  return cachedRequest(
+    cacheKeyLinearProjectDocuments(projectId),
+    () =>
+      request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+        `/linear/projects/${encodeURIComponent(projectId)}/documents${linearListQuery({
+          force: options?.force ? "1" : undefined,
+        })}`,
+        undefined,
+        LINEAR_LIST_REQUEST_TIMEOUT_MS,
+      ),
+    { ttlMs: LINEAR_LIST_CACHE_TTL_MS, force: options?.force },
   );
 }
 
 export async function fetchLinearTeamDocuments(
   teamId: string,
-  options?: { dailyOnly?: boolean },
+  options?: { dailyOnly?: boolean; force?: boolean },
 ) {
-  const query = options?.dailyOnly ? "?dailyOnly=true" : "";
-  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
-    `/linear/teams/${encodeURIComponent(teamId)}/documents${query}`,
+  return cachedRequest(
+    cacheKeyLinearTeamDocuments(teamId, options?.dailyOnly ?? false),
+    () =>
+      request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+        `/linear/teams/${encodeURIComponent(teamId)}/documents${linearListQuery({
+          dailyOnly: options?.dailyOnly ? "true" : undefined,
+          force: options?.force ? "1" : undefined,
+        })}`,
+        undefined,
+        LINEAR_LIST_REQUEST_TIMEOUT_MS,
+      ),
+    { ttlMs: LINEAR_LIST_CACHE_TTL_MS, force: options?.force },
   );
 }
 
-export async function fetchLinearMeetingDocuments() {
-  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
-    "/linear/documents/meetings",
+export async function fetchLinearMeetingDocuments(options?: { force?: boolean }) {
+  return cachedRequest(
+    cacheKeyLinearMeetingDocuments(),
+    () =>
+      request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+        `/linear/documents/meetings${linearListQuery({
+          force: options?.force ? "1" : undefined,
+        })}`,
+        undefined,
+        LINEAR_LIST_REQUEST_TIMEOUT_MS,
+      ),
+    { ttlMs: LINEAR_LIST_CACHE_TTL_MS, force: options?.force },
   );
 }
 
@@ -1517,23 +1577,31 @@ export async function fetchLinearWorkspaceDocuments() {
 }
 
 export async function createLinearTeamDocument(teamId: string, options?: { title?: string }) {
-  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+  const result = await request<{ document: ProjectDocumentEntity | null; error?: string }>(
     `/linear/teams/${encodeURIComponent(teamId)}/documents`,
     {
       method: "POST",
       body: JSON.stringify(options ?? {}),
     },
   );
+  if (result.document) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
 export async function createLinearTeamMeetingDocument(teamId: string) {
-  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+  const result = await request<{ document: ProjectDocumentEntity | null; error?: string }>(
     `/linear/teams/${encodeURIComponent(teamId)}/documents`,
     {
       method: "POST",
       body: JSON.stringify({ meeting: true }),
     },
   );
+  if (result.document) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
 export type WorkoutMilestoneEntity = {
@@ -1632,24 +1700,40 @@ export async function appendLinearWorkoutRep(
 
 export async function fetchLinearTeamIssues(
   teamId: string,
-  options?: { excludeSubIssues?: boolean },
+  options?: { excludeSubIssues?: boolean; force?: boolean },
 ) {
-  const query = options?.excludeSubIssues ? "?rootOnly=1" : "";
-  return request<{
-    issues: LinearIssueEntity[];
-    workflowStates: { id: string; name: string; type: string; color?: string; position?: number }[];
-    error?: string;
-  }>(`/linear/teams/${encodeURIComponent(teamId)}/issues${query}`);
+  const rootOnly = options?.excludeSubIssues ?? false;
+  return cachedRequest(
+    cacheKeyLinearTeamIssues(teamId, rootOnly),
+    () =>
+      request<{
+        issues: LinearIssueEntity[];
+        workflowStates: { id: string; name: string; type: string; color?: string; position?: number }[];
+        error?: string;
+      }>(
+        `/linear/teams/${encodeURIComponent(teamId)}/issues${linearListQuery({
+          rootOnly: rootOnly ? "1" : undefined,
+          force: options?.force ? "1" : undefined,
+        })}`,
+        undefined,
+        LINEAR_LIST_REQUEST_TIMEOUT_MS,
+      ),
+    { ttlMs: LINEAR_LIST_CACHE_TTL_MS, force: options?.force },
+  );
 }
 
 export async function createLinearTeamIssue(teamId: string, options?: { title?: string }) {
-  return request<{ issue: LinearIssueEntity | null; error?: string }>(
+  const result = await request<{ issue: LinearIssueEntity | null; error?: string }>(
     `/linear/teams/${encodeURIComponent(teamId)}/issues`,
     {
       method: "POST",
       body: JSON.stringify(options ?? {}),
     },
   );
+  if (result.issue) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
 export async function uploadLinearTeamLetter(
@@ -1706,13 +1790,17 @@ export async function uploadLinearTeamLetter(
   }
 
   try {
-    return JSON.parse(text) as {
+    const parsed = JSON.parse(text) as {
       issue: LinearIssueEntity | null;
       document: ProjectDocumentEntity | null;
       assetUrl?: string;
       content?: string;
       error?: string;
     };
+    if (parsed.issue || parsed.document) {
+      invalidateLinearContentListCaches();
+    }
+    return parsed;
   } catch {
     throw new Error("Invalid response from agent server");
   }
@@ -1723,9 +1811,18 @@ export type LinearTeamProjectSummary = {
   name: string;
 };
 
-export async function fetchLinearTeamProjects(teamId: string) {
-  return request<{ projects: LinearTeamProjectSummary[]; error?: string }>(
-    `/linear/teams/${encodeURIComponent(teamId)}/projects`,
+export async function fetchLinearTeamProjects(teamId: string, options?: { force?: boolean }) {
+  return cachedRequest(
+    cacheKeyLinearTeamProjects(teamId),
+    () =>
+      request<{ projects: LinearTeamProjectSummary[]; error?: string }>(
+        `/linear/teams/${encodeURIComponent(teamId)}/projects${linearListQuery({
+          force: options?.force ? "1" : undefined,
+        })}`,
+        undefined,
+        LINEAR_LIST_REQUEST_TIMEOUT_MS,
+      ),
+    { ttlMs: LINEAR_LIST_CACHE_TTL_MS, force: options?.force },
   );
 }
 
@@ -1749,20 +1846,28 @@ export async function createLinearTeamProject(teamId: string, name?: string) {
 }
 
 export async function createLinearProjectDocument(projectId: string) {
-  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+  const result = await request<{ document: ProjectDocumentEntity | null; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/documents`,
     { method: "POST" },
   );
+  if (result.document) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
 export async function createLinearProjectMeetingDocument(projectId: string) {
-  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+  const result = await request<{ document: ProjectDocumentEntity | null; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/documents`,
     {
       method: "POST",
       body: JSON.stringify({ meeting: true }),
     },
   );
+  if (result.document) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
 export type LinearDocumentContent = {
@@ -1807,10 +1912,14 @@ export async function updateLinearDocument(
 }
 
 export async function deleteLinearDocument(documentId: string) {
-  return request<{ ok: boolean; error?: string }>(
+  const result = await request<{ ok: boolean; error?: string }>(
     `/linear/documents/${encodeURIComponent(documentId)}`,
     { method: "DELETE" },
   );
+  if (result.ok) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
 }
 
 export type CursorModelSummary = {

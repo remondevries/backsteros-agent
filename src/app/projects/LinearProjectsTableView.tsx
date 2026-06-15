@@ -23,10 +23,12 @@ export function LinearProjectsTableView({
   enabled,
   teamId = null,
   workspaceTeamConfig = {},
+  listNavigationRegion = "main",
 }: {
   enabled: boolean;
   teamId?: string | null;
   workspaceTeamConfig?: LinearSidebarTeamConfig;
+  listNavigationRegion?: "main" | "sidebar";
 }) {
   const { linearSelection, setLinearSelection } = useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,7 +132,7 @@ export function LinearProjectsTableView({
     linearSelection?.kind === "project" ? linearSelection.id : null;
 
   useContentListNavigationRegistration({
-    region: "main",
+    region: listNavigationRegion,
     enabled: enabled && listNavItems.length > 0,
     items: listNavItems,
     selectedId: selectedListId,

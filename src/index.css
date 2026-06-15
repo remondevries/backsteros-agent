@@ -70,9 +70,34 @@ html.ios-standalone {
 
 html.ios-standalone .app-shell {
   padding-top: var(--ios-safe-area-top);
+  /* Bottom safe area is handled by the fixed nav; shell extends to the physical bottom. */
   padding-bottom: 0;
   padding-left: var(--ios-safe-area-left);
   padding-right: var(--ios-safe-area-right);
+}
+
+/* iOS layout viewport is often shorter than the screen; fill the visual viewport. */
+html.ios-device body {
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  background: var(--bg-app);
+}
+
+html.ios-device #root {
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  background: var(--bg-app);
+}
+
+html.ios-standalone #root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 html:not(.tauri) .app-window-chrome {
@@ -92,13 +117,29 @@ html.ios-standalone-dev {
 }
 
 html.ios-device {
+  height: -webkit-fill-available;
+  background: var(--bg-app);
+  color-scheme: dark;
   --ios-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --ios-mobile-bottom-nav-stack-height: 56px;
+  --ios-mobile-content-inset-bottom: calc(
+    var(--ios-mobile-bottom-nav-stack-height) + var(--ios-safe-area-bottom) + 12px
+  );
+  --ios-mobile-bottom-nav-overlay-clearance: calc(
+    var(--ios-mobile-bottom-nav-stack-height) + var(--ios-safe-area-bottom) + 8px
+  );
   --ios-mobile-nav-fade-color: #000000;
   --ios-mobile-nav-bg: rgba(28, 28, 30, 0.58);
   --ios-mobile-nav-border: rgba(255, 255, 255, 0.14);
   --ios-frosted-surface-bg: rgba(28, 28, 30, 0.58);
   --ios-frosted-surface-border: rgba(255, 255, 255, 0.14);
   --ios-frosted-surface-active-bg: rgba(255, 255, 255, 0.14);
+  --ios-mobile-menu-bg: rgba(28, 28, 30, 0.82);
+  --ios-sheet-transition-duration: 0.38s;
+  --ios-sheet-transition-easing: cubic-bezier(0.32, 0.72, 0, 1);
+  --ios-control-touch-height: 44px;
+  --ios-segmented-control-padding: 4px;
+  --ios-segmented-control-font-size: 15px;
   --bg-app: #000000;
   --bg-panel: #000000;
   --bg-surface: #000000;
@@ -108,6 +149,27 @@ html.ios-device {
   --gradient-from: #000000;
   --gradient-mid: transparent;
   --gradient-fade: transparent;
+  --sidebar-list-group-gradient-start: #000000;
+  --sidebar-list-group-gradient-end: #000000;
+  --workspace-status-group-gradient-start: #000000;
+  --workspace-status-group-gradient-end: #000000;
+  --workspace-status-group-gradient-end-active: #000000;
+  --overlay-scrim: rgba(0, 0, 0, 0.65);
+  --overlay-scrim-light: rgba(0, 0, 0, 0.45);
+}
+
+html.ios-device .app-main-shell,
+html.ios-device .content-panel-slot,
+html.ios-device .content-panel-shell,
+html.ios-device .content-panel,
+html.ios-device .content-panel-main,
+html.ios-device .content-panel-content,
+html.ios-device .content-panel-main-slot,
+html.ios-device .content-panel-slot .vault-document,
+html.ios-device .content-panel-slot .document-pdf-layout,
+html.ios-device .content-panel-slot .linear-issue-layout,
+html.ios-device .linear-connect-gate {
+  background: var(--bg-app);
 }
 
 html.ios-device .content-panel-slot {
@@ -140,6 +202,18 @@ html.ios-device .content-panel-slot .vault-document-scroll,
 html.ios-device .content-panel-slot .linear-issue-scroll,
 html.ios-device .content-panel-slot .content-panel-main-slot > .linear-projects-table {
   position: relative;
+}
+
+html.ios-device .content-panel-slot .workspace-status-list-scroll,
+html.ios-device .content-panel-slot .vault-document-scroll,
+html.ios-device .content-panel-slot .linear-issue-scroll,
+html.ios-device .content-panel-slot .linear-project-view-body,
+html.ios-device .content-panel-slot .content-panel-sidebar-body,
+html.ios-device .content-panel-slot .linear-projects-table__body,
+html.ios-device .ios-projects-sidebar-panel .linear-projects-table__body,
+html.ios-device .ios-projects-sidebar-panel .workspace-status-list-scroll {
+  scroll-padding-bottom: var(--ios-mobile-content-inset-bottom);
+  padding-bottom: var(--ios-mobile-content-inset-bottom);
 }
 
 html.ios-device .content-panel-slot .linear-project-view-body::before,
@@ -218,6 +292,55 @@ html.ios-device
   background: var(--ios-frosted-surface-active-bg);
 }
 
+/* iOS: 44pt touch targets for segmented toggles and pill tabs in content areas */
+html.ios-device .content-panel-slot .model-mode-toggle,
+html.ios-device .linear-project-content .model-mode-toggle {
+  box-sizing: border-box;
+  min-height: var(--ios-control-touch-height);
+  padding: var(--ios-segmented-control-padding);
+}
+
+html.ios-device .content-panel-slot .model-mode-toggle .model-mode-indicator,
+html.ios-device .linear-project-content .model-mode-toggle .model-mode-indicator {
+  top: var(--ios-segmented-control-padding);
+  bottom: var(--ios-segmented-control-padding);
+  left: var(--ios-segmented-control-padding);
+  width: calc(50% - var(--ios-segmented-control-padding));
+}
+
+html.ios-device .content-panel-slot .model-mode-toggle .model-mode-option,
+html.ios-device .linear-project-content .model-mode-toggle .model-mode-option {
+  min-width: 0;
+  min-height: calc(var(--ios-control-touch-height) - var(--ios-segmented-control-padding) * 2);
+  padding: 8px 14px;
+  font-size: var(--ios-segmented-control-font-size);
+  line-height: 1.2;
+}
+
+html.ios-device .content-panel-slot .linear-project-view-tab,
+html.ios-device .linear-project-content .linear-project-view-tab {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ios-control-touch-height);
+  padding: 10px 16px;
+  font-size: var(--ios-segmented-control-font-size);
+  line-height: 1.2;
+}
+
+html.ios-device .content-panel-slot .linear-project-list-board-toggle,
+html.ios-device .linear-project-content .linear-project-list-board-toggle {
+  min-width: 148px;
+}
+
+html.ios-device .inbox-explorer-toolbar,
+html.ios-device .vault-folder-explorer-header:has(.model-mode-toggle) {
+  gap: 10px;
+  padding-top: 10px;
+  padding-bottom: 8px;
+}
+
 html.ios-device .ios-mobile-bottom-nav-more-item--active {
   background: var(--ios-frosted-surface-active-bg);
 }
@@ -249,7 +372,7 @@ html.ios-device .content-panel-slot .content-panel-breadcrumb-search-input {
 }
 
 html.ios-device .content-panel-slot .content-panel-narrow-sidebar-header {
-  border-bottom: none;
+  display: none;
 }
 
 html.ios-device .content-panel-slot .app-resizable-panel-inset.app-resizable-panel-left,
@@ -319,10 +442,11 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 85;
+  z-index: 130;
   display: flex;
   justify-content: center;
-  padding: 0 16px calc(10px + var(--ios-safe-area-bottom, env(safe-area-inset-bottom, 0px)));
+  align-items: flex-end;
+  padding: 0 16px var(--ios-safe-area-bottom, env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -348,7 +472,7 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
   z-index: 1;
   pointer-events: auto;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   width: min(100%, 520px);
 }
@@ -474,14 +598,6 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
   cursor: default;
 }
 
-.ios-mobile-bottom-nav-action--anchor.ios-mobile-bottom-nav-action--placeholder {
-  pointer-events: none;
-}
-
-.ios-mobile-bottom-nav-action--placeholder {
-  pointer-events: none;
-}
-
 .ios-mobile-bottom-nav-action-icon {
   display: inline-flex;
   align-items: center;
@@ -505,9 +621,9 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
   padding: 6px;
   border-radius: 20px;
   border: 0.5px solid var(--ios-mobile-nav-border, rgba(255, 255, 255, 0.14));
-  background: var(--ios-mobile-nav-bg, rgba(28, 28, 30, 0.72));
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: var(--ios-mobile-menu-bg, rgba(28, 28, 30, 0.82));
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.32),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
@@ -538,12 +654,16 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
 
 .ios-mobile-bottom-nav-more-item:hover,
 .ios-mobile-bottom-nav-more-item:focus-visible {
-  background: var(--hover-overlay);
+  background: var(--ios-frosted-surface-active-bg, rgba(255, 255, 255, 0.14));
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   outline: none;
 }
 
 .ios-mobile-bottom-nav-more-item--active {
-  background: var(--sidebar-item-active-bg);
+  background: var(--ios-frosted-surface-active-bg, rgba(255, 255, 255, 0.14));
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   color: var(--text-primary);
 }
 
@@ -572,8 +692,33 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
   white-space: nowrap;
 }
 
+.ios-pull-to-refresh {
+  position: absolute;
+  top: calc(var(--ios-safe-area-top, env(safe-area-inset-top, 0px)) + 12px);
+  left: 50%;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 0.5px solid var(--ios-frosted-surface-border, rgba(255, 255, 255, 0.14));
+  background: var(--ios-frosted-surface-bg, rgba(28, 28, 30, 0.58));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.ios-pull-to-refresh .content-panel-breadcrumb-refresh-icon {
+  color: var(--text-primary);
+}
+
 @media (prefers-color-scheme: light) {
   html.ios-device {
+    color-scheme: light;
     --ios-mobile-nav-fade-color: #ffffff;
     --bg-app: #ffffff;
     --bg-panel: #ffffff;
@@ -584,11 +729,19 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
     --gradient-from: #ffffff;
     --gradient-mid: transparent;
     --gradient-fade: transparent;
+    --sidebar-list-group-gradient-start: #ffffff;
+    --sidebar-list-group-gradient-end: #ffffff;
+    --workspace-status-group-gradient-start: #ffffff;
+    --workspace-status-group-gradient-end: #ffffff;
+    --workspace-status-group-gradient-end-active: #ffffff;
+    --overlay-scrim: rgba(255, 255, 255, 0.72);
+    --overlay-scrim-light: rgba(255, 255, 255, 0.55);
     --ios-mobile-nav-bg: rgba(255, 255, 255, 0.72);
     --ios-mobile-nav-border: rgba(0, 0, 0, 0.1);
     --ios-frosted-surface-bg: rgba(255, 255, 255, 0.72);
     --ios-frosted-surface-border: rgba(0, 0, 0, 0.1);
     --ios-frosted-surface-active-bg: rgba(0, 0, 0, 0.08);
+    --ios-mobile-menu-bg: rgba(255, 255, 255, 0.88);
   }
 }
 
@@ -1738,6 +1891,138 @@ html.tauri .content-panel-tabs-bar:has(.content-panel-navigation-toggle) {
   min-width: 0;
 }
 
+html.ios-device .content-panel-content--ios-list-inline {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+html.ios-device .content-panel-content--ios-list-inline .content-panel-sidebar {
+  flex: 1;
+  min-height: 0;
+}
+
+html.ios-device .content-panel-content--ios-list-inline .content-panel-sidebar-body,
+html.ios-device .content-panel-content--ios-list-inline .linear-projects-table__body,
+html.ios-device .content-panel-content--ios-list-inline .workspace-status-list-scroll {
+  scroll-padding-bottom: var(--ios-mobile-content-inset-bottom);
+  padding-bottom: var(--ios-mobile-content-inset-bottom);
+}
+
+html.ios-device .content-panel-main--ios-sidebar-active .content-panel-content {
+  transition:
+    transform var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)),
+    opacity var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1));
+  transform-origin: center center;
+}
+
+html.ios-device .content-panel-main--ios-sidebar-overlay-open .content-panel-content {
+  transform: scale(0.96);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+html.ios-device .content-panel-ios-sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 119;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--overlay-scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1));
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+html.ios-device .content-panel-main--ios-sidebar-overlay-open .content-panel-ios-sidebar-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+html.ios-device .content-panel-ios-sidebar-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 120;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  transform: translate3d(-100%, 0, 0);
+  transition: transform var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1));
+  pointer-events: none;
+  will-change: transform;
+  backface-visibility: hidden;
+  border-right: none;
+  background: var(--bg-app);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+html.ios-device .content-panel-main--ios-sidebar-overlay-open .content-panel-ios-sidebar-overlay {
+  transform: translate3d(0, 0, 0);
+  pointer-events: auto;
+}
+
+html.ios-device .content-panel-ios-sidebar-overlay .content-panel-sidebar-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+html.ios-device .content-panel-ios-sidebar-overlay .content-panel-sidebar-body,
+html.ios-device .content-panel-ios-sidebar-overlay .linear-projects-table__body,
+html.ios-device .content-panel-ios-sidebar-overlay .workspace-status-list-scroll {
+  padding-bottom: var(--ios-mobile-content-inset-bottom);
+  scroll-padding-bottom: var(--ios-mobile-content-inset-bottom);
+}
+
+html.ios-device .ios-projects-sidebar-panel,
+html.ios-device .ios-projects-sidebar-panel .linear-projects-table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+html.ios-device .ios-projects-sidebar-panel .linear-projects-table__body,
+html.ios-device .ios-projects-sidebar-panel .workspace-status-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* iOS sheet motion is core navigation — keep transitions even when Reduce Motion is on. */
+@media (prefers-reduced-motion: reduce) {
+  html.ios-device .content-panel-main--ios-sidebar-active .content-panel-content {
+    transition:
+      transform var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)),
+      opacity var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+  }
+
+  html.ios-device .content-panel-ios-sidebar-backdrop {
+    transition: opacity var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+  }
+
+  html.ios-device .content-panel-ios-sidebar-overlay {
+    transition: transform var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+  }
+}
+
 .content-panel-sidebar-body {
   flex: 1;
   min-height: 0;
@@ -1920,6 +2205,9 @@ html.tauri .content-panel-tabs-bar:has(.content-panel-navigation-toggle) {
 }
 
 .vault-folder-explorer-week-group {
+  --workspace-status-group-gradient-start: #1a1b1c;
+  --workspace-status-group-gradient-end: #171718;
+  --workspace-status-group-gradient-end-active: #171718;
   margin: 0;
   list-style: none;
 }
@@ -2428,11 +2716,11 @@ html.tauri .content-panel-tabs-bar:has(.content-panel-navigation-toggle) {
 
 html.ios-device .linear-project-content {
   position: relative;
-  --ios-linear-project-view-tabs-inset: 48px;
+  --ios-linear-project-view-tabs-inset: 56px;
 }
 
 html.ios-device .linear-project-content:has(.linear-project-view-tabs-controls) {
-  --ios-linear-project-view-tabs-inset: 82px;
+  --ios-linear-project-view-tabs-inset: 106px;
 }
 
 html.ios-device .linear-project-content .linear-project-view-tabs {
@@ -3723,6 +4011,16 @@ html.ios-device .linear-project-content .linear-project-view-body .linear-projec
   );
 }
 
+.vault-folder-explorer-week-header.workspace-status-group__header,
+.vault-folder-explorer-week-header.workspace-status-group__header:hover,
+.vault-folder-explorer-week-header.workspace-status-group__header:focus-visible {
+  background-image: linear-gradient(
+    in oklab 90deg,
+    var(--sidebar-list-group-gradient-start) 0.19%,
+    var(--sidebar-list-group-gradient-end) 100.02%
+  );
+}
+
 .workspace-status-group__header:focus-visible {
   outline: 1px solid var(--border-hover);
   outline-offset: -1px;
@@ -4231,6 +4529,26 @@ button.project-issue-row--dragging {
   .project-issue-row__title-text {
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  /* Inbox-style rows: status/priority icon + title only — keep icon beside title */
+  button.project-issue-row:not(:has(.project-issue-row__id, .project-issue-row__pill)) {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  button.project-issue-row:not(:has(.project-issue-row__id, .project-issue-row__pill)) .project-issue-row__title {
+    order: unset;
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+
+  button.project-issue-row:not(:has(.project-issue-row__id, .project-issue-row__pill)) .project-issue-row__title-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: normal;
   }
 
   .project-issue-row__id {
@@ -4784,6 +5102,44 @@ button.meeting-document-sidebar-row--keyboard-focused {
 
 .document-pdf-preview-panel:not(.app-resizable-panel-collapsed) {
   border-left: 0.5px solid var(--chrome-border);
+}
+
+html.ios-device .document-pdf-modal--ios {
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transform: translate3d(100%, 0, 0);
+  transition: transform var(--ios-sheet-transition-duration, 0.38s)
+    var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1));
+  will-change: transform;
+}
+
+html.ios-device .document-pdf-modal--ios.document-pdf-modal--ios-open {
+  transform: translate3d(0, 0, 0);
+}
+
+html.ios-device .document-pdf-modal--ios .document-pdf-preview-panel-inner,
+html.ios-device .document-pdf-modal--ios .document-pdf-viewer-shell--modal {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+html.ios-device .document-pdf-modal--ios .document-pdf-viewer-toolbar {
+  opacity: 1;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.ios-device .document-pdf-modal--ios {
+    transition: transform var(--ios-sheet-transition-duration, 0.38s)
+      var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+  }
 }
 
 .document-pdf-preview-panel-inner {
@@ -6465,6 +6821,12 @@ button.meeting-document-sidebar-row--keyboard-focused {
 }
 
 @media (prefers-color-scheme: light) {
+  .vault-folder-explorer-week-group {
+    --workspace-status-group-gradient-start: #f3f3f4;
+    --workspace-status-group-gradient-end: #f3f3f4;
+    --workspace-status-group-gradient-end-active: #f3f3f4;
+  }
+
   .vault-folder-explorer-week-header,
   .linear-project-group-header {
     --sidebar-list-group-gradient-start: #f3f3f4;

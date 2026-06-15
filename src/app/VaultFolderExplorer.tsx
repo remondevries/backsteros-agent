@@ -13,7 +13,7 @@ import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
 import { vaultFolderTitle } from "../lib/vaultFolderContext";
 import { onVaultContentChanged } from "../lib/vaultContentEvents";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
-import { useIosMobileQuickActions } from "../hooks/useIosMobileQuickActions";
+import { useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import {
   useContentPanelNavigation,
@@ -439,7 +439,7 @@ export function VaultFolderExplorer({
     ? vaultDocumentDisplayName(deleteTargetPath, fileTitleByPath.get(deleteTargetPath))
     : "";
 
-  useIosMobileQuickActions(
+  useExplorerIosChrome(
     enabled && canCreateNote
       ? [
           {
