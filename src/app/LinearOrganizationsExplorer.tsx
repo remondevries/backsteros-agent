@@ -8,6 +8,7 @@ import {
   workspaceSetupLinearTeamIdSet,
 } from "../lib/workspaceSetupTeamIds";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useBinaryContentModeShortcuts } from "../hooks/useBinaryContentModeShortcuts";
 import {
   contentListGroupHeaderId,
   contentListItemDataAttributes,
@@ -66,6 +67,14 @@ export function LinearOrganizationsExplorer({
   } = useContentPanelNavigation();
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
   const showingOrganizations = contentMode === "organizations";
+
+  useBinaryContentModeShortcuts({
+    enabled,
+    mode: contentMode,
+    modes: ["organizations", "customers"],
+    onChange: setContentMode,
+  });
+
   const selectedTeamId =
     showingOrganizations && linearSelection?.kind === "team" ? linearSelection.id : null;
   const teamsQuery = useLinearTeams(enabled && showingOrganizations);

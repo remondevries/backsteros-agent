@@ -208,7 +208,7 @@ export function LinearContactsExplorer({
       }
 
       replaceIssue(draft.id, mergedIssue);
-      migrateLinearIssueDetailSeed(draft.id, mergedIssue, { freshCreate: true });
+      migrateLinearIssueDetailSeed(draft.id, mergedIssue, { freshCreate: false });
 
       if (activeLinearIssueIdRef.current === draft.id) {
         setActiveLinearIssue({

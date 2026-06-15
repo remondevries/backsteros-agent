@@ -13,6 +13,7 @@ import {
   seedLinearIssueDetailFromEntity,
 } from "../lib/linearIssueDetailSeed";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useBinaryContentModeShortcuts } from "../hooks/useBinaryContentModeShortcuts";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
@@ -111,6 +112,13 @@ export function LinearInboxExplorer({
   const refreshing = issuesRefreshing || documentsRefreshing;
   const error = issuesError ?? documentsError;
   const showingIssues = contentMode === "issues";
+
+  useBinaryContentModeShortcuts({
+    enabled,
+    mode: contentMode,
+    modes: ["issues", "documents"],
+    onChange: setContentMode,
+  });
 
   useContentPanelBarState({
     error,
@@ -270,7 +278,7 @@ export function LinearInboxExplorer({
       }
 
       replaceIssue(draft.id, mergedIssue);
-      migrateLinearIssueDetailSeed(draft.id, mergedIssue, { freshCreate: true });
+      migrateLinearIssueDetailSeed(draft.id, mergedIssue, { freshCreate: false });
 
       if (activeLinearIssueIdRef.current === draft.id) {
         setActiveLinearIssue({

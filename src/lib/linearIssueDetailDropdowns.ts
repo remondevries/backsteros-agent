@@ -9,6 +9,12 @@ export type LinearTeamEstimationSettings = {
   issueEstimationExtended: boolean;
 };
 
+export const DEFAULT_LINEAR_TEAM_ESTIMATION_SETTINGS: LinearTeamEstimationSettings = {
+  issueEstimationType: "linear",
+  issueEstimationAllowZero: true,
+  issueEstimationExtended: false,
+};
+
 export const LINEAR_ISSUE_MAX_ESTIMATE = 5;
 
 export const LINEAR_UNASSIGNED_ASSIGNEE_VALUE = "__none__";
@@ -53,6 +59,18 @@ export function buildLinearEstimateScaleValues(
   if (!type || type === "notUsed") return [];
 
   return [...ESTIMATE_SCALE_VALUES];
+}
+
+export function resolveLinearTeamEstimationSettings(
+  settings: LinearTeamEstimationSettings | null | undefined,
+  options?: { allowDefaultWhenMissing?: boolean },
+): LinearTeamEstimationSettings | null {
+  if (settings) {
+    const type = settings.issueEstimationType.trim();
+    if (!type || type === "notUsed") return null;
+    return settings;
+  }
+  return options?.allowDefaultWhenMissing ? DEFAULT_LINEAR_TEAM_ESTIMATION_SETTINGS : null;
 }
 
 export function buildLinearEstimateDropdownOptions(

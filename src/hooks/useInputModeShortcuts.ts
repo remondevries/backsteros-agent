@@ -11,6 +11,13 @@ function isShortcutBlockedTarget(target: EventTarget | null): boolean {
   );
 }
 
+function isChatInputModeShortcutTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(target.closest(".chat-view, .lookup-view, .composer"))
+  );
+}
+
 function isInputModeShortcut(event: KeyboardEvent): boolean {
   return event.metaKey && event.altKey && !event.ctrlKey && !event.shiftKey;
 }
@@ -32,6 +39,7 @@ export function useInputModeShortcuts({
     function onKeyDown(event: KeyboardEvent) {
       if (!isInputModeShortcut(event)) return;
       if (isShortcutBlockedTarget(event.target)) return;
+      if (!isChatInputModeShortcutTarget(event.target)) return;
 
       if (event.key === "ArrowLeft") {
         event.preventDefault();

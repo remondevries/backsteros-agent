@@ -5,6 +5,7 @@ import {
   buildLinearEstimateDropdownOptions,
   buildLinearEstimateScaleValues,
   buildLinearPriorityDropdownOptions,
+  DEFAULT_LINEAR_TEAM_ESTIMATION_SETTINGS,
   isLinearNoEstimateValue,
   isLinearPickDueDateValue,
   LINEAR_NO_DUE_DATE_VALUE,
@@ -16,6 +17,7 @@ import {
   linearEstimateDropdownValue,
   linearEstimateLabelFromValue,
   linearPriorityDropdownValue,
+  resolveLinearTeamEstimationSettings,
 } from "./linearIssueDetailDropdowns";
 
 describe("linearIssueDetailDropdowns", () => {
@@ -71,6 +73,30 @@ describe("linearIssueDetailDropdowns", () => {
         issueEstimationExtended: false,
       }),
     ).toEqual([]);
+  });
+
+  test("uses default estimation settings when team settings are missing", () => {
+    expect(
+      resolveLinearTeamEstimationSettings(null, { allowDefaultWhenMissing: true }),
+    ).toEqual(DEFAULT_LINEAR_TEAM_ESTIMATION_SETTINGS);
+    expect(
+      buildLinearEstimateDropdownOptions(
+        resolveLinearTeamEstimationSettings(null, { allowDefaultWhenMissing: true }),
+      ),
+    ).toHaveLength(6);
+  });
+
+  test("does not default estimation settings when disabled on team", () => {
+    expect(
+      resolveLinearTeamEstimationSettings(
+        {
+          issueEstimationType: "notUsed",
+          issueEstimationAllowZero: false,
+          issueEstimationExtended: false,
+        },
+        { allowDefaultWhenMissing: true },
+      ),
+    ).toBeNull();
   });
 
   test("defaults unset estimates to no estimate", () => {

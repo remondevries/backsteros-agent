@@ -19,6 +19,7 @@ import {
   linearAssigneeDropdownValue,
   linearEstimateDropdownValue,
   linearPriorityDropdownValue,
+  resolveLinearTeamEstimationSettings,
 } from "../../lib/linearIssueDetailDropdowns";
 import { abbreviateGithubLabelName, githubLabelHoverTitle } from "../../lib/linearLabelDisplay";
 import { searchableDropdownShortcut } from "../ui/searchableDropdownShortcuts";
@@ -276,6 +277,9 @@ export function LinearIssueDetailsPanel({
   }, [hideEstimateProperty, showOrganizationProjectControls]);
 
   const priorityLabel = issue.priorityLabel || getPriorityLabel(issue.priority);
+  const estimateSettings = resolveLinearTeamEstimationSettings(issue.teamEstimation, {
+    allowDefaultWhenMissing: Boolean(onEstimateChange),
+  });
   const estimateLabel =
     issue.estimate == null || issue.estimate <= 0
       ? "No estimate"
@@ -350,7 +354,7 @@ export function LinearIssueDetailsPanel({
 
   const estimateOptions = useMemo(
     (): SearchableDropdownOption[] =>
-      buildLinearEstimateDropdownOptions(issue.teamEstimation).map((option) => ({
+      buildLinearEstimateDropdownOptions(estimateSettings).map((option) => ({
         ...option,
         icon: isLinearNoEstimateValue(option.value) ? (
           <LinearIssueNoEstimateIcon />
@@ -358,7 +362,7 @@ export function LinearIssueDetailsPanel({
           <LinearIssueEstimateIcon />
         ),
       })),
-    [issue.teamEstimation],
+    [estimateSettings],
   );
 
   const assigneeOptions = useMemo((): SearchableDropdownOption[] => {
@@ -403,7 +407,7 @@ export function LinearIssueDetailsPanel({
   const selectedStateId = issue.stateId ?? statusOptions[0]?.value ?? null;
   const selectedPriority = linearPriorityDropdownValue(issue.priority);
   const selectedAssignee = linearAssigneeDropdownValue(issue.assigneeId);
-  const selectedEstimate = linearEstimateDropdownValue(issue.estimate, issue.teamEstimation);
+  const selectedEstimate = linearEstimateDropdownValue(issue.estimate, estimateSettings);
 
   const assigneeFallbackLabel = issue.assigneeUsername ?? "Unassigned";
   const assigneeFallbackIcon = issue.assigneeUsername ? (
