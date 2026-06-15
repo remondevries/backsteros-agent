@@ -22,6 +22,7 @@ import { sidebarNavItemIcon } from "./sidebarNavConfig";
 import { resolveLinearIssueTabLabel } from "../lib/inboxDraftIssue";
 import { formatVaultWorkoutDocumentLabel } from "../lib/workouts/workoutsBreadcrumb";
 import { WorkoutsPeriodViewProvider } from "./workouts/WorkoutsPeriodViewContext";
+import { ContentPanelTabShortcuts } from "../shortcuts/ContentPanelTabShortcuts";
 
 const CONTENT_PANEL_SIDEBAR_WIDTH_KEY = "backsteros.layout.contentPanelWidth";
 const DEFAULT_CONTENT_TAB_LABEL = "Workspace";
@@ -140,6 +141,7 @@ function ContentPanelFrame({
   breadcrumbSegments,
   navigationCollapsed = false,
   onOpenNavigation,
+  settingsOpen = false,
   children,
 }: {
   sidebarOpen: boolean;
@@ -157,6 +159,7 @@ function ContentPanelFrame({
   breadcrumbSegments: ReturnType<typeof buildContentPanelBreadcrumbSegments>;
   navigationCollapsed?: boolean;
   onOpenNavigation?: () => void;
+  settingsOpen?: boolean;
   children: ReactNode;
 }) {
   const [narrowContentSidebar, setNarrowContentSidebar] = useState(false);
@@ -431,6 +434,25 @@ function ContentPanelFrame({
     ],
   );
 
+  const selectRelativeTab = useCallback(
+    (direction: -1 | 1) => {
+      if (!activeTabId || tabs.length <= 1) return;
+      const currentIndex = tabs.findIndex((tab) => tab.id === activeTabId);
+      if (currentIndex === -1) return;
+      const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+      handleSelectTab(tabs[nextIndex]!.id);
+    },
+    [activeTabId, handleSelectTab, tabs],
+  );
+
+  const handlePreviousTab = useCallback(() => {
+    selectRelativeTab(-1);
+  }, [selectRelativeTab]);
+
+  const handleNextTab = useCallback(() => {
+    selectRelativeTab(1);
+  }, [selectRelativeTab]);
+
   const displayedBreadcrumbSegments = useMemo(() => {
     if (!narrowContentLayout || !activeVaultNavItem || hideSidebar || breadcrumbSegments.length === 0) {
       return breadcrumbSegments;
@@ -500,6 +522,12 @@ function ContentPanelFrame({
 
   return (
     <div className="content-panel-shell">
+      <ContentPanelTabShortcuts
+        enabled={!settingsOpen}
+        onNewTab={handleAddTab}
+        onPreviousTab={handlePreviousTab}
+        onNextTab={handleNextTab}
+      />
       <ContentPanelTabsBar
         tabs={tabs.map((tab) => {
           const isActiveTab = tab.id === activeTabId;
@@ -638,6 +666,7 @@ function ContentPanelWithBreadcrumbs({
       breadcrumbSegments={breadcrumbSegments}
       navigationCollapsed={navigationCollapsed}
       onOpenNavigation={onOpenNavigation}
+      settingsOpen={settingsOpen}
     >
       {children}
     </ContentPanelFrame>

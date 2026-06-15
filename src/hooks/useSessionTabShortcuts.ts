@@ -73,7 +73,6 @@ export function useSessionTabShortcuts(
         return;
       }
 
-      if (!event.shiftKey) return;
       if (isEditableTarget(event.target)) return;
 
       if (key === "[" || event.key === "ArrowLeft") {
