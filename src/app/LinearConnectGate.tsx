@@ -16,6 +16,7 @@ import { restartSidecarIfNeeded } from "../lib/restartSidecar";
 import { BOOTSTRAP_CHECKING_MESSAGE } from "../lib/sidecarBootstrap";
 import { isLinearOAuthConnected } from "../settings/integrationConnectionStatus";
 import { ConnectGateShell } from "./ConnectGateShell";
+import { ConnectGateServerAccess } from "./ConnectGateServerAccess";
 import type { ConnectGateProgressStep } from "./ConnectGateProgress";
 import {
   IntegrationSecretInput,
@@ -248,6 +249,16 @@ export function LinearConnectGate({
       >
         {!loadingStatus ? (
           <>
+            <ConnectGateServerAccess
+              onSignedIn={() => {
+                setLoadingStatus(true);
+                void loadStatus()
+                  .catch((err) => {
+                    setError(err instanceof Error ? err.message : "Failed to load integration status");
+                  })
+                  .finally(() => setLoadingStatus(false));
+              }}
+            />
             <div
               className={[
                 "linear-connect-gate-actions",
@@ -290,6 +301,16 @@ export function LinearConnectGate({
           <p className="settings-hint">Loading…</p>
         ) : (
           <>
+            <ConnectGateServerAccess
+              onSignedIn={() => {
+                setLoadingStatus(true);
+                void loadStatus()
+                  .catch((err) => {
+                    setError(err instanceof Error ? err.message : "Failed to load integration status");
+                  })
+                  .finally(() => setLoadingStatus(false));
+              }}
+            />
             <section className="linear-connect-gate-section">
               <h2 className="settings-subsection-title">1. OAuth application</h2>
               <p className="settings-hint settings-hint-spaced-top">

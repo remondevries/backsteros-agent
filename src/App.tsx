@@ -297,7 +297,7 @@ export default function App() {
       if (!linearReady) {
         clearConnectGateAccessCache();
         setAppReady(false);
-        setServiceOffline(!health.hasLinearOAuthCredentials);
+        setServiceOffline(false);
         setGateNotice(null);
         return { linearReady: false, hasApiKey: false, appReady: false };
       }
@@ -383,12 +383,16 @@ export default function App() {
       return { linearReady: true, hasApiKey: true, appReady: true };
     } catch (err) {
       const message = formatSidecarReachabilityError(err);
-      if (message.toLowerCase().includes("unauthorized") || message.includes("401")) {
+      const isUnauthorized =
+        message.toLowerCase().includes("unauthorized") || message.includes("401");
+      if (isUnauthorized) {
         setGateNotice(
-          "Server access denied. Enter your server access token in Settings → Account → Server access.",
+          "Server access denied. Sign in with your server access token below, then retry.",
         );
+        setServiceOffline(false);
       } else {
         setGateNotice(message);
+        setServiceOffline(true);
       }
       clearConnectGateAccessCache();
       setLinearAccessReady(false);
