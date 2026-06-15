@@ -82,9 +82,16 @@ impl SidecarState {
     pub fn connection(&self) -> SidecarConnection {
         if let Some(url) = remote_server_url() {
             let base_url = url.trim_end_matches('/').to_string();
+            let token = resolve_sidecar_token();
+            // Avoid sending the dev default bearer to a hosted sidecar unless explicitly configured.
+            let token = if token == DEFAULT_TOKEN {
+                String::new()
+            } else {
+                token
+            };
             return SidecarConnection {
                 base_url,
-                token: resolve_sidecar_token(),
+                token,
             };
         }
 

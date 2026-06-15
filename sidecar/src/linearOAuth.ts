@@ -18,6 +18,7 @@ import {
   CONNECT_GATE_PROGRESS_INCOMPLETE,
   connectGateProgressAfterLinearOAuth,
 } from "./connectGateProgressConfig.ts";
+import { clearLinearOAuthAccessCache } from "./linear/oauth-access.ts";
 import { loadUserAccountWorkspace } from "./accounts.ts";
 import { isUserAccountSetupComplete } from "./accountWorkspace.ts";
 import { fetchLinearViewer } from "./linear/viewer.ts";
@@ -72,6 +73,7 @@ async function saveTokens(tokens: Record<string, unknown>) {
   const tokenPath = getLinearOAuthTokenPath();
   await mkdir(dirname(tokenPath), { recursive: true });
   await writeFile(tokenPath, `${JSON.stringify(tokens, null, 2)}\n`, { mode: 0o600 });
+  clearLinearOAuthAccessCache();
 }
 
 function clearAuthTimeout() {

@@ -57,7 +57,11 @@ import {
   configureSidecarConnection,
   fetchBootstrapHealth,
 } from "./lib/sidecarBootstrap";
-import { isTauriRuntime } from "./platform/runtime";
+import { isTauriRuntime, isTauriRemoteShell } from "./platform/runtime";
+import {
+  describeDesktopReleaseMismatch,
+  getClientAppBuildSha,
+} from "./lib/releaseSync";
 import {
   appendNotificationEdgeCache,
   showNativeNotification,
@@ -103,6 +107,7 @@ export default function App() {
   const [calendarConnecting, setCalendarConnecting] = useState(false);
   const [needsCalendarConnect, setNeedsCalendarConnect] = useState(false);
   const [whoopWarning, setWhoopWarning] = useState<string | null>(null);
+  const [desktopReleaseWarning, setDesktopReleaseWarning] = useState<string | null>(null);
   const [inboxLinearTeamId, setInboxLinearTeamId] = useState<string | null>(null);
   const [dailyLinearTeamId, setDailyLinearTeamId] = useState<string | null>(null);
   const [workoutsLinearTeamId, setWorkoutsLinearTeamId] = useState<string | null>(null);
@@ -295,6 +300,11 @@ export default function App() {
 
       const linearReady = isLinearAccessGranted(health);
       setLinearAccessReady(linearReady);
+      setDesktopReleaseWarning(
+        isTauriRemoteShell()
+          ? describeDesktopReleaseMismatch(getClientAppBuildSha(), health.appBuildSha)
+          : null,
+      );
       if (!linearReady) {
         clearConnectGateAccessCache();
         setAppReady(false);
@@ -418,6 +428,7 @@ export default function App() {
       clearConnectGateAccessCache();
       setLinearAccessReady(false);
       setAppReady(false);
+      setDesktopReleaseWarning(null);
       return { linearReady: false, hasApiKey: false, appReady: false };
     } finally {
       setBootstrapping(false);
@@ -503,6 +514,13 @@ export default function App() {
       try {
         const health = await getHealth({ force: true, timeoutMs: 4_000 });
         if (!active) return;
+
+        if (isTauriRemoteShell()) {
+          setDesktopReleaseWarning(
+            describeDesktopReleaseMismatch(getClientAppBuildSha(), health.appBuildSha),
+          );
+          return;
+        }
 
         const signature =
           health.sidecarBuildId?.trim() || health.sidecarVersion?.trim() || null;
@@ -719,6 +737,11 @@ export default function App() {
           >
             Connect Whoop
           </button>
+        </div>
+      )}
+      {!healthError && desktopReleaseWarning && (
+        <div className="warning-banner">
+          <span>{desktopReleaseWarning}</span>
         </div>
       )}
 

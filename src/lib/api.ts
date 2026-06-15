@@ -91,6 +91,9 @@ function sidecarConnectionHint(baseUrl: string, message: string): string {
   if (!baseUrl) {
     return "The server at this URL is not responding; check the deployment process.";
   }
+  if (/^https:\/\//.test(baseUrl)) {
+    return "Check BACKSTER_SERVER_URL in ~/.backsteros-agent/.env and that staging allows desktop origins (redeploy if needed).";
+  }
   return "Start the agent server with `npm run dev` (browser) or `npm run tauri:dev` (desktop), then retry.";
 }
 
@@ -541,7 +544,7 @@ export async function submitGoodNightReflection(answers: string[]) {
   }, 180_000);
 }
 
-type HealthResponse = {
+export type HealthResponse = {
   ok: boolean;
   hasApiKey: boolean;
   hasGeminiApiKey: boolean;
@@ -558,6 +561,7 @@ type HealthResponse = {
   sidecarRuntimeId?: string | null;
   sidecarVersion?: string | null;
   sidecarBuildId?: string | null;
+  appBuildSha?: string | null;
 };
 
 export async function getAuthStatus(): Promise<{

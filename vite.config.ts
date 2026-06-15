@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { resolveBuildSha } from "./scripts/resolve-build-sha.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const stubsDir = path.resolve(rootDir, "src/platform/stubs");
@@ -54,6 +55,11 @@ function configureSidecarProxy(
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  define: {
+    "import.meta.env.VITE_APP_BUILD_SHA": JSON.stringify(
+      process.env.VITE_APP_BUILD_SHA?.trim() || resolveBuildSha(),
+    ),
+  },
   resolve: {
     alias: isTauriViteBuild() ? {} : tauriStubAliases(),
   },

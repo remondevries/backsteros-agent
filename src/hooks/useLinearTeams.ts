@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchLinearTeams, type LinearTeamSummary } from "../lib/api";
+import { formatLinearAccessError } from "../lib/linearAccess";
 
 export function useLinearTeams(enabled: boolean) {
   const [teams, setTeams] = useState<LinearTeamSummary[]>([]);
@@ -28,11 +29,15 @@ export function useLinearTeams(enabled: boolean) {
         const result = await fetchLinearTeams({ force: isBackgroundRefresh });
         setTeams(result.teams);
         if (result.error) {
-          setError(result.error);
+          setError(formatLinearAccessError(result.error));
         }
       } catch (err) {
         setTeams([]);
-        setError(err instanceof Error ? err.message : "Failed to load Linear teams");
+        setError(
+          formatLinearAccessError(
+            err instanceof Error ? err.message : "Failed to load Linear teams",
+          ),
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);

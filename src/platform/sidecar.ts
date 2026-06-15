@@ -1,6 +1,7 @@
 import { isTauriRuntime } from "./runtime";
 
-const TAURI_INVOKE_RETRIES = 1;
+const TAURI_INVOKE_RETRIES = 12;
+const TAURI_INVOKE_RETRY_DELAY_MS = 150;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +22,7 @@ export async function loadTauriSidecarConnection(): Promise<{ baseUrl: string; t
       return connection;
     } catch {
       if (attempt < TAURI_INVOKE_RETRIES - 1) {
-        await sleep(100);
+        await sleep(TAURI_INVOKE_RETRY_DELAY_MS);
       }
     }
   }

@@ -48,6 +48,7 @@ import {
   startLinearOAuthAuth,
 } from "./linearAuth.ts";
 import { getLinearAuthToken, linearAuthorizationHeader } from "./linear/auth-token.ts";
+import { isLinearOAuthAccessValid } from "./linear/oauth-access.ts";
 import { fetchLinearViewer } from "./linear/viewer.ts";
 import { viewerHasAdministratorAccess } from "./admin-access.ts";
 import {
@@ -310,6 +311,7 @@ import {
   revertLastChanges,
 } from "./workspace.ts";
 import { loadTtsModule, loadSttModule } from "./speech-modules.ts";
+import { APP_BUILD_SHA } from "./build-meta.ts";
 
 const token = getSidecarToken();
 const port = getSidecarPort();
@@ -550,13 +552,14 @@ app.onError((err, c) => {
   return c.json({ error: message || "Unknown error" }, status);
 });
 
-app.get("/healthz", (c) => {
+app.get("/healthz", async (c) => {
+  const hasLinearOAuthAuth = await isLinearOAuthAccessValid();
   return c.json({
     ok: true,
     hasApiKey: isUserCursorApiKeyConfigured(),
     hasGeminiApiKey: Boolean(getGeminiApiKey()),
     hasLinearOAuthCredentials: isLinearOAuthConfigured(),
-    hasLinearOAuthAuth: isLinearOAuthAuthenticated(),
+    hasLinearOAuthAuth,
     hasGoogleCalendarCredentials: isGoogleCalendarConfigured(),
     hasGoogleCalendarAuth: isGoogleCalendarAuthenticated(),
     hasWhoopConfigured: isWhoopConfigured(),
@@ -566,6 +569,7 @@ app.get("/healthz", (c) => {
     sidecarRuntimeId: SIDECAR_RUNTIME_ID,
     sidecarVersion: SIDECAR_VERSION,
     sidecarBuildId: SIDECAR_BUILD_ID,
+    appBuildSha: APP_BUILD_SHA,
     staticUiAvailable: Boolean(staticDistDir),
     requiresServerAccessAuth: isServerAccessAuthEnabled(),
   });
@@ -2264,8 +2268,10 @@ app.post("/integrations/whoop/auth/mfa", async (c) => {
   }
 });
 
-app.get("/integrations/status", (c) => {
-  return c.json(getIntegrationsStatus());
+app.get("/integrations/status", async (c) => {
+  const status = getIntegrationsStatus();
+  status.linear.authenticated = await isLinearOAuthAccessValid();
+  return c.json(status);
 });
 
 app.put("/integrations/secrets", async (c) => {

@@ -78,7 +78,7 @@ npm run ci                 # sidecar tests + web build + smoke
 | **Desktop (local)** | Local UI + embedded sidecar | Offline, full vault, local agent cwd |
 | **Desktop (remote API)** | Local UI + `BACKSTER_SERVER_URL` | Same agent/data as staging/prod; keep terminal & disk access |
 
-**UI parity:** build the desktop app from the **same git commit** you deployed to the server. The remote API mode updates agent behavior on the server immediately, but UI changes ship with a new desktop build (or reload only picks up server-side changes).
+**UI parity:** build the desktop app from the **same git commit** you deployed to the server. The remote API mode updates agent behavior on the server immediately, but UI changes ship with a new desktop build. When the desktop UI is behind the server, a **warning banner** shows the client vs server commit (from `/healthz` `appBuildSha`).
 
 **Server CORS:** when using desktop remote mode, `ALLOWED_ORIGINS` on the server must include `https://tauri.localhost` and `http://tauri.localhost` (already set in `config/deploy.yml` for staging).
 

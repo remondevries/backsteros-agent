@@ -166,10 +166,10 @@ Connect the desktop app to staging **without** embedding a local sidecar. The wi
 
 **What differs from the browser**
 
-- UI version follows your **desktop build**, not every `kamal deploy` (rebuild the app to pick up UI changes)
+- UI version follows your **desktop build**, not every `kamal deploy` (rebuild the app to pick up UI changes). When they diverge, the desktop app shows a **warning banner** with client vs server commit SHAs (`appBuildSha` on `/healthz`).
 - Agent workspace for Cursor runs on the **server** unless you use fully local mode (unset `BACKSTER_SERVER_URL`)
 
-If API calls fail with CORS errors, confirm staging `ALLOWED_ORIGINS` includes `https://tauri.localhost,http://tauri.localhost` and redeploy.
+If API calls fail with CORS errors, confirm staging `ALLOWED_ORIGINS` includes `https://tauri.localhost,http://tauri.localhost,http://localhost:5173,http://127.0.0.1:5173` and redeploy.
 
 ## Config reference
 

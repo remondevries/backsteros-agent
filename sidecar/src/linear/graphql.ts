@@ -1,4 +1,5 @@
 import { getLinearAuthToken, linearAuthorizationHeader } from "./auth-token.ts";
+import { formatLinearAuthErrorMessage } from "./auth-errors.ts";
 
 export const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 
@@ -34,7 +35,8 @@ export async function linearGraphqlRequest<T>(
       detail?.includes("project not in same team as issue")
         ? " The grocery project belongs to a different Linear team than the one used to create the issue. Restart the sidecar after updating — it should resolve the project team automatically."
         : "";
-    throw new Error(`${detail ?? `Linear API request failed (${response.status})`}${hint}`);
+    const message = detail ?? `Linear API request failed (${response.status})`;
+    throw new Error(formatLinearAuthErrorMessage(`${message}${hint}`));
   }
 
   if (!body.data) {
