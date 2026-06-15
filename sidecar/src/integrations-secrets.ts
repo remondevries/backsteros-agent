@@ -185,6 +185,11 @@ export function updateIntegrationSecrets(body: {
 
   if (Object.keys(updates).length > 0) {
     mergeEnvFile(getEnvFilePath(), updates);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === "") {
+        delete process.env[key];
+      }
+    }
     reloadEnvFromDisk();
   }
 

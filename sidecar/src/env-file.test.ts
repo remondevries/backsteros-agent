@@ -57,6 +57,14 @@ describe("env-file", () => {
     expect(process.env.CURSOR_API_KEY).toBe("cursor_from_disk");
   });
 
+  test("reloadEnvFromDisk keeps container env when key is absent from disk file", () => {
+    process.env.CURSOR_API_KEY = "cursor_from_kamal";
+
+    reloadEnvFromDisk();
+
+    expect(process.env.CURSOR_API_KEY).toBe("cursor_from_kamal");
+  });
+
   test("reloadEnvFromDisk syncs LINEAR_OAUTH_CREDENTIALS", () => {
     const credentialsPath = join(dataDir, "linear-oauth.keys.json");
     mergeEnvFile(envPath, { LINEAR_OAUTH_CREDENTIALS: credentialsPath });

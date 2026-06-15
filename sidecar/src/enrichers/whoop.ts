@@ -7,7 +7,6 @@ import type {
   WhoopStrainTarget,
   WhoopWorkoutEntity,
 } from "../types.ts";
-import { SPORTS_BY_ID } from "@briangaoo/totem/dist/data/sports.js";
 
 type RecoveryState = "GREEN" | "YELLOW" | "RED";
 
@@ -216,13 +215,7 @@ export function parseWorkoutEntity(record: Record<string, unknown>): WhoopWorkou
   };
 }
 
-function resolveWorkoutSportName(sportName: string, sportId?: number | null): string {
-  if (sportId != null) {
-    const catalogName = SPORTS_BY_ID.get(sportId)?.name;
-    if (catalogName) {
-      return catalogName;
-    }
-  }
+function resolveWorkoutSportName(sportName: string, _sportId?: number | null): string {
   return sportName;
 }
 

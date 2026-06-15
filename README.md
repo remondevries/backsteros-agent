@@ -47,6 +47,8 @@ docker build -t backsteros-agent .
 docker run --rm -p 3847:3847 -e CURSOR_API_KEY=... -e SIDECAR_TOKEN=... backsteros-agent
 ```
 
+**Staging (Kamal):** [`docs/deploy-staging.md`](docs/deploy-staging.md) — `staging.backsteros.com` on backsteros.com via `config/deploy.yml`.
+
 ## Development (Tauri app)
 
 ```bash

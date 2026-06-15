@@ -1,0 +1,62 @@
+# Kamal deploy — staging on backsteros.com (161.35.86.25)
+#
+# TLS: nginx on the host terminates HTTPS and proxies to kamal-proxy (127.0.0.1:8082),
+# same pattern as agent.backsteros.com. Keep proxy.ssl false here.
+#
+# Setup:
+#   1. cp .kamal/secrets.example .kamal/secrets  (fill values; never commit)
+#   2. Point staging.backsteros.com A → 161.35.86.25
+#   3. Install nginx site: docs/deploy-staging.md
+#   4. kamal setup   (first time on this machine — proxy already runs on the server)
+#   5. kamal deploy
+#
+# GHCR PAT: read:packages + write:packages → KAMAL_REGISTRY_PASSWORD in .kamal/secrets
+# SSH: uses ~/.ssh/config Host backsteros.com (1Password / digitalocean key)
+
+service: backsteros-staging
+image: lemo-design/backsteros-agent-ui
+
+servers:
+  web:
+    - 161.35.86.25
+
+ssh:
+  user: wsmk_rvw4fjmeeydkdvhghwnq7_wbfxa
+  # Net::SSH (Kamal) cannot use the 1Password SSH agent. Uncomment and point at a
+  # deploy key after adding the public half to ~/.ssh/authorized_keys on the server:
+  # keys:
+  #   - /tmp/backsteros-kamal-staging.key
+
+registry:
+  server: ghcr.io
+  username: remondevries
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+
+env:
+  clear:
+    NODE_ENV: production
+    PRODUCT_MODE: linear
+    SIDECAR_HOST: 0.0.0.0
+    SIDECAR_PORT: 3847
+    BACKSTER_DATA_DIR: /data
+    ALLOWED_ORIGINS: https://staging.backsteros.com
+  secret:
+    - SIDECAR_TOKEN
+    - CURSOR_API_KEY
+
+volumes:
+  - "backsteros_staging_data:/data"
+
+proxy:
+  ssl: false
+  host: staging.backsteros.com
+  app_port: 3847
+  forward_headers: true
+  healthcheck:
+    path: /healthz
+    interval: 5
+    timeout: 15

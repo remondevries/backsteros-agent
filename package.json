@@ -23,7 +23,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "npm run build:sidecar && tauri build"
+    "tauri:build": "npm run build:sidecar && tauri build",
+    "kamal:setup": "kamal setup -c config/deploy.yml",
+    "kamal:deploy": "kamal deploy -c config/deploy.yml",
+    "kamal:logs": "kamal app logs -c config/deploy.yml",
+    "kamal:details": "kamal app details -c config/deploy.yml"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

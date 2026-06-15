@@ -16,6 +16,7 @@ BacksterOS Agent: **React + Vite UI**, **Bun sidecar**, optional **Tauri shell**
 | Sidecar tests | `cd sidecar && bun test` |
 | Typecheck | `npm run typecheck` |
 | Web smoke | `npm run smoke:web` (after `build:web`) |
+| Staging deploy | [`docs/deploy-staging.md`](docs/deploy-staging.md) · `npm run kamal:deploy` |
 | Desktop sidecar bundle | `npm run build:sidecar` (copies `sidecar/` → `src-tauri/resources/`; gitignored) |
 
 ## Hard rules

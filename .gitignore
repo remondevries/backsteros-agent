@@ -21,6 +21,10 @@ dist-ssr
 # Env
 .env
 .env.local
+.kamal/secrets
+.kamal/secret
+!.kamal/secrets.example
+config/deploy.local.yml
 
 # Tauri
 src-tauri/target

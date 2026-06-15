@@ -112,6 +112,7 @@ const SYNCED_ENV_KEYS = [
 export function reloadEnvFromDisk(): void {
   const envRecord = readEnvFile(getEnvFilePath());
   for (const key of SYNCED_ENV_KEYS) {
+    if (!(key in envRecord)) continue;
     const value = envRecord[key];
     if (value) {
       process.env[key] = value;

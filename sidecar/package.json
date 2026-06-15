@@ -24,6 +24,7 @@
   },
   "trustedDependencies": [
     "onnxruntime-node",
-    "protobufjs"
+    "protobufjs",
+    "sqlite3"
   ]
 }
