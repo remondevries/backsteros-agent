@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
+import { createLinearTeamDocument } from "../lib/api";
+import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
 import {
   compareDailyJournalDocumentsNewestFirst,
