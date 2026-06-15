@@ -11,7 +11,8 @@ import {
 import { connectLinearOAuthAndWait } from "../lib/linearConnect";
 import {
   getLinearOAuthRedirectUris,
-  LINEAR_OAUTH_PRIMARY_REDIRECT_URI,
+  getLinearOAuthPrimaryRedirectUri,
+  usesPublicLinearOAuthRedirect,
 } from "../lib/linearOAuthRedirect";
 import { openExternalUrl } from "../lib/openExternalUrl";
 import { restartSidecarIfNeeded } from "../lib/restartSidecar";
@@ -389,19 +390,23 @@ export function LinearIntegrationSection({
 
           <p className="settings-hint settings-hint-spaced">
             Primary redirect URI:{" "}
-            <code className="settings-inline-code">{LINEAR_OAUTH_PRIMARY_REDIRECT_URI}</code>
+            <code className="settings-inline-code">{getLinearOAuthPrimaryRedirectUri()}</code>
           </p>
-          <p className="settings-hint">
-            If port 3510 is already in use, BacksterOS may use 3511–3515 instead. Register these too if
-            sign-in fails with an invalid redirect URI:
-          </p>
-          <ul className="settings-hint settings-linear-oauth-redirect-list">
-            {getLinearOAuthRedirectUris().map((redirectUri) => (
-              <li key={redirectUri}>
-                <code className="settings-inline-code">{redirectUri}</code>
-              </li>
-            ))}
-          </ul>
+          {!usesPublicLinearOAuthRedirect() ? (
+            <>
+              <p className="settings-hint">
+                If port 3510 is already in use, BacksterOS may use 3511–3515 instead. Register these too if
+                sign-in fails with an invalid redirect URI:
+              </p>
+              <ul className="settings-hint settings-linear-oauth-redirect-list">
+                {getLinearOAuthRedirectUris().map((redirectUri) => (
+                  <li key={redirectUri}>
+                    <code className="settings-inline-code">{redirectUri}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
 
           {linearOAuth ? (
             <p className="settings-hint settings-hint-spaced">

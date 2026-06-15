@@ -1,7 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  getCursorApiKey,
   getDefaultGoogleOAuthCredentialsPath,
   getDefaultLinearOAuthCredentialsPath,
   getGeminiApiKey,
@@ -15,11 +14,13 @@ import {
   isLinearOAuthAuthenticated,
   isLinearOAuthConfigured,
   isLinearOAuthCredentialsFromEnv,
+  isUserCursorApiKeyConfigured,
   isWhoopAuthenticated,
   isWhoopConfigured,
   getTotemEnvPath,
 } from "./config.ts";
-import { getEnvFilePath, mergeEnvFile, reloadEnvFromDisk } from "./env-file.ts";
+import { getEnvFilePath, getTotemEnvFilePath, mergeEnvFile, readEnvFile, reloadEnvFromDisk } from "./env-file.ts";
+import { ensureTotemEnvTemplate } from "./whoopAuth.ts";
 import { stopLinearOAuthAuth } from "./linearOAuth.ts";
 
 export interface SecretFieldStatus {
@@ -137,14 +138,15 @@ function readLinearOAuthCredentialFields(): Pick<LinearOAuthStatus, "clientId" |
 }
 
 export function getIntegrationsStatus(): IntegrationsStatus {
-  const cursor = getCursorApiKey()?.trim();
+  const cursorConfigured = isUserCursorApiKeyConfigured();
+  const cursor = cursorConfigured ? readEnvFile(getEnvFilePath()).CURSOR_API_KEY?.trim() : undefined;
   const gemini = getGeminiApiKey();
   const googleCalendarCredentials = readGoogleCalendarCredentialFields();
   const linearOAuthCredentials = readLinearOAuthCredentialFields();
 
   return {
     cursorApiKey: {
-      configured: Boolean(cursor),
+      configured: cursorConfigured,
       preview: secretPreview(cursor),
     },
     geminiApiKey: {
@@ -352,6 +354,12 @@ export function saveLinearOAuthCredentials(body: {
     throw new Error("Client ID and client secret are both required");
   }
 
+  if (clientId === clientSecret) {
+    throw new Error(
+      "Client ID and client secret must be different. Copy each value from Linear → Settings → API → your OAuth app.",
+    );
+  }
+
   return writeLinearOAuthCredentialsFile({
     client_id: clientId,
     client_secret: clientSecret,
@@ -375,6 +383,53 @@ export function clearLinearOAuthCredentials(): IntegrationsStatus {
   });
   reloadEnvFromDisk();
   delete process.env.LINEAR_OAUTH_CREDENTIALS;
+
+  return getIntegrationsStatus();
+}
+
+export function saveWhoopCredentials(body: {
+  email?: string | null;
+  iosBearerToken?: string | null;
+  cognitoRefreshToken?: string | null;
+  userId?: string | null;
+  installationId?: string | null;
+  clear?: boolean;
+}): IntegrationsStatus {
+  ensureTotemEnvTemplate();
+
+  if (body.clear) {
+    mergeEnvFile(getTotemEnvFilePath(), {
+      WHOOP_EMAIL: null,
+      WHOOP_IOS_BEARER_TOKEN: null,
+      WHOOP_COGNITO_REFRESH_TOKEN: null,
+      WHOOP_USER_ID: null,
+      WHOOP_INSTALLATION_ID: null,
+    });
+    reloadEnvFromDisk();
+    return getIntegrationsStatus();
+  }
+
+  const updates: Record<string, string | null> = {};
+  if (body.email !== undefined) {
+    updates.WHOOP_EMAIL = body.email?.trim() || null;
+  }
+  if (body.iosBearerToken !== undefined) {
+    updates.WHOOP_IOS_BEARER_TOKEN = body.iosBearerToken?.trim() || null;
+  }
+  if (body.cognitoRefreshToken !== undefined) {
+    updates.WHOOP_COGNITO_REFRESH_TOKEN = body.cognitoRefreshToken?.trim() || null;
+  }
+  if (body.userId !== undefined) {
+    updates.WHOOP_USER_ID = body.userId?.trim() || null;
+  }
+  if (body.installationId !== undefined) {
+    updates.WHOOP_INSTALLATION_ID = body.installationId?.trim() || null;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    mergeEnvFile(getTotemEnvFilePath(), updates);
+    reloadEnvFromDisk();
+  }
 
   return getIntegrationsStatus();
 }

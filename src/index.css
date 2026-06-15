@@ -4304,29 +4304,13 @@ button.meeting-document-sidebar-row--keyboard-focused {
   justify-content: center;
 }
 
-.daily-gym-indicator__icon {
-  position: relative;
-  z-index: 1;
-  width: 20px;
-  height: 20px;
-  color: color-mix(in srgb, var(--text-primary) 72%, transparent);
-}
-
-.daily-gym-indicator--loading .daily-gym-indicator__icon {
-  opacity: 0.45;
-}
-
-.daily-gym-indicator--visited .daily-gym-indicator__icon {
-  color: color-mix(in srgb, #5ec269 85%, var(--text-primary));
-}
-
-.daily-gym-indicator--missed .daily-gym-indicator__icon {
-  color: color-mix(in srgb, #eb5757 85%, var(--text-primary));
-}
-
 .daily-gym-indicator .whoop-metric-ring-label {
   display: block;
   min-width: 48px;
+}
+
+.daily-gym-indicator .whoop-metric-ring-target-fill {
+  color: color-mix(in srgb, var(--whoop-metric-ring-color) 52%, white);
 }
 
 .vault-document-leading-whoop .vault-document-whoop {

@@ -22,10 +22,8 @@ servers:
 
 ssh:
   user: wsmk_rvw4fjmeeydkdvhghwnq7_wbfxa
-  # Net::SSH (Kamal) cannot use the 1Password SSH agent. Uncomment and point at a
-  # deploy key after adding the public half to ~/.ssh/authorized_keys on the server:
-  # keys:
-  #   - /tmp/backsteros-kamal-staging.key
+  keys:
+    - /tmp/backsteros-kamal-staging.key
 
 registry:
   server: ghcr.io
@@ -46,7 +44,6 @@ env:
     ALLOWED_ORIGINS: https://staging.backsteros.com
   secret:
     - SIDECAR_TOKEN
-    - CURSOR_API_KEY
 
 volumes:
   - "backsteros_staging_data:/data"

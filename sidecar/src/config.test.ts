@@ -8,7 +8,9 @@ import {
   getLinearOAuthCredentialsPath,
   getSidecarToken,
   isLinearOAuthConfigured,
+  isUserCursorApiKeyConfigured,
 } from "./config.ts";
+import { mergeEnvFile } from "./env-file.ts";
 
 describe("getSidecarToken", () => {
   let previousToken: string | undefined;
@@ -30,6 +32,38 @@ describe("getSidecarToken", () => {
   test("reads SIDECAR_TOKEN from env when set", () => {
     process.env.SIDECAR_TOKEN = "custom-token";
     expect(getSidecarToken()).toBe("custom-token");
+  });
+});
+
+describe("isUserCursorApiKeyConfigured", () => {
+  let dataDir: string;
+  let previousDataDir: string | undefined;
+  let previousCursorKey: string | undefined;
+
+  beforeEach(() => {
+    previousDataDir = process.env.BACKSTER_DATA_DIR;
+    previousCursorKey = process.env.CURSOR_API_KEY;
+    dataDir = mkdtempSync(join(tmpdir(), "backster-cursor-key-"));
+    process.env.BACKSTER_DATA_DIR = dataDir;
+    delete process.env.CURSOR_API_KEY;
+  });
+
+  afterEach(() => {
+    if (previousDataDir === undefined) delete process.env.BACKSTER_DATA_DIR;
+    else process.env.BACKSTER_DATA_DIR = previousDataDir;
+    if (previousCursorKey === undefined) delete process.env.CURSOR_API_KEY;
+    else process.env.CURSOR_API_KEY = previousCursorKey;
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  test("returns false when only container env is set", () => {
+    process.env.CURSOR_API_KEY = "cursor_from_kamal";
+    expect(isUserCursorApiKeyConfigured()).toBe(false);
+  });
+
+  test("returns true when key is saved under the data dir", () => {
+    mergeEnvFile(join(dataDir, ".env"), { CURSOR_API_KEY: "cursor_user_saved" });
+    expect(isUserCursorApiKeyConfigured()).toBe(true);
   });
 });
 

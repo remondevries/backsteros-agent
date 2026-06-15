@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
-  LINEAR_OAUTH_PRIMARY_REDIRECT_URI,
+  getLinearOAuthPrimaryRedirectUri,
   getLinearOAuthRedirectUris,
+  usesPublicLinearOAuthCallback,
 } from "./linearOAuth.ts";
 
 describe("linearOAuth redirect URIs", () => {
   test("uses the Linear OAuth callback path on localhost", () => {
-    expect(LINEAR_OAUTH_PRIMARY_REDIRECT_URI).toBe(
+    expect(getLinearOAuthPrimaryRedirectUri()).toBe(
       "http://localhost:3510/linear/oauth/callback",
     );
   });
@@ -20,5 +21,22 @@ describe("linearOAuth redirect URIs", () => {
       "http://localhost:3514/linear/oauth/callback",
       "http://localhost:3515/linear/oauth/callback",
     ]);
+  });
+
+  test("uses public callback URL when ALLOWED_ORIGINS is HTTPS in production", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousOrigins = process.env.ALLOWED_ORIGINS;
+    process.env.NODE_ENV = "production";
+    process.env.ALLOWED_ORIGINS = "https://staging.backsteros.com";
+
+    try {
+      expect(usesPublicLinearOAuthCallback()).toBe(true);
+      expect(getLinearOAuthRedirectUris()).toEqual([
+        "https://staging.backsteros.com/linear/oauth/callback",
+      ]);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      process.env.ALLOWED_ORIGINS = previousOrigins;
+    }
   });
 });

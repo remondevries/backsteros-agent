@@ -9,7 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@briangaoo/totem": "1.4.3",
+    "@briangaoo/totem": "github:briangaoo/totem#v1.4.3",
     "@cursor/sdk": "^1.0.18",
     "@huggingface/transformers": "^3.5.1",
     "google-auth-library": "^10.7.0",

@@ -6,9 +6,8 @@ COPY . .
 RUN bun run build:web
 
 WORKDIR /app/sidecar
-# @briangaoo/totem is not published on npm; optional for linear-only staging (Whoop uses dynamic import).
-RUN bun -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); delete p.dependencies["@briangaoo/totem"]; fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
-RUN rm -f bun.lock && bun install --trust-all
+# @briangaoo/totem is installed from GitHub (not on the public npm registry).
+RUN bun install --frozen-lockfile --trust-all
 
 FROM oven/bun:1
 WORKDIR /app

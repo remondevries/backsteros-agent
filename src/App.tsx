@@ -32,6 +32,7 @@ import { VaultProvider } from "./chat/VaultContext";
 import {
   formatSidecarReachabilityError,
   getAccountWorkspace,
+  getAuthStatus,
   getHealth,
   getSettings,
   getWhoopSetup,
@@ -303,6 +304,18 @@ export default function App() {
       }
 
       setServiceOffline(false);
+
+      if (!import.meta.env.DEV) {
+        const authStatus = await getAuthStatus();
+        if (!authStatus.authenticated) {
+          clearConnectGateAccessCache();
+          setAppReady(false);
+          setGateNotice(
+            "Server access denied. Sign in with your server access token below, then retry.",
+          );
+          return { linearReady: true, hasApiKey: false, appReady: false };
+        }
+      }
 
       const settings = await getSettings();
       if (!health.hasApiKey) {

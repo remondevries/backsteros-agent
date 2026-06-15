@@ -9,7 +9,8 @@ import {
 import { connectLinearOAuthAndWait } from "../lib/linearConnect";
 import {
   getLinearOAuthRedirectUris,
-  LINEAR_OAUTH_PRIMARY_REDIRECT_URI,
+  getLinearOAuthPrimaryRedirectUri,
+  usesPublicLinearOAuthRedirect,
 } from "../lib/linearOAuthRedirect";
 import { openExternalUrl } from "../lib/openExternalUrl";
 import { restartSidecarIfNeeded } from "../lib/restartSidecar";
@@ -78,6 +79,9 @@ export function LinearConnectGate({
   }, [loadStatus, onServerAccessSignedIn]);
 
   const bootstrapBlocking = Boolean(bootstrapMessage);
+  const needsServerAccessSignIn = bootstrapMessage
+    ?.toLowerCase()
+    .includes("server access");
 
   useEffect(() => {
     if (bootstrapBlocking) {
@@ -238,6 +242,9 @@ export function LinearConnectGate({
         description={bootstrapMessage ?? undefined}
         {...progressProps}
       >
+        {needsServerAccessSignIn ? (
+          <ConnectGateServerAccess onSignedIn={handleServerAccessSignedIn} />
+        ) : null}
         {!checking && onBootstrapRetry ? (
           <div className="linear-connect-gate-actions">
             <button
@@ -319,19 +326,23 @@ export function LinearConnectGate({
                 Create a Linear OAuth app and register this redirect URI exactly:
               </p>
               <p className="settings-hint settings-hint-spaced">
-                <code className="settings-inline-code">{LINEAR_OAUTH_PRIMARY_REDIRECT_URI}</code>
+                <code className="settings-inline-code">{getLinearOAuthPrimaryRedirectUri()}</code>
               </p>
-              <p className="settings-hint">
-                If port 3510 is in use, BacksterOS may use 3511–3515. Register those URIs too if
-                sign-in fails:
-              </p>
-              <ul className="settings-hint settings-linear-oauth-redirect-list">
-                {getLinearOAuthRedirectUris().map((redirectUri) => (
-                  <li key={redirectUri}>
-                    <code className="settings-inline-code">{redirectUri}</code>
-                  </li>
-                ))}
-              </ul>
+              {!usesPublicLinearOAuthRedirect() ? (
+                <>
+                  <p className="settings-hint">
+                    If port 3510 is in use, BacksterOS may use 3511–3515. Register those URIs too if
+                    sign-in fails:
+                  </p>
+                  <ul className="settings-hint settings-linear-oauth-redirect-list">
+                    {getLinearOAuthRedirectUris().map((redirectUri) => (
+                      <li key={redirectUri}>
+                        <code className="settings-inline-code">{redirectUri}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
               <p className="settings-hint">
                 <button
                   type="button"

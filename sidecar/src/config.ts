@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 
 /** Matches Tauri default and Vite `VITE_SIDECAR_TOKEN` fallback for local dev. */
 export const DEFAULT_SIDECAR_TOKEN = "dev-token-change-me";
-import { reloadEnvFromDisk } from "./env-file.ts";
+import { reloadEnvFromDisk, readEnvFile, getEnvFilePath } from "./env-file.ts";
 
 reloadEnvFromDisk();
 
@@ -112,6 +112,22 @@ export function getDefaultAppReturnUrl(): string {
   return "http://localhost:5173";
 }
 
+/**
+ * Public HTTPS origin for Linear OAuth callback (web/staging). When set, OAuth uses
+ * `{base}/linear/oauth/callback` on the sidecar instead of localhost:3510–3515.
+ */
+export function getLinearOAuthPublicBaseUrl(): string | undefined {
+  const explicit = process.env.LINEAR_OAUTH_PUBLIC_BASE_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, "");
+  }
+  if (isDevelopmentAuthMode()) {
+    return undefined;
+  }
+  const httpsOrigin = getAllowedOrigins().find((origin) => origin.startsWith("https://"));
+  return httpsOrigin?.replace(/\/+$/, "");
+}
+
 /** Resolve a safe in-app URL for OAuth success pages (open redirect protection). */
 export function resolveAppReturnUrl(input?: string): string {
   const fallback = getDefaultAppReturnUrl();
@@ -150,7 +166,14 @@ export function appendAppReturnQuery(
 }
 
 export function getCursorApiKey(): string | undefined {
-  return process.env.CURSOR_API_KEY;
+  const value = process.env.CURSOR_API_KEY?.trim();
+  return value || undefined;
+}
+
+/** True when the user saved a Cursor API key under the data dir (not Kamal/container env alone). */
+export function isUserCursorApiKeyConfigured(): boolean {
+  const value = readEnvFile(getEnvFilePath()).CURSOR_API_KEY?.trim();
+  return Boolean(value);
 }
 
 export function getGeminiApiKey(): string | undefined {

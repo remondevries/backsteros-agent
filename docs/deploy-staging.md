@@ -14,7 +14,7 @@ Web-first BacksterOS Agent on **backsteros.com** (`161.35.86.25`) via **Kamal** 
 ```bash
 cp .kamal/secrets.example .kamal/secrets
 # KAMAL_REGISTRY_PASSWORD=$(gh auth token)
-# SIDECAR_TOKEN and CURSOR_API_KEY from ~/.backsteros-agent/.env (or generate a new token)
+# SIDECAR_TOKEN from ~/.backsteros-agent/.env (or generate a new token)
 chmod 600 .kamal/secrets
 ```
 
@@ -96,7 +96,21 @@ kamal app boot -c config/deploy.yml
 curl -sS https://staging.backsteros.com/healthz | jq .
 ```
 
-Open `https://staging.backsteros.com`, sign in with `SIDECAR_TOKEN`, connect Linear (seed OAuth files on the volume or configure client id/secret in secrets).
+Open `https://staging.backsteros.com`, sign in with `SIDECAR_TOKEN`, connect Linear, then add your **Cursor API key** in the connect gate or **Settings → Cursor** (each user provides their own key; it is stored on the server volume under `/data`).
+
+Seed OAuth files on the volume or configure client id/secret in secrets if needed.
+
+### Linear OAuth redirect URI (staging)
+
+On staging, Linear must redirect to the **public** callback on the server — not `localhost:3510`:
+
+```text
+https://staging.backsteros.com/linear/oauth/callback
+```
+
+Add that URI exactly in your [Linear OAuth application](https://linear.app/settings/api/applications). The connect gate on staging shows the same URL. Local desktop dev still uses `http://localhost:3510–3515/linear/oauth/callback`.
+
+The sidecar picks the public URL automatically from `ALLOWED_ORIGINS` when `NODE_ENV=production`. Override with `LINEAR_OAUTH_PUBLIC_BASE_URL` if needed.
 
 ## Data volume
 
@@ -110,6 +124,22 @@ To copy local dev data once:
 # Example: tar local ~/.backsteros-agent and extract into the container volume (adjust paths)
 kamal app exec -c config/deploy.yml --interactive --reuse "ls /data"
 ```
+
+### Whoop (Totem)
+
+Whoop uses the [@briangaoo/totem](https://github.com/briangaoo/totem) library (installed from GitHub in the Docker image). Tokens live in `/data/totem.env` on the server volume.
+
+1. On your Mac, run `npx -y @briangaoo/totem auth` and sign in.
+2. In staging **Settings → Whoop**, paste `WHOOP_EMAIL`, `WHOOP_IOS_BEARER_TOKEN`, `WHOOP_COGNITO_REFRESH_TOKEN`, `WHOOP_USER_ID`, and `WHOOP_INSTALLATION_ID`, then **Save tokens** and **Test connection**.
+
+Or copy your local file once:
+
+```bash
+scp ~/.backsteros-agent/totem.env backsteros.com:/tmp/totem.env
+kamal app exec -c config/deploy.yml --reuse "cp /tmp/totem.env /data/totem.env && chmod 600 /data/totem.env"
+```
+
+Redeploy after image changes so `@briangaoo/totem` is present in the container.
 
 ## Desktop remote shell
 

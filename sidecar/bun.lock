@@ -5,7 +5,7 @@
     "": {
       "name": "sidecar",
       "dependencies": {
-        "@briangaoo/totem": "1.4.3",
+        "@briangaoo/totem": "github:briangaoo/totem#v1.4.3",
         "@cursor/sdk": "^1.0.18",
         "@huggingface/transformers": "^3.5.1",
         "google-auth-library": "^10.7.0",
@@ -21,11 +21,12 @@
     },
   },
   "trustedDependencies": [
+    "sqlite3",
     "onnxruntime-node",
     "protobufjs",
   ],
   "packages": {
-    "@briangaoo/totem": ["@briangaoo/totem@1.4.3", "", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "dotenv": "^17.4.2", "express": "^5.2.1", "zod": "^4.4.3" }, "bin": { "totem": "dist/cli/index.js" } }, "sha512-Y+i5+3HVs+syYd7FZXM3WyPEU8KX9Qv5GktwqwkZLTnoeUNXq/WnnSm+jF96/5TVKWA00/M4tVld+GbZxLW13Q=="],
+    "@briangaoo/totem": ["@briangaoo/totem@github:briangaoo/totem#21d92dc", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "dotenv": "^17.4.2", "express": "^5.2.1", "zod": "^4.4.3" }, "bin": { "totem": "./dist/cli/index.js" } }, "thebriangao-totem-21d92dc", "sha512-NRjos77xojaPz8ThZcxMrdkXP+uvfVnXNNQy0AqdIz9eQWdWwBjTUCxsKEiSXblzYD0zT6NfkCI1/ZGA6A/GIA=="],
 
     "@bufbuild/protobuf": ["@bufbuild/protobuf@1.10.0", "", {}, "sha512-QDdVFLoN93Zjg36NoQPZfsVH9tZew7wKDKyV5qRdj8ntT4wQCOradQjRaTdwMhWUYsgKsvCINKKm87FdEk96Ag=="],
 

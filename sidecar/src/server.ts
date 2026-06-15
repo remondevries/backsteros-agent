@@ -41,7 +41,11 @@ import {
   waitForApproval,
 } from "./approvals.ts";
 import { startGoogleCalendarAuth } from "./calendarAuth.ts";
-import { startLinearOAuthAuth } from "./linearAuth.ts";
+import {
+  handleLinearOAuthCallback,
+  LINEAR_OAUTH_CALLBACK_PATH,
+  startLinearOAuthAuth,
+} from "./linearAuth.ts";
 import { getLinearAuthToken, linearAuthorizationHeader } from "./linear/auth-token.ts";
 import { fetchLinearViewer } from "./linear/viewer.ts";
 import { viewerHasAdministratorAccess } from "./admin-access.ts";
@@ -56,6 +60,7 @@ import {
 import {
   getAgentProfilePath,
   getCursorApiKey,
+  isUserCursorApiKeyConfigured,
   getGeminiApiKey,
   getNotesDirOverride,
   getSidecarPort,
@@ -163,6 +168,7 @@ import {
   appendWorkoutRep,
   createWorkoutGroupSet,
   fetchWorkoutSession,
+  fetchWorkoutSubIssueCountForDate,
 } from "./linear/workout-sessions.ts";
 import { syncWorkoutPersonalRecordForRepWeight } from "./linear/workout-personal-records.ts";
 import { fetchLinearTeamLabelGroupLabels, fetchLinearTeamLabels } from "./linear/team-labels.ts";
@@ -211,6 +217,7 @@ import {
   saveGoogleCalendarOAuthCredentials,
   disconnectLinearOAuth,
   saveLinearOAuthCredentials,
+  saveWhoopCredentials,
   updateIntegrationSecrets,
 } from "./integrations-secrets.ts";
 import {
@@ -493,6 +500,13 @@ app.get("/auth/status", (c) => {
   return c.json({ authenticated: authorized });
 });
 
+app.get(LINEAR_OAUTH_CALLBACK_PATH, async (c) => {
+  const result = await handleLinearOAuthCallback(c.req.query());
+  return c.body(result.html, result.status, {
+    "Content-Type": "text/html; charset=utf-8",
+  });
+});
+
 app.use("/flows/*", bearerOrCookieAuth);
 app.use("/settings", bearerOrCookieAuth);
 app.use("/accounts/*", bearerOrCookieAuth);
@@ -529,7 +543,7 @@ app.onError((err, c) => {
 app.get("/healthz", (c) => {
   return c.json({
     ok: true,
-    hasApiKey: Boolean(getCursorApiKey()),
+    hasApiKey: isUserCursorApiKeyConfigured(),
     hasGeminiApiKey: Boolean(getGeminiApiKey()),
     hasLinearOAuthCredentials: isLinearOAuthConfigured(),
     hasLinearOAuthAuth: isLinearOAuthAuthenticated(),
@@ -1685,6 +1699,33 @@ app.get("/linear/teams/:teamId/workout-sessions/:date", async (c) => {
   }
 });
 
+app.get("/linear/teams/:teamId/workout-sessions/:date/sub-issue-count", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        count: 0,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  const date = c.req.param("date")?.trim();
+  if (!teamId || !date) {
+    return c.json({ error: "teamId and date are required", count: 0 }, 400);
+  }
+
+  try {
+    const count = await fetchWorkoutSubIssueCountForDate(teamId, date);
+    return c.json({ count });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load workout sub-issue count";
+    return c.json({ error: message, count: 0 }, 500);
+  }
+});
+
 app.post("/linear/teams/:teamId/workout-sessions/:date/group-sets", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
@@ -2169,6 +2210,25 @@ app.get("/linear/projects/:projectId/context", async (c) => {
 app.post("/integrations/whoop/setup", async (c) => {
   const info = getWhoopSetupInfo();
   return c.json(info);
+});
+
+app.post("/integrations/whoop/credentials", async (c) => {
+  try {
+    const body = await c.req.json();
+    return c.json(
+      saveWhoopCredentials(body as {
+        email?: string | null;
+        iosBearerToken?: string | null;
+        cognitoRefreshToken?: string | null;
+        userId?: string | null;
+        installationId?: string | null;
+        clear?: boolean;
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save Whoop credentials";
+    return c.json({ error: message }, 400);
+  }
 });
 
 app.get("/integrations/status", (c) => {

@@ -1,45 +1,60 @@
-import { useMemo, type CSSProperties } from "react";
-import { useLinearWorkoutMilestones } from "../../hooks/useLinearWorkoutMilestones";
-import { hasWorkoutMilestoneForDate } from "../../lib/workouts/workoutMilestoneGroups";
+import { useEffect, useState } from "react";
+import { WhoopMetricRing } from "../../chat/WhoopMetricRing";
+import { formatWhoopRingValue } from "../../chat/whoopMetrics";
 import {
-  WHOOP_METRIC_RING_CIRCUMFERENCE,
-  whoopValueToDash,
-} from "../../chat/whoopMetrics";
-import { SidebarWorkoutsIcon } from "../SidebarNavIcons";
+  DAILY_GYM_RING_COLOR,
+  DAILY_GYM_RING_COLOR_LOADING,
+  DAILY_GYM_RING_MAX,
+  DAILY_GYM_SUB_ISSUE_TARGET,
+  formatDailyGymRingTitle,
+} from "../../lib/dailyGymMetrics";
+import { useDailyGymSubIssueCount } from "../../hooks/useDailyGymSubIssueCount";
 
-const GYM_RING_STROKE_WIDTH = 3;
-const GYM_RING_COLOR_VISITED = "#5EC269";
-const GYM_RING_COLOR_MISSED = "#EB5757";
-const GYM_RING_COLOR_LOADING = "color-mix(in srgb, var(--text-faint) 45%, transparent)";
+const WHOOP_HEADER_ANIMATION_MS = 460;
 
-function DailyGymRing({ fillPercent }: { fillPercent: number }) {
-  const dashLength = whoopValueToDash(fillPercent, 100);
+function useAnimatedGymCount(value: number, animationKey: string, enabled: boolean) {
+  const [animatedValue, setAnimatedValue] = useState(enabled ? 0 : value);
+  const [visible, setVisible] = useState(!enabled);
 
-  return (
-    <svg className="whoop-metric-ring-svg" viewBox="0 0 24 24" aria-hidden="true">
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={GYM_RING_STROKE_WIDTH}
-        className="whoop-metric-ring-track"
-      />
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={GYM_RING_STROKE_WIDTH}
-        strokeDasharray={`${WHOOP_METRIC_RING_CIRCUMFERENCE} ${WHOOP_METRIC_RING_CIRCUMFERENCE}`}
-        strokeDashoffset={WHOOP_METRIC_RING_CIRCUMFERENCE - dashLength}
-        strokeLinecap="round"
-        className="whoop-metric-ring-fill"
-      />
-    </svg>
-  );
+  useEffect(() => {
+    if (!enabled) {
+      setAnimatedValue(value);
+      setVisible(true);
+      return;
+    }
+
+    setAnimatedValue(0);
+    setVisible(false);
+
+    let startTime: number | null = null;
+    let frameId = 0;
+    const target = Math.max(0, value);
+
+    const step = (timestamp: number) => {
+      if (startTime == null) startTime = timestamp;
+      const progress = Math.min(1, (timestamp - startTime) / WHOOP_HEADER_ANIMATION_MS);
+      const eased = 1 - (1 - progress) ** 3;
+      setAnimatedValue(target * eased);
+
+      if (progress < 1) {
+        frameId = window.requestAnimationFrame(step);
+        return;
+      }
+
+      setAnimatedValue(target);
+    };
+
+    frameId = window.requestAnimationFrame((timestamp) => {
+      setVisible(true);
+      step(timestamp);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [animationKey, enabled, value]);
+
+  return { value: animatedValue, visible };
 }
 
 export function DailyGymIndicator({
@@ -55,56 +70,37 @@ export function DailyGymIndicator({
   const normalizedDate = date?.trim() ?? "";
   const showIndicator = enabled && Boolean(normalizedDate) && Boolean(normalizedTeamId);
 
-  const { milestones, loading } = useLinearWorkoutMilestones({
+  const { count, loading } = useDailyGymSubIssueCount({
     teamId: normalizedTeamId,
+    date: normalizedDate,
     enabled: showIndicator,
   });
 
-  const visitedGym = useMemo(
-    () => hasWorkoutMilestoneForDate(milestones, normalizedDate),
-    [milestones, normalizedDate],
+  const animatedCount = useAnimatedGymCount(
+    count,
+    `${normalizedDate}:${count}`,
+    showIndicator && !loading,
   );
-
-  const ringColor = loading
-    ? GYM_RING_COLOR_LOADING
-    : visitedGym
-      ? GYM_RING_COLOR_VISITED
-      : GYM_RING_COLOR_MISSED;
-
-  const ringFillPercent = loading ? 0 : 100;
 
   if (!showIndicator) return null;
 
-  const title = visitedGym
-    ? "Gym session logged for this day"
-    : loading
-      ? "Checking gym session…"
-      : "No gym session for this day";
+  const ringColor = loading ? DAILY_GYM_RING_COLOR_LOADING : DAILY_GYM_RING_COLOR;
+  const title = loading ? "Loading gym progress…" : formatDailyGymRingTitle(count);
 
   return (
-    <div
-      className={[
-        "whoop-metric-ring-item",
-        "daily-gym-indicator",
-        loading
-          ? "daily-gym-indicator--loading"
-          : visitedGym
-            ? "daily-gym-indicator--visited"
-            : "daily-gym-indicator--missed",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+    <WhoopMetricRing
+      className="daily-gym-indicator"
+      label="Gym"
+      value={loading ? 0 : animatedCount.value}
+      targetValue={DAILY_GYM_SUB_ISSUE_TARGET}
+      max={DAILY_GYM_RING_MAX}
+      ringColor={ringColor}
+      animateFill={false}
+      displayValue={formatWhoopRingValue(loading ? null : animatedCount.value, DAILY_GYM_RING_MAX)}
+      valueClassName={
+        loading || !animatedCount.visible ? "whoop-metric-ring-value--hidden" : undefined
+      }
       title={title}
-      aria-label={title}
-    >
-      <div
-        className="whoop-metric-ring-badge"
-        style={{ "--whoop-metric-ring-color": ringColor } as CSSProperties}
-      >
-        <DailyGymRing fillPercent={ringFillPercent} />
-        <SidebarWorkoutsIcon className="daily-gym-indicator__icon" />
-      </div>
-      <span className="whoop-metric-ring-label">Gym</span>
-    </div>
+    />
   );
 }

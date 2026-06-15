@@ -316,6 +316,20 @@ export async function runIntegrationTest(
   );
 }
 
+export async function saveWhoopCredentials(body: {
+  email?: string | null;
+  iosBearerToken?: string | null;
+  cognitoRefreshToken?: string | null;
+  userId?: string | null;
+  installationId?: string | null;
+  clear?: boolean;
+}) {
+  return request<IntegrationsStatus>("/integrations/whoop/credentials", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function getWhoopSetup() {
   return request<{ envPath: string; authCommand: string; docsUrl: string }>(
     "/integrations/whoop/setup",

@@ -57,12 +57,12 @@ describe("env-file", () => {
     expect(process.env.CURSOR_API_KEY).toBe("cursor_from_disk");
   });
 
-  test("reloadEnvFromDisk keeps container env when key is absent from disk file", () => {
+  test("reloadEnvFromDisk clears container CURSOR_API_KEY when absent from disk file", () => {
     process.env.CURSOR_API_KEY = "cursor_from_kamal";
 
     reloadEnvFromDisk();
 
-    expect(process.env.CURSOR_API_KEY).toBe("cursor_from_kamal");
+    expect(process.env.CURSOR_API_KEY).toBeUndefined();
   });
 
   test("reloadEnvFromDisk syncs LINEAR_OAUTH_CREDENTIALS", () => {
