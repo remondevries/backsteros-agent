@@ -74,6 +74,7 @@ docker build --platform linux/amd64 --label service=backsteros-staging \
 docker push ghcr.io/lemo-design/backsteros-agent-ui:latest
 
 # Pull on server and boot (env + kamal-proxy route)
+ssh backsteros.com 'docker pull ghcr.io/lemo-design/backsteros-agent-ui:latest'
 kamal build pull -c config/deploy.yml
 kamal app boot -c config/deploy.yml
 ```
