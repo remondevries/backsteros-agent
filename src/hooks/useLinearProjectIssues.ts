@@ -13,6 +13,7 @@ export type LinearWorkflowState = {
   name: string;
   type: string;
   color?: string;
+  position?: number;
 };
 
 export function useLinearProjectIssues(projectId: string | null, enabled: boolean) {

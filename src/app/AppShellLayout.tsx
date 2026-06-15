@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContentPanel } from "./ContentPanel";
 import { ContentPanelNavigationProvider, useContentPanelNavigation } from "./contentPanelNavigation";
 import { LeftSidePanel } from "./LeftSidePanel";
@@ -11,10 +11,15 @@ import { ResizablePanel } from "./ResizablePanel";
 import { useSidePanelToggles } from "../hooks/useSidePanelToggles";
 import { CommandPalette } from "../command-palette/CommandPalette";
 import { CommandPaletteProvider, useCommandPalette } from "../command-palette/CommandPaletteContext";
+import { AppUrlSync } from "./AppUrlSync";
 import { AppShellShortcuts } from "../shortcuts/AppShellShortcuts";
 import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
-import { showTrafficLights } from "../lib/traffic-lights";
-import { isTauriRuntime } from "../lib/tauriRuntime";
+import { isLetterComposeDraftDocumentId } from "../lib/letterComposeDraft";
+import { showTrafficLights } from "../platform/trafficLights";
+import { isTauriRuntime } from "../platform/runtime";
+
+const LETTER_COMPOSE_CHAT_BLOCKED_MESSAGE =
+  "The assistant is unavailable while you upload a letter.";
 
 const LEFT_SIDE_PANEL_WIDTH_KEY = "backsteros.layout.leftPanelWidth";
 const RIGHT_SIDE_PANEL_WIDTH_KEY = "backsteros.layout.rightPanelWidth";
@@ -32,14 +37,22 @@ function AppMainShell({
   onSettingsTabChange,
   onOpenSettings,
   onExitSettings,
-  savedNotesPath,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
   rightPanelChatEnabled,
   rightPanelSession,
   rightPanelSessionLoading,
   onSaveRightPanelSessionState,
   activeVaultNavItem,
   onVaultNavItemChange,
+  linearWorkspaceEnabled,
   vaultExplorerEnabled,
+  linearUserId,
+  urlSyncEnabled,
   children,
   leftSidePanelOpen,
   rightSidePanelOpen,
@@ -56,7 +69,12 @@ function AppMainShell({
   onSettingsTabChange: (tab: SettingsTabId) => void;
   onOpenSettings: () => void;
   onExitSettings?: () => void;
-  savedNotesPath: string | null;
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
   rightPanelChatEnabled: boolean;
   rightPanelSession: RightPanelSession | null;
   rightPanelSessionLoading: boolean;
@@ -67,7 +85,10 @@ function AppMainShell({
   ) => void;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
+  linearWorkspaceEnabled: boolean;
   vaultExplorerEnabled: boolean;
+  linearUserId: string | null;
+  urlSyncEnabled: boolean;
   children: ReactNode;
   leftSidePanelOpen: boolean;
   rightSidePanelOpen: boolean;
@@ -82,17 +103,40 @@ function AppMainShell({
   const { activeLinearDocument, clearActiveVaultDocument, resetProjectsOverview } =
     useContentPanelNavigation();
   const { open: commandPaletteOpen } = useCommandPalette();
+  const letterComposeActive =
+    activeLinearDocument != null &&
+    isLetterComposeDraftDocumentId(activeLinearDocument.id);
+  const rightPanelChatBlockedMessage = letterComposeActive
+    ? LETTER_COMPOSE_CHAT_BLOCKED_MESSAGE
+    : null;
   const [leftNavigationOverlayOpen, setLeftNavigationOverlayOpen] = useState(false);
   const [narrowNavigation, setNarrowNavigation] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(NARROW_NAVIGATION_QUERY).matches,
   );
   const leftNavigationOverlayRef = useRef<HTMLDivElement | null>(null);
   const rightPanelOverlayRef = useRef<HTMLDivElement | null>(null);
-  const showContentPanelSidebar =
-    contentPanelSidebarOpen && activeLinearDocument === null;
+  const showContentPanelSidebar = contentPanelSidebarOpen;
   const showFloatingLeftNavigation =
     narrowNavigation && (leftSidePanelOpen || leftNavigationOverlayOpen);
   const showFloatingRightPanel = narrowNavigation && rightSidePanelOpen;
+  const linearSidebarTeamConfig = useMemo(
+    () => ({
+      inboxLinearTeamId,
+      dailyLinearTeamId,
+      workoutsLinearTeamId,
+      lettersLinearTeamId,
+      knowledgeBaseLinearTeamId,
+      addressbookLinearTeamId,
+    }),
+    [
+      addressbookLinearTeamId,
+      dailyLinearTeamId,
+      inboxLinearTeamId,
+      knowledgeBaseLinearTeamId,
+      lettersLinearTeamId,
+      workoutsLinearTeamId,
+    ],
+  );
 
   const handleVaultNavItemChange = useCallback(
     (item: SidebarNavItemId | null) => {
@@ -132,6 +176,16 @@ function AppMainShell({
     setLeftNavigationOverlayOpen(false);
     if (narrowNavigation) closeLeftSidePanel();
   }, [closeLeftSidePanel, narrowNavigation, onOpenSettings]);
+
+  const switchVaultNavItemQuiet = useCallback(
+    (item: SidebarNavItemId) => {
+      if (item === activeVaultNavItem) return;
+      onVaultNavItemChange(item);
+      setLeftNavigationOverlayOpen(false);
+      if (narrowNavigation) closeLeftSidePanel();
+    },
+    [activeVaultNavItem, closeLeftSidePanel, narrowNavigation, onVaultNavItemChange],
+  );
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -204,6 +258,22 @@ function AppMainShell({
   }, [closeRightSidePanel, showFloatingRightPanel]);
 
   useEffect(() => {
+    if (letterComposeActive && rightSidePanelOpen) {
+      closeRightSidePanel();
+    }
+  }, [closeRightSidePanel, letterComposeActive, rightSidePanelOpen]);
+
+  const handleToggleRightSidePanel = useCallback(() => {
+    if (letterComposeActive) return;
+    toggleRightSidePanel();
+  }, [letterComposeActive, toggleRightSidePanel]);
+
+  const handleOpenRightSidePanel = useCallback(() => {
+    if (letterComposeActive) return;
+    openRightSidePanel();
+  }, [letterComposeActive, openRightSidePanel]);
+
+  useEffect(() => {
     return registerContentPanelLocalBack(() => {
       if (showFloatingRightPanel && rightSidePanelOpen) {
         closeRightSidePanel();
@@ -226,8 +296,29 @@ function AppMainShell({
     showFloatingRightPanel,
   ]);
 
+  const handleShowSettingsFromUrl = useCallback(
+    (open: boolean) => {
+      if (open) {
+        handleOpenSettings();
+        return;
+      }
+      onExitSettings?.();
+    },
+    [handleOpenSettings, onExitSettings],
+  );
+
   return (
     <div className="app-main-shell">
+      <AppUrlSync
+        enabled={urlSyncEnabled}
+        linearUserId={linearUserId}
+        showSettings={settingsOpen}
+        onShowSettingsChange={handleShowSettingsFromUrl}
+        activeSettingsTab={activeSettingsTab}
+        onSettingsTabChange={onSettingsTabChange}
+        activeVaultNavItem={activeVaultNavItem}
+        onVaultNavItemChange={switchVaultNavItemQuiet}
+      />
       <div className="app-window-chrome" aria-hidden="true">
         <div className="app-window-traffic-safe" data-tauri-drag-region={false} />
         <div className="app-window-drag" data-tauri-drag-region />
@@ -249,7 +340,12 @@ function AppMainShell({
             onSettingsTabChange={onSettingsTabChange}
             onOpenSettings={handleOpenSettings}
             onExitSettings={onExitSettings}
-            savedNotesPath={savedNotesPath}
+            inboxLinearTeamId={inboxLinearTeamId}
+            dailyLinearTeamId={dailyLinearTeamId}
+            workoutsLinearTeamId={workoutsLinearTeamId}
+            lettersLinearTeamId={lettersLinearTeamId}
+            knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+            addressbookLinearTeamId={addressbookLinearTeamId}
             activeVaultNavItem={activeVaultNavItem}
             onVaultNavItemChange={handleVaultNavItemChange}
           />
@@ -269,7 +365,12 @@ function AppMainShell({
             onSettingsTabChange={onSettingsTabChange}
             onOpenSettings={handleOpenSettings}
             onExitSettings={onExitSettings}
-            savedNotesPath={savedNotesPath}
+            inboxLinearTeamId={inboxLinearTeamId}
+            dailyLinearTeamId={dailyLinearTeamId}
+            workoutsLinearTeamId={workoutsLinearTeamId}
+            lettersLinearTeamId={lettersLinearTeamId}
+            knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+            addressbookLinearTeamId={addressbookLinearTeamId}
             activeVaultNavItem={activeVaultNavItem}
             onVaultNavItemChange={handleVaultNavItemChange}
           />
@@ -279,9 +380,16 @@ function AppMainShell({
       <div className="content-panel-slot">
         <ContentPanel
           sidebarOpen={showContentPanelSidebar}
-          hideSidebar={settingsOpen || activeVaultNavItem === "projects"}
+          hideSidebar={settingsOpen || activeVaultNavItem === "projects" || activeVaultNavItem === "workouts"}
           activeVaultNavItem={activeVaultNavItem}
           onVaultNavItemChange={handleVaultNavItemChange}
+          inboxLinearTeamId={inboxLinearTeamId}
+          dailyLinearTeamId={dailyLinearTeamId}
+          workoutsLinearTeamId={workoutsLinearTeamId}
+          lettersLinearTeamId={lettersLinearTeamId}
+            knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+            addressbookLinearTeamId={addressbookLinearTeamId}
+            linearWorkspaceEnabled={linearWorkspaceEnabled}
           vaultExplorerEnabled={vaultExplorerEnabled}
           navigationCollapsed={!leftSidePanelOpen && !leftNavigationOverlayOpen}
           onOpenNavigation={() => {
@@ -303,14 +411,15 @@ function AppMainShell({
           side="right"
           className="app-resizable-panel-outer"
           storageKey={RIGHT_SIDE_PANEL_WIDTH_KEY}
-          defaultWidth={280}
-          minWidth={200}
+          defaultWidth={320}
+          minWidth={320}
           maxWidth={480}
           ariaLabel="Right side panel"
           collapsed={!rightSidePanelOpen}
         >
           <RightSidePanel
             chatEnabled={rightPanelChatEnabled}
+            chatBlockedMessage={rightPanelChatBlockedMessage}
             session={rightPanelSession}
             sessionLoading={rightPanelSessionLoading}
             onSaveSessionState={onSaveRightPanelSessionState}
@@ -327,6 +436,7 @@ function AppMainShell({
         >
           <RightSidePanel
             chatEnabled={rightPanelChatEnabled}
+            chatBlockedMessage={rightPanelChatBlockedMessage}
             session={rightPanelSession}
             sessionLoading={rightPanelSessionLoading}
             onSaveSessionState={onSaveRightPanelSessionState}
@@ -335,22 +445,28 @@ function AppMainShell({
       ) : null}
       <CommandPalette
         vaultExplorerEnabled={vaultExplorerEnabled}
+        activeVaultNavItem={activeVaultNavItem}
+        linearSidebarTeamConfig={linearSidebarTeamConfig}
+        settingsOpen={settingsOpen}
         onVaultNavItemChange={handleVaultNavItemChange}
+        onVaultNavItemChangeQuiet={switchVaultNavItemQuiet}
         onOpenSettings={handleOpenSettings}
         onSettingsTabChange={onSettingsTabChange}
       />
       <AppShellShortcuts
         settingsOpen={settingsOpen}
         commandPaletteOpen={commandPaletteOpen}
+        linearSidebarTeamConfig={linearSidebarTeamConfig}
         activeVaultNavItem={activeVaultNavItem}
         onVaultNavItemChange={handleVaultNavItemChange}
         onOpenSettings={handleOpenSettings}
         onSettingsTabChange={onSettingsTabChange}
         onToggleLeftSidePanel={toggleLeftSidePanel}
-        onToggleRightSidePanel={toggleRightSidePanel}
+        onToggleRightSidePanel={handleToggleRightSidePanel}
         onToggleContentPanelSidebar={toggleContentPanelSidebar}
-        onOpenRightSidePanel={openRightSidePanel}
+        onOpenRightSidePanel={handleOpenRightSidePanel}
         rightSidePanelOpen={rightSidePanelOpen}
+        rightPanelChatBlocked={letterComposeActive}
       />
     </div>
   );
@@ -362,14 +478,22 @@ export function AppShellLayout({
   onSettingsTabChange,
   onOpenSettings,
   onExitSettings,
-  savedNotesPath,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
   rightPanelChatEnabled,
   rightPanelSession,
   rightPanelSessionLoading,
   onSaveRightPanelSessionState,
   activeVaultNavItem,
   onVaultNavItemChange,
+  linearWorkspaceEnabled,
   vaultExplorerEnabled,
+  linearUserId,
+  urlSyncEnabled,
   children,
 }: {
   settingsOpen: boolean;
@@ -377,7 +501,12 @@ export function AppShellLayout({
   onSettingsTabChange: (tab: SettingsTabId) => void;
   onOpenSettings: () => void;
   onExitSettings?: () => void;
-  savedNotesPath: string | null;
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
   rightPanelChatEnabled: boolean;
   rightPanelSession: RightPanelSession | null;
   rightPanelSessionLoading: boolean;
@@ -388,7 +517,10 @@ export function AppShellLayout({
   ) => void;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
+  linearWorkspaceEnabled: boolean;
   vaultExplorerEnabled: boolean;
+  linearUserId: string | null;
+  urlSyncEnabled: boolean;
   children: ReactNode;
 }) {
   const {
@@ -412,14 +544,22 @@ export function AppShellLayout({
         onSettingsTabChange={onSettingsTabChange}
         onOpenSettings={onOpenSettings}
         onExitSettings={onExitSettings}
-        savedNotesPath={savedNotesPath}
+        inboxLinearTeamId={inboxLinearTeamId}
+        dailyLinearTeamId={dailyLinearTeamId}
+        workoutsLinearTeamId={workoutsLinearTeamId}
+        lettersLinearTeamId={lettersLinearTeamId}
+        knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+        addressbookLinearTeamId={addressbookLinearTeamId}
         rightPanelChatEnabled={rightPanelChatEnabled}
         rightPanelSession={rightPanelSession}
         rightPanelSessionLoading={rightPanelSessionLoading}
         onSaveRightPanelSessionState={onSaveRightPanelSessionState}
         activeVaultNavItem={activeVaultNavItem}
         onVaultNavItemChange={onVaultNavItemChange}
+        linearWorkspaceEnabled={linearWorkspaceEnabled}
         vaultExplorerEnabled={vaultExplorerEnabled}
+        linearUserId={linearUserId}
+        urlSyncEnabled={urlSyncEnabled}
         leftSidePanelOpen={leftSidePanelOpen}
         rightSidePanelOpen={rightSidePanelOpen}
         contentPanelSidebarOpen={contentPanelSidebarOpen}

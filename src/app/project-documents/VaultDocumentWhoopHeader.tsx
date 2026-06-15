@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { WhoopMetricRing } from "../../chat/WhoopMetricRing";
 import type { WhoopSnapshotEntity } from "../../chat/types";
 import {
@@ -76,7 +76,13 @@ function useAnimatedMetricValue(
   return { value: animatedValue, visible };
 }
 
-export function VaultDocumentWhoopHeader({ snapshot }: { snapshot: WhoopSnapshotEntity }) {
+export function VaultDocumentWhoopHeader({
+  snapshot,
+  trailing,
+}: {
+  snapshot: WhoopSnapshotEntity;
+  trailing?: ReactNode;
+}) {
   const animationKey = snapshot.id || snapshot.date;
   const sleep = useAnimatedMetricValue(snapshot.sleepPerformance, `${animationKey}:sleep`);
   const recovery = useAnimatedMetricValue(snapshot.recoveryScore, `${animationKey}:recovery`);
@@ -128,6 +134,7 @@ export function VaultDocumentWhoopHeader({ snapshot }: { snapshot: WhoopSnapshot
               : undefined
           }
         />
+        {trailing}
       </div>
     </div>
   );

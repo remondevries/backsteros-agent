@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isLinearProductMode } from "../lib/productMode";
 import { VAULT_NAV_ITEMS, type VaultNavItemId, vaultNavItemLabel } from "../lib/vaultNavFolders";
 import {
   type SidebarNavItemId,
@@ -66,31 +67,46 @@ function projectsNavItem(): SidebarNavItemDefinition {
   };
 }
 
-export const SIDEBAR_PRIMARY_ITEMS: SidebarNavItemDefinition[] = [
+const FULL_MODE_PRIMARY_ITEMS: SidebarNavItemDefinition[] = [
   navItem("inbox"),
   navItem("daily"),
   navItem("workouts"),
 ];
 
-const SIDEBAR_PRIMARY_NAV_ITEM_IDS = new Set(
-  SIDEBAR_PRIMARY_ITEMS.map((item) => item.id),
-);
+/** @deprecated Prefer getSidebarPrimaryItems for linear team configuration. */
+export const SIDEBAR_PRIMARY_ITEMS: SidebarNavItemDefinition[] = isLinearProductMode()
+  ? []
+  : FULL_MODE_PRIMARY_ITEMS;
 
-export function isSidebarPrimaryNavItem(
-  id: SidebarNavItemId,
-): id is (typeof SIDEBAR_PRIMARY_ITEMS)[number]["id"] {
-  return SIDEBAR_PRIMARY_NAV_ITEM_IDS.has(id as (typeof SIDEBAR_PRIMARY_ITEMS)[number]["id"]);
+export type LinearSidebarTeamConfig = {
+  inboxLinearTeamId?: string | null;
+  dailyLinearTeamId?: string | null;
+  workoutsLinearTeamId?: string | null;
+  lettersLinearTeamId?: string | null;
+  knowledgeBaseLinearTeamId?: string | null;
+  addressbookLinearTeamId?: string | null;
+};
+
+export function getSidebarPrimaryItems(
+  config?: LinearSidebarTeamConfig,
+): SidebarNavItemDefinition[] {
+  if (isLinearProductMode()) {
+    const items: SidebarNavItemDefinition[] = [];
+    if (config?.inboxLinearTeamId?.trim()) {
+      items.push(navItem("inbox"));
+    }
+    if (config?.dailyLinearTeamId?.trim()) {
+      items.push(navItem("daily"));
+    }
+    if (config?.workoutsLinearTeamId?.trim()) {
+      items.push(navItem("workouts"));
+    }
+    return items;
+  }
+  return FULL_MODE_PRIMARY_ITEMS;
 }
 
-/** Primary nav sections that show the content empty state until the user picks an item. */
-export function shouldShowPrimaryNavEmptyState(id: SidebarNavItemId): boolean {
-  if (id === "workouts") return false;
-  if (id === "meetings") return true;
-  if (id === "knowledge-base") return true;
-  return isSidebarPrimaryNavItem(id) && id !== "daily";
-}
-
-export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
+const FULL_MODE_SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
   {
     id: "workspace",
     label: "Workspace",
@@ -108,5 +124,65 @@ export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = [
     items: [navItem("organizations"), navItem("contacts")],
   },
 ];
+
+export function getSidebarSections(
+  config?: LinearSidebarTeamConfig,
+): SidebarNavSectionDefinition[] {
+  if (isLinearProductMode()) {
+    const workspaceItems: SidebarNavItemDefinition[] = [
+      projectsNavItem(),
+      navItem("meetings"),
+    ];
+    if (config?.knowledgeBaseLinearTeamId?.trim()) {
+      workspaceItems.push(navItem("knowledge-base"));
+    }
+    if (config?.lettersLinearTeamId?.trim()) {
+      workspaceItems.push(navItem("letters"));
+    }
+    const peopleItems: SidebarNavItemDefinition[] = [navItem("organizations")];
+    if (config?.addressbookLinearTeamId?.trim()) {
+      peopleItems.push(navItem("contacts"));
+    }
+    return [
+      {
+        id: "workspace",
+        label: "Workspace",
+        items: workspaceItems,
+      },
+      {
+        id: "people",
+        label: "People",
+        items: peopleItems,
+      },
+    ];
+  }
+  return FULL_MODE_SIDEBAR_SECTIONS;
+}
+
+export function buildSidebarNavOrder(config?: LinearSidebarTeamConfig): SidebarNavItemId[] {
+  return [
+    ...getSidebarPrimaryItems(config),
+    ...getSidebarSections(config).flatMap((section) => section.items),
+  ].map((item) => item.id);
+}
+
+export function isSidebarPrimaryNavItem(id: SidebarNavItemId): boolean {
+  return id === "inbox" || id === "daily" || id === "workouts";
+}
+
+/** Primary nav sections that show the content empty state until the user picks an item. */
+export function shouldShowPrimaryNavEmptyState(id: SidebarNavItemId): boolean {
+  if (id === "workouts") return false;
+  if (id === "meetings") return false;
+  if (id === "knowledge-base") return false;
+  if (id === "contacts") return true;
+  if (id === "organizations") return true;
+  return isSidebarPrimaryNavItem(id) && id !== "daily";
+}
+
+/** @deprecated Prefer getSidebarSections(config) for linear letters team gating. */
+export const SIDEBAR_SECTIONS: SidebarNavSectionDefinition[] = isLinearProductMode()
+  ? getSidebarSections()
+  : FULL_MODE_SIDEBAR_SECTIONS;
 
 export const SIDEBAR_VAULT_NAV_ITEM_IDS = VAULT_NAV_ITEMS.map((item) => item.id);

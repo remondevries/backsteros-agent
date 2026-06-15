@@ -10,7 +10,6 @@ import type { IntegrationsStatus } from "../lib/api";
 
 const baseStatus: IntegrationsStatus = {
   cursorApiKey: { configured: true },
-  linearApiKey: { configured: false },
   geminiApiKey: { configured: false },
   googleCalendar: {
     credentialsConfigured: false,
@@ -20,15 +19,27 @@ const baseStatus: IntegrationsStatus = {
   },
   linear: {
     credentialsConfigured: false,
+    credentialsFromEnv: false,
     authenticated: false,
     clientId: { configured: false },
     clientSecret: { configured: false },
+  },
+  whoop: {
+    configured: false,
+    authenticated: false,
+    envPath: "/Users/me/.backsteros-agent/totem.env",
   },
 };
 
 const linearConnectedStatus: IntegrationsStatus = {
   ...baseStatus,
-  linearApiKey: { configured: true },
+  linear: {
+    credentialsConfigured: true,
+    credentialsFromEnv: false,
+    authenticated: true,
+    clientId: { configured: true },
+    clientSecret: { configured: true },
+  },
 };
 
 describe("supportsLinearPanelAgent", () => {

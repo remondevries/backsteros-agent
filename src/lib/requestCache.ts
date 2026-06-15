@@ -22,7 +22,9 @@ export const REQUEST_CACHE_KEYS = {
   vaultDailyNoteToday: "vault-daily-note-today",
   settings: "settings",
   linearTeams: "linear-teams",
+  linearCustomersAll: "linear-customers-all",
   linearProjectsAll: "linear-projects-all",
+  linearProjectStatuses: "linear-project-statuses",
   vaultSearchIndex: "vault-search-index",
 } as const;
 
@@ -91,6 +93,9 @@ export function invalidateDashboardRequestCache(): void {
   invalidateRequestCache(REQUEST_CACHE_KEYS.linearToday);
   invalidateRequestCache(REQUEST_CACHE_KEYS.whoopToday);
   invalidateRequestCache(REQUEST_CACHE_KEYS.vaultDailyNoteToday);
+  invalidateRequestCache(REQUEST_CACHE_KEYS.linearTeams);
+  invalidateRequestCache(REQUEST_CACHE_KEYS.linearCustomersAll);
+  invalidateRequestCache(REQUEST_CACHE_KEYS.linearProjectsAll);
 }
 
 export async function cachedRequest<T>(

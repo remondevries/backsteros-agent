@@ -486,6 +486,9 @@ function WatcherConfigSettingsPanel({
                     <LinearStatusIcon
                       status={state.name}
                       stateType={state.type}
+                      stateId={state.id}
+                      statusColor={state.color}
+                      workflowStates={workflowStates}
                       title={state.name}
                     />
                     <span>{state.name}</span>

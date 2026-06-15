@@ -4,6 +4,7 @@ import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { performContentPanelBack } from "../lib/contentPanelBack";
 import { getContentListNavigationController } from "../lib/contentListNavigation";
 import { dismissTiptapEditorFocus, isTiptapEditorFocused } from "../lib/tiptapEditorFocus";
+import { isDocumentPdfModalOpen } from "../lib/documentPdfModalOpen";
 import { isSidebarNoteDeletionConfirmOpen } from "../lib/sidebarNoteDeletion";
 import { useContentPanelNavigation } from "../app/contentPanelNavigation";
 
@@ -94,6 +95,8 @@ export function ContentPanelBackShortcuts({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.metaKey || event.ctrlKey || event.altKey) return;
       if (isSidebarNoteDeletionConfirmOpen()) return;
+
+      if (isDocumentPdfModalOpen()) return;
 
       if (isTiptapEditorFocused() && dismissTiptapEditorFocus()) {
         event.preventDefault();

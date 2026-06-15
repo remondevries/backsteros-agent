@@ -88,11 +88,7 @@ export function ContentPanelBreadcrumb({
   segments: ContentPanelBreadcrumbSegment[];
 }) {
   if (segments.length === 0) {
-    return (
-      <nav className="content-panel-breadcrumb" aria-label="Location">
-        <span className="content-panel-breadcrumb-current">Explorer</span>
-      </nav>
-    );
+    return <nav className="content-panel-breadcrumb content-panel-breadcrumb--empty" aria-label="Location" />;
   }
 
   return (

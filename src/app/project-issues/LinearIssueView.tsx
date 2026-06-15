@@ -3,6 +3,7 @@ import { TiptapEditor } from "../../editor/TiptapEditor";
 import { XTermView } from "../../editor/XTermView";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearIssueDetail } from "../../hooks/useLinearIssueDetail";
+import { useLinearIssueSubIssues } from "../../hooks/useLinearIssueSubIssues";
 import { useLinearProjectWatcherPollProgress } from "../../hooks/useLinearProjectWatcherPollProgress";
 import { ensureLinearIssueTerminalDirectory, getSettings } from "../../lib/api";
 import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
@@ -16,10 +17,9 @@ import {
   registerTerminalAgentLogContext,
 } from "../../lib/terminalAgentActivityLog";
 import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
+import type { LinearSidebarTeamConfig } from "../sidebarNavConfig";
 import { useIssueViewModeBreadcrumbAction } from "../../hooks/useIssueViewModeBreadcrumbAction";
-import { ResizablePanel } from "../ResizablePanel";
-import { LinearIssueActionBar } from "./LinearIssueActionBar";
-import { LinearIssueDetailsPanel } from "./LinearIssueDetailsPanel";
+import { LinearIssueDetailsSidePanel } from "./LinearIssueDetailsSidePanel";
 import type { LinearIssueViewMode } from "./LinearIssueViewModeToggle";
 import {
   consumeLinearIssueViewMode,
@@ -29,16 +29,36 @@ import {
   handleVaultDocumentTitleEnter,
   registerVaultDocumentTitleFocus,
 } from "../../lib/vaultDocumentTitleFocus";
-import { linearAssigneeIdFromDropdownValue } from "../../lib/linearIssueDetailDropdowns";
-
-const LINEAR_ISSUE_DETAILS_WIDTH_KEY = "backsteros.layout.linearIssueDetailsWidth";
+import { seedLinearIssueDetailFromEntity } from "../../lib/linearIssueDetailSeed";
+import { stripMarkdownForSpeech } from "../../lib/tts";
 const SAVE_DEBOUNCE_MS = 800;
 
-export function LinearIssueView({ issueId }: { issueId: string }) {
-  const { updateActiveLinearIssue, linearIssueRefreshNonce } = useContentPanelNavigation();
+function formatSubIssueDescription(description: string | null): string {
+  if (!description?.trim()) return "";
+  return stripMarkdownForSpeech(description);
+}
+
+export function LinearIssueView({
+  issueId,
+  showDetailsPanel = true,
+  showInboxConvertBar = false,
+  showSubIssueTitles = false,
+  workspaceTeamConfig = {},
+}: {
+  issueId: string;
+  showDetailsPanel?: boolean;
+  showInboxConvertBar?: boolean;
+  showSubIssueTitles?: boolean;
+  workspaceTeamConfig?: LinearSidebarTeamConfig;
+}) {
+  const { updateActiveLinearIssue, linearIssueRefreshNonce, clearActiveLinearIssue, setActiveLinearIssue } =
+    useContentPanelNavigation();
   const { issue, loading, refreshing, updating, error, refresh, updateIssue } = useLinearIssueDetail(
     issueId,
+    true,
+    { inboxMode: !showDetailsPanel },
   );
+  const { subIssues, linkedCustomers } = useLinearIssueSubIssues(issueId, showSubIssueTitles);
   const [contentMode, setContentMode] = useState<LinearIssueViewMode>("issue");
   const [terminalWorkingDirectory, setTerminalWorkingDirectory] = useState<string | null>(null);
   const [terminalWorkingDirectoryResolved, setTerminalWorkingDirectoryResolved] = useState(false);
@@ -160,10 +180,11 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
   useEffect(() => {
     if (!issue) return;
     updateActiveLinearIssue({
-      identifier: issue.identifier,
+      identifier: issue.identifier?.trim() || undefined,
       title: titleDirty ? titleDraft.trim() || issue.title : issue.title,
       status: issue.status,
       stateType: issue.stateType,
+      projectName: issue.projectName?.trim() || undefined,
     });
   }, [issue, titleDirty, titleDraft, updateActiveLinearIssue]);
 
@@ -188,60 +209,6 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
       },
     });
   }, [contentMode, issue]);
-
-  const handleStatusChange = useCallback(
-    (stateId: string) => {
-      void updateIssue({ stateId });
-    },
-    [updateIssue],
-  );
-
-  const handlePriorityChange = useCallback(
-    (priority: string) => {
-      const value = Number(priority);
-      if (!Number.isFinite(value)) return;
-      void updateIssue({ priority: Math.round(value) });
-    },
-    [updateIssue],
-  );
-
-  const handleEstimateChange = useCallback(
-    (estimate: string) => {
-      const value = Number(estimate);
-      if (!Number.isFinite(value) || value <= 0) {
-        void updateIssue({ estimate: null });
-        return;
-      }
-      void updateIssue({ estimate: Math.round(value) });
-    },
-    [updateIssue],
-  );
-
-  const handleAssigneeChange = useCallback(
-    (assigneeValue: string) => {
-      void updateIssue({ assigneeId: linearAssigneeIdFromDropdownValue(assigneeValue) });
-    },
-    [updateIssue],
-  );
-
-  const handleDueDateChange = useCallback(
-    (dueDate: string | null) => {
-      void updateIssue({ dueDate });
-    },
-    [updateIssue],
-  );
-
-  const handleLabelAdd = useCallback(
-    (labelId: string) => {
-      if (!issue) return;
-      const existingLabelIds = issue.labels
-        .map((label) => label.id)
-        .filter((id): id is string => typeof id === "string" && id.trim().length > 0);
-      const nextLabelIds = Array.from(new Set([...existingLabelIds, labelId]));
-      void updateIssue({ labelIds: nextLabelIds });
-    },
-    [issue, updateIssue],
-  );
 
   const persistDescription = useCallback(
     async (content: string) => {
@@ -484,6 +451,33 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
                   placeholder="Issue title"
                   aria-label="Issue title"
                 />
+                {showSubIssueTitles && linkedCustomers.length > 0 ? (
+                  <p className="linear-issue-linked-customer" aria-label="Linked customer">
+                    {linkedCustomers.map((customer) => customer.name).join(", ")}
+                  </p>
+                ) : null}
+                {showSubIssueTitles && subIssues.length > 0 ? (
+                  <ul className="linear-issue-sub-issues" aria-label="Sub-issues">
+                    {subIssues.map((subIssue) => {
+                      const descriptionPreview = formatSubIssueDescription(subIssue.description);
+                      return (
+                        <li key={subIssue.id} className="linear-issue-sub-issue">
+                          <span className="linear-issue-sub-issue-title">{subIssue.title}</span>
+                          {descriptionPreview ? (
+                            <>
+                              <span className="linear-issue-sub-issue-separator" aria-hidden="true">
+                                :
+                              </span>
+                              <span className="linear-issue-sub-issue-description">
+                                {descriptionPreview}
+                              </span>
+                            </>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
               </header>
               <div className="linear-issue-body-editor">
                 <TiptapEditor
@@ -501,31 +495,36 @@ export function LinearIssueView({ issueId }: { issueId: string }) {
         </div>
       </div>
 
-      {issue ? (
-        <ResizablePanel
-          side="right"
-          className="app-resizable-panel-inset linear-issue-details-resizable"
-          storageKey={LINEAR_ISSUE_DETAILS_WIDTH_KEY}
-          defaultWidth={300}
-          minWidth={300}
-          maxWidth={480}
-          ariaLabel="Issue details"
-        >
-          <div className="linear-issue-details-shell">
-            <LinearIssueActionBar issue={issue} />
-            <div className="linear-issue-details-scroll">
-              <LinearIssueDetailsPanel
-                issue={issue}
-                onStatusChange={handleStatusChange}
-                onPriorityChange={handlePriorityChange}
-                onAssigneeChange={handleAssigneeChange}
-                onEstimateChange={handleEstimateChange}
-                onDueDateChange={handleDueDateChange}
-                onLabelAdd={handleLabelAdd}
-              />
-            </div>
-          </div>
-        </ResizablePanel>
+      {issue && showDetailsPanel ? (
+        <LinearIssueDetailsSidePanel
+          issueId={issue.id}
+          workspaceTeamConfig={workspaceTeamConfig}
+          inboxProjectMove={
+            showInboxConvertBar && !showTerminal
+              ? {
+                  issueId: issue.id,
+                  getTitle: () => titleRef.current,
+                  getDescription: () => descriptionRef.current,
+                  onMoved: clearActiveLinearIssue,
+                  onViewConvertedIssue: (converted) => {
+                    seedLinearIssueDetailFromEntity({
+                      id: converted.id,
+                      identifier: converted.identifier,
+                      title: titleRef.current,
+                      url: converted.url,
+                      projectId: converted.projectId,
+                      projectName: converted.projectName,
+                    });
+                    setActiveLinearIssue({
+                      id: converted.id,
+                      identifier: converted.identifier,
+                      title: titleRef.current,
+                    });
+                  },
+                }
+              : undefined
+          }
+        />
       ) : null}
     </div>
   );

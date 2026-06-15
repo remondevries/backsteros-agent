@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 
 /** Matches Tauri default and Vite `VITE_SIDECAR_TOKEN` fallback for local dev. */
 export const DEFAULT_SIDECAR_TOKEN = "dev-token-change-me";
@@ -41,6 +41,114 @@ export function getSidecarPort(): number {
   return Number(process.env.SIDECAR_PORT ?? 3847);
 }
 
+export function getSidecarHost(): string {
+  const value = process.env.SIDECAR_HOST?.trim();
+  if (value) return value;
+  return isDevelopmentAuthMode() ? "127.0.0.1" : "0.0.0.0";
+}
+
+export type ProductMode = "linear" | "full";
+
+export function getProductMode(): ProductMode {
+  const mode = process.env.PRODUCT_MODE?.trim().toLowerCase();
+  if (mode === "full") return "full";
+  return "linear";
+}
+
+export function isVaultEnabled(): boolean {
+  return getProductMode() === "full";
+}
+
+export function isDevelopmentAuthMode(): boolean {
+  return (
+    process.env.NODE_ENV === "development" ||
+    process.env.BACKSTER_DEV_AUTH === "1" ||
+    process.env.SIDECAR_DEV_AUTH === "1"
+  );
+}
+
+export function getWorkspaceDir(): string {
+  const configured = process.env.BACKSTER_WORKSPACE_DIR?.trim();
+  if (configured) return configured;
+  return join(getDataDir(), "workspace");
+}
+
+export function ensureWorkspaceDir(): string {
+  const dir = getWorkspaceDir();
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+export function getAllowedOrigins(): string[] {
+  const raw = process.env.ALLOWED_ORIGINS?.trim();
+  if (!raw) {
+    return isDevelopmentAuthMode()
+      ? [
+          "http://localhost:5173",
+          "http://127.0.0.1:5173",
+          "http://tauri.localhost",
+          "https://tauri.localhost",
+        ]
+      : [];
+  }
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+const BUILTIN_APP_RETURN_ORIGINS = [
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+] as const;
+
+export function getDefaultAppReturnUrl(): string {
+  const origins = getAllowedOrigins();
+  if (origins.length > 0) {
+    return origins[0];
+  }
+  return "http://localhost:5173";
+}
+
+/** Resolve a safe in-app URL for OAuth success pages (open redirect protection). */
+export function resolveAppReturnUrl(input?: string): string {
+  const fallback = getDefaultAppReturnUrl();
+  const trimmed = input?.trim();
+  if (!trimmed) return fallback;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return fallback;
+    }
+
+    const allowedOrigins = new Set([
+      ...getAllowedOrigins(),
+      ...BUILTIN_APP_RETURN_ORIGINS,
+    ]);
+    if (!allowedOrigins.has(url.origin)) {
+      return fallback;
+    }
+
+    return url.href;
+  } catch {
+    return fallback;
+  }
+}
+
+export function appendAppReturnQuery(
+  baseUrl: string,
+  query: Record<string, string>,
+): string {
+  const url = new URL(baseUrl);
+  for (const [key, value] of Object.entries(query)) {
+    url.searchParams.set(key, value);
+  }
+  return url.href;
+}
+
 export function getCursorApiKey(): string | undefined {
   return process.env.CURSOR_API_KEY;
 }
@@ -54,10 +162,6 @@ export const GEMINI_LOOKUP_MODEL = process.env.GEMINI_LOOKUP_MODEL?.trim() || "g
 export function getNotesDirOverride(): string | undefined {
   const value = process.env.NOTES_DIR?.trim();
   return value || undefined;
-}
-
-export function getLinearApiKey(): string | undefined {
-  return process.env.LINEAR_API_KEY?.trim() || undefined;
 }
 
 export function getDefaultLinearOAuthCredentialsPath(): string {
@@ -82,7 +186,45 @@ export function getLinearOAuthTokenPath(): string {
   return join(getDataDir(), "linear-oauth-tokens.json");
 }
 
+export interface LinearOAuthClientCredentials {
+  client_id: string;
+  client_secret: string;
+}
+
+/** Deploy-time OAuth app credentials (e.g. bundled in ~/.backsteros-agent/.env or process env). */
+export function getLinearOAuthCredentialsFromEnv(): LinearOAuthClientCredentials | null {
+  const clientId = process.env.LINEAR_OAUTH_CLIENT_ID?.trim();
+  const clientSecret = process.env.LINEAR_OAUTH_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) return null;
+  return { client_id: clientId, client_secret: clientSecret };
+}
+
+export function isLinearOAuthCredentialsFromEnv(): boolean {
+  return getLinearOAuthCredentialsFromEnv() !== null;
+}
+
+export function getLinearOAuthClientCredentials(): LinearOAuthClientCredentials {
+  const fromEnv = getLinearOAuthCredentialsFromEnv();
+  if (fromEnv) return fromEnv;
+
+  const credentialsPath = getLinearOAuthCredentialsPath();
+  if (!credentialsPath) {
+    throw new Error("Linear OAuth credentials path is missing");
+  }
+
+  const keys = JSON.parse(readFileSync(credentialsPath, "utf8")) as Record<string, unknown>;
+  if (keys.client_id && keys.client_secret) {
+    return {
+      client_id: String(keys.client_id),
+      client_secret: String(keys.client_secret),
+    };
+  }
+
+  throw new Error("Invalid Linear OAuth credentials file format");
+}
+
 export function isLinearOAuthConfigured(): boolean {
+  if (isLinearOAuthCredentialsFromEnv()) return true;
   const credentialsPath = getLinearOAuthCredentialsPath();
   return Boolean(credentialsPath && existsSync(credentialsPath));
 }

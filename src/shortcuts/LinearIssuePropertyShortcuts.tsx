@@ -25,11 +25,22 @@ export function LinearIssuePropertyShortcuts({ enabled }: { enabled: boolean }) 
     if (!enabled) return undefined;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableTarget(event.target)) return;
 
       const key = event.key.toLowerCase();
-      if (key !== "s" && key !== "p" && key !== "a" && key !== "e" && key !== "l") return;
+
+      if (event.shiftKey && key === "p") {
+        if (!triggerLinearIssuePropertyShortcut("p", { shiftKey: true })) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      if (event.shiftKey) return;
+
+      if (key !== "s" && key !== "p" && key !== "a" && key !== "e" && key !== "l" && key !== "o")
+        return;
       if (!triggerLinearIssuePropertyShortcut(key)) return;
 
       event.preventDefault();

@@ -1,6 +1,1 @@
-export function isTauriRuntime(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    Boolean((window as Window & { __TAURI__?: unknown }).__TAURI__)
-  );
-}
+export { isTauriRuntime, isTauriRemoteShell, isWebRuntime } from "../platform/runtime";

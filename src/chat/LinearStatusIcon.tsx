@@ -1,37 +1,18 @@
-export type LinearStatusIconKey =
-  | "triage"
-  | "backlog"
-  | "unstarted"
-  | "started"
-  | "in_review"
-  | "on_hold"
-  | "completed"
-  | "unknown";
+import { useSyncExternalStore } from "react";
+import {
+  computeLinearStatusIconModel,
+  describeLinearStatusPieWedge,
+  linearStatusRingPath,
+  LINEAR_STATUS_RING_STROKE_WIDTH,
+  type LinearWorkflowStateForIcon,
+} from "../lib/linearStatusIcon";
+import {
+  getPreferredColorSchemeSnapshot,
+  subscribeToPreferredColorScheme,
+} from "../lib/linearStatusColor";
 
-export function resolveLinearStatusKey(
-  status?: string,
-  stateType?: string,
-): LinearStatusIconKey {
-  const name = status?.trim().toLowerCase() ?? "";
-  const type = stateType?.trim().toLowerCase() ?? "";
-
-  if (name.includes("in review")) return "in_review";
-  if (name.includes("on hold")) return "on_hold";
-
-  if (type === "triage" || name === "triage") return "triage";
-  if (type === "backlog" || name.includes("backlog")) return "backlog";
-  if (type === "completed" || name === "done" || name === "completed") return "completed";
-  if (type === "unstarted" || name === "todo" || name === "unstarted") return "unstarted";
-  if (type === "started" || name.includes("progress")) return "started";
-
-  if (type === "canceled" || name === "canceled" || name === "cancelled") return "unstarted";
-
-  if (name.includes("ready to start")) return "unstarted";
-  if (name.includes("review")) return "in_review";
-  if (name.includes("hold")) return "on_hold";
-
-  return "unknown";
-}
+export type { LinearStatusIconKey, LinearWorkflowStateForIcon } from "../lib/linearStatusIcon";
+export { resolveLinearStatusKey } from "../lib/linearStatusIcon";
 
 function TriageIcon() {
   return (
@@ -45,94 +26,61 @@ function BacklogIcon() {
   );
 }
 
-function UnstartedIcon() {
-  return (
-    <path
-      d="M13 7C13 3.686 10.314 1 7 1C3.686 1 1 3.686 1 7C1 10.314 3.686 13 7 13C10.314 13 13 10.314 13 7Z"
-      fill="none"
-      stroke="#E2E2E2"
-      strokeWidth="1.5"
-    />
-  );
-}
-
-function StartedIcon() {
-  return (
-    <>
-      <path
-        d="M13 7C13 3.686 10.314 1 7 1C3.686 1 1 3.686 1 7C1 10.314 3.686 13 7 13C10.314 13 13 10.314 13 7Z"
-        fill="none"
-        stroke="#FABD00"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M7 7V3.5C7.928 3.5 8.819 3.869 9.475 4.525C10.131 5.181 10.5 6.072 10.5 7H7Z"
-        fill="#FABD00"
-      />
-    </>
-  );
-}
-
-function InReviewIcon() {
-  return (
-    <>
-      <path
-        d="M13 7C13 3.686 10.314 1 7 1C3.686 1 1 3.686 1 7C1 10.314 3.686 13 7 13C10.314 13 13 10.314 13 7Z"
-        fill="none"
-        stroke="#00A933"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M7 7V3.5C7.692 3.5 8.369 3.705 8.944 4.09C9.52 4.474 9.969 5.021 10.234 5.661C10.498 6.3 10.568 7.004 10.433 7.683C10.298 8.362 9.964 8.985 9.475 9.475C8.985 9.964 8.362 10.298 7.683 10.433C7.004 10.568 6.3 10.498 5.661 10.234C5.021 9.969 4.474 9.52 4.09 8.944C3.705 8.369 3.5 7.692 3.5 7H7Z"
-        fill="#00A933"
-      />
-    </>
-  );
-}
-
-function OnHoldIcon() {
-  return (
-    <>
-      <path
-        d="M13 7C13 3.686 10.314 1 7 1C3.686 1 1 3.686 1 7C1 10.314 3.686 13 7 13C10.314 13 13 10.314 13 7Z"
-        fill="none"
-        stroke="#EB5757"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M7 7V3.5C7.928 3.5 8.819 3.869 9.475 4.525C10.131 5.181 10.5 6.072 10.5 7C10.5 7.928 10.131 8.819 9.475 9.475C8.819 10.131 7.928 10.5 7 10.5V7Z"
-        fill="#EB5757"
-      />
-    </>
-  );
-}
-
-function CompletedIcon() {
+function CompletedIcon({ color }: { color: string }) {
   return (
     <path
       fillRule="evenodd"
       clipRule="evenodd"
       d="M7 0C3.134 0 0 3.134 0 7C0 10.866 3.134 14 7 14C10.866 14 14 10.866 14 7C14 3.134 10.866 0 7 0ZM11.101 5.101C11.433 4.769 11.433 4.231 11.101 3.899C10.769 3.567 10.231 3.567 9.899 3.899L5.5 8.298L4.101 6.899C3.769 6.567 3.231 6.567 2.899 6.899C2.567 7.231 2.567 7.769 2.899 8.101L4.899 10.101C5.231 10.433 5.769 10.433 6.101 10.101L11.101 5.101Z"
+      fill={color}
     />
   );
 }
 
-const ICON_FILLS: Partial<Record<LinearStatusIconKey, string>> = {
-  triage: "#FF6615",
-  backlog: "#BEC2C8",
-  completed: "#5C6ADA",
-};
+function ProgressRingIcon({ color, fillRatio }: { color: string; fillRatio: number }) {
+  const wedgePath = describeLinearStatusPieWedge(fillRatio);
+
+  return (
+    <>
+      {wedgePath ? <path d={wedgePath} fill={color} /> : null}
+      <path
+        d={linearStatusRingPath()}
+        fill="none"
+        stroke={color}
+        strokeWidth={LINEAR_STATUS_RING_STROKE_WIDTH}
+      />
+    </>
+  );
+}
 
 export function LinearStatusIcon({
   status,
   stateType,
+  stateId,
+  statusColor,
+  workflowStates,
   title,
 }: {
   status?: string;
   stateType?: string;
+  stateId?: string | null;
+  statusColor?: string;
+  workflowStates?: LinearWorkflowStateForIcon[];
   title?: string;
 }) {
-  const iconKey = resolveLinearStatusKey(status, stateType);
+  const colorScheme = useSyncExternalStore(
+    subscribeToPreferredColorScheme,
+    getPreferredColorSchemeSnapshot,
+    () => "dark" as const,
+  );
+  const model = computeLinearStatusIconModel({
+    status,
+    stateType,
+    stateId,
+    statusColor,
+    workflowStates,
+    colorScheme,
+  });
   const label = status ?? stateType ?? "Unknown status";
 
   return (
@@ -146,14 +94,21 @@ export function LinearStatusIcon({
       role={title ? "img" : undefined}
     >
       {title ? <title>{title}</title> : null}
-      <g fill={ICON_FILLS[iconKey] ?? "none"}>
-        {iconKey === "triage" && <TriageIcon />}
-        {iconKey === "backlog" && <BacklogIcon />}
-        {(iconKey === "unstarted" || iconKey === "unknown") && <UnstartedIcon />}
-        {iconKey === "started" && <StartedIcon />}
-        {iconKey === "in_review" && <InReviewIcon />}
-        {iconKey === "on_hold" && <OnHoldIcon />}
-        {iconKey === "completed" && <CompletedIcon />}
+      <g fill="none">
+        {model.kind === "triage" ? (
+          <g fill={model.color}>
+            <TriageIcon />
+          </g>
+        ) : null}
+        {model.kind === "backlog" ? (
+          <g fill={model.color}>
+            <BacklogIcon />
+          </g>
+        ) : null}
+        {model.kind === "completed" ? <CompletedIcon color={model.color} /> : null}
+        {model.kind === "ring" ? (
+          <ProgressRingIcon color={model.color} fillRatio={model.fillRatio} />
+        ) : null}
       </g>
     </svg>
   );

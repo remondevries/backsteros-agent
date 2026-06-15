@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { getLinearApiKey } from "./config.ts";
+import { getLinearAuthToken } from "./linear/auth-token.ts";
 import { fetchLinearProjectsPage } from "./linear/projects.ts";
 import { fetchLinearTeams, type LinearTeamSummary } from "./linear/teams.ts";
 import {
@@ -90,7 +90,7 @@ export async function buildLetterMatchCatalog(notesPath: string): Promise<Letter
   let linearTeams: LinearTeamSummary[] = [];
   let linearProjects: LinearCatalogEntity[] = [];
 
-  if (getLinearApiKey()) {
+  if (getLinearAuthToken()) {
     try {
       linearTeams = await fetchLinearTeams();
     } catch {

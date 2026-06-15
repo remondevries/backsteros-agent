@@ -9,6 +9,7 @@ import {
   getGoogleOAuthCredentialsPath,
   isGoogleCalendarConfigured,
 } from "./config.ts";
+import { buildOAuthCallbackPageHtml } from "./oauthCallbackPage.ts";
 
 interface OAuthCredentials {
   client_id: string;
@@ -172,7 +173,15 @@ export async function startGoogleCalendarAuth(): Promise<{ authUrl: string; loca
       const requestUrl = new URL(req.url ?? "/", `http://localhost:${port}`);
 
       if (requestUrl.pathname !== "/oauth2callback") {
-        sendHtml(res, 404, "<html><body><p>Not found</p></body></html>");
+        sendHtml(
+          res,
+          404,
+          buildOAuthCallbackPageHtml({
+            title: "Not found",
+            message: "This page does not exist.",
+            variant: "error",
+          }),
+        );
         return;
       }
 
@@ -181,7 +190,15 @@ export async function startGoogleCalendarAuth(): Promise<{ authUrl: string; loca
       const flow = pendingAuth;
 
       if (!code) {
-        sendHtml(res, 400, "<html><body><p>Authorization code missing.</p></body></html>");
+        sendHtml(
+          res,
+          400,
+          buildOAuthCallbackPageHtml({
+            title: "Sign-in incomplete",
+            message: "Authorization code missing. Return to BacksterOS and try again.",
+            variant: "error",
+          }),
+        );
         return;
       }
 
@@ -189,7 +206,12 @@ export async function startGoogleCalendarAuth(): Promise<{ authUrl: string; loca
         sendHtml(
           res,
           403,
-          "<html><body><p>This sign-in link expired. Return to BacksterOS Agent and click Connect Google Calendar again.</p></body></html>",
+          buildOAuthCallbackPageHtml({
+            title: "Sign-in expired",
+            message:
+              "This sign-in link expired. Return to BacksterOS and connect Google Calendar again.",
+            variant: "error",
+          }),
         );
         return;
       }
@@ -204,7 +226,11 @@ export async function startGoogleCalendarAuth(): Promise<{ authUrl: string; loca
       sendHtml(
         res,
         200,
-        "<html><body><h1>Google Calendar connected</h1><p>You can close this tab and return to BacksterOS Agent.</p></body></html>",
+        buildOAuthCallbackPageHtml({
+          title: "Connect to Google Calendar",
+          message: "You're signed in with Google Calendar. Close this tab and return to BacksterOS.",
+          variant: "success",
+        }),
       );
 
       await stopGoogleCalendarAuth();
@@ -213,7 +239,11 @@ export async function startGoogleCalendarAuth(): Promise<{ authUrl: string; loca
       sendHtml(
         res,
         500,
-        `<html><body><h1>Authentication failed</h1><p>${message}</p></body></html>`,
+        buildOAuthCallbackPageHtml({
+          title: "Authentication failed",
+          message,
+          variant: "error",
+        }),
       );
       await stopGoogleCalendarAuth();
     }

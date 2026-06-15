@@ -4,7 +4,7 @@ const SIDEBAR_SEARCH_INPUT_SELECTOR =
   ".vault-folder-explorer-search-input, .sidebar-explorer-search-input";
 
 export type SidebarNoteDeletionRegistration = {
-  openDeleteConfirm: () => void;
+  openDeleteConfirm: () => boolean;
 };
 
 let registration: SidebarNoteDeletionRegistration | null = null;
@@ -23,8 +23,7 @@ export function registerSidebarNoteDeletion(
 
 export function triggerSidebarNoteDeletionRequest(): boolean {
   if (!registration) return false;
-  registration.openDeleteConfirm();
-  return true;
+  return registration.openDeleteConfirm();
 }
 
 export function setSidebarNoteDeletionConfirmOpen(open: boolean): void {

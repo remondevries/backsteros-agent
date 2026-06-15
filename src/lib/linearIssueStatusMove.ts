@@ -26,6 +26,7 @@ export type LinearWorkflowStateSummary = {
   name: string;
   type: string;
   color?: string;
+  position?: number;
 };
 
 export function canonicalStatusKey(status: string): string {

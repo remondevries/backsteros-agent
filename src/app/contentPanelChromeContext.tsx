@@ -8,8 +8,11 @@ import {
 } from "react";
 import type {
   ContentPanelBarState,
+  DocumentDeleteBreadcrumbAction,
   IssueViewModeBreadcrumbAction,
   IssuesWatcherBreadcrumbAction,
+  ProjectDocumentsTabCreateAction,
+  ProjectsBrowseSearchBreadcrumbAction,
 } from "./contentPanelNavigation";
 
 type ContentPanelChromeContextValue = {
@@ -19,6 +22,12 @@ type ContentPanelChromeContextValue = {
   setIssuesWatcherAction: (action: IssuesWatcherBreadcrumbAction | null) => void;
   issueViewModeAction: IssueViewModeBreadcrumbAction | null;
   setIssueViewModeAction: (action: IssueViewModeBreadcrumbAction | null) => void;
+  documentDeleteAction: DocumentDeleteBreadcrumbAction | null;
+  setDocumentDeleteAction: (action: DocumentDeleteBreadcrumbAction | null) => void;
+  projectsBrowseSearchAction: ProjectsBrowseSearchBreadcrumbAction | null;
+  setProjectsBrowseSearchAction: (action: ProjectsBrowseSearchBreadcrumbAction | null) => void;
+  projectDocumentsCreateAction: ProjectDocumentsTabCreateAction | null;
+  setProjectDocumentsCreateAction: (action: ProjectDocumentsTabCreateAction | null) => void;
   clearChrome: () => void;
 };
 
@@ -32,6 +41,12 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     useState<IssuesWatcherBreadcrumbAction | null>(null);
   const [issueViewModeAction, setIssueViewModeActionState] =
     useState<IssueViewModeBreadcrumbAction | null>(null);
+  const [documentDeleteAction, setDocumentDeleteActionState] =
+    useState<DocumentDeleteBreadcrumbAction | null>(null);
+  const [projectsBrowseSearchAction, setProjectsBrowseSearchActionState] =
+    useState<ProjectsBrowseSearchBreadcrumbAction | null>(null);
+  const [projectDocumentsCreateAction, setProjectDocumentsCreateActionState] =
+    useState<ProjectDocumentsTabCreateAction | null>(null);
 
   const setContentPanelBarState = useCallback((state: ContentPanelBarState | null) => {
     setContentPanelBarStateState(state);
@@ -45,10 +60,31 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     setIssueViewModeActionState(action);
   }, []);
 
+  const setDocumentDeleteAction = useCallback((action: DocumentDeleteBreadcrumbAction | null) => {
+    setDocumentDeleteActionState(action);
+  }, []);
+
+  const setProjectsBrowseSearchAction = useCallback(
+    (action: ProjectsBrowseSearchBreadcrumbAction | null) => {
+      setProjectsBrowseSearchActionState(action);
+    },
+    [],
+  );
+
+  const setProjectDocumentsCreateAction = useCallback(
+    (action: ProjectDocumentsTabCreateAction | null) => {
+      setProjectDocumentsCreateActionState(action);
+    },
+    [],
+  );
+
   const clearChrome = useCallback(() => {
     setContentPanelBarStateState(null);
     setIssuesWatcherActionState(null);
     setIssueViewModeActionState(null);
+    setDocumentDeleteActionState(null);
+    setProjectsBrowseSearchActionState(null);
+    setProjectDocumentsCreateActionState(null);
   }, []);
 
   const value = useMemo(
@@ -59,16 +95,28 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setIssuesWatcherAction,
       issueViewModeAction,
       setIssueViewModeAction,
+      documentDeleteAction,
+      setDocumentDeleteAction,
+      projectsBrowseSearchAction,
+      setProjectsBrowseSearchAction,
+      projectDocumentsCreateAction,
+      setProjectDocumentsCreateAction,
       clearChrome,
     }),
     [
       clearChrome,
       contentPanelBarState,
+      documentDeleteAction,
       issueViewModeAction,
       issuesWatcherAction,
+      projectDocumentsCreateAction,
+      projectsBrowseSearchAction,
       setContentPanelBarState,
+      setDocumentDeleteAction,
       setIssueViewModeAction,
       setIssuesWatcherAction,
+      setProjectDocumentsCreateAction,
+      setProjectsBrowseSearchAction,
     ],
   );
 

@@ -1,6 +1,7 @@
 import { deleteWorkspaceFile } from "./letter-deletion.ts";
 import { buildDeleteFileConfirmToken } from "./delete-file-confirm.ts";
 import { resolveDeleteTargetFromText } from "./delete-file-resolve.ts";
+import { isDailyVaultNotePath } from "./vault/vault-whoop-stats.ts";
 
 export const DELETE_FILE_ACTION_ID = "delete-file";
 
@@ -71,7 +72,11 @@ export function buildDeleteFileConfirmResponse(path: string): string {
 }
 
 export function buildDeleteFileNotFoundResponse(): string {
-  return "I couldn't find a file matching that. Try the note title, a [[wikilink]], or a path like `Daily/2025-06-10.md`.";
+  return "I couldn't find a file matching that. Try the note title, a [[wikilink]], or a path like `Inbox/my-note.md`.";
+}
+
+export function buildDeleteFileProtectedResponse(): string {
+  return "Daily notes cannot be deleted.";
 }
 
 export function buildDeleteFileAmbiguousResponse(candidates: string[]): string {
@@ -95,6 +100,9 @@ export function resolveDeleteFileRequest(
   if (resolution.status === "ambiguous") {
     return { kind: "reply", response: buildDeleteFileAmbiguousResponse(resolution.candidates) };
   }
+  if (isDailyVaultNotePath(resolution.path)) {
+    return { kind: "reply", response: buildDeleteFileProtectedResponse() };
+  }
   return {
     kind: "confirm",
     path: resolution.path,
@@ -114,6 +122,10 @@ export function respondToPendingDeleteFile(
 
   if (action === "return") {
     return { response: "I did not delete the note, it's still in the original location." };
+  }
+
+  if (isDailyVaultNotePath(pending.path)) {
+    return { response: buildDeleteFileProtectedResponse() };
   }
 
   try {

@@ -12,11 +12,11 @@ describe("isSidebarPrimaryNavItem", () => {
 });
 
 describe("shouldShowPrimaryNavEmptyState", () => {
-  test("shows empty state for inbox/meetings/knowledge-base but not daily or workouts", () => {
+  test("shows empty state for inbox but not daily, workouts, meetings, or knowledge-base", () => {
     expect(shouldShowPrimaryNavEmptyState("inbox")).toBe(true);
     expect(shouldShowPrimaryNavEmptyState("workouts")).toBe(false);
-    expect(shouldShowPrimaryNavEmptyState("meetings")).toBe(true);
-    expect(shouldShowPrimaryNavEmptyState("knowledge-base")).toBe(true);
+    expect(shouldShowPrimaryNavEmptyState("meetings")).toBe(false);
+    expect(shouldShowPrimaryNavEmptyState("knowledge-base")).toBe(false);
     expect(shouldShowPrimaryNavEmptyState("daily")).toBe(false);
     expect(shouldShowPrimaryNavEmptyState("projects")).toBe(false);
   });

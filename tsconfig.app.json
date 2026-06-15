@@ -21,6 +21,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
+  "include": ["src", "sidecar/src/connectGateProgressConfig.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

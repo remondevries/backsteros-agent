@@ -40,7 +40,6 @@ const IMPLEMENTED_AGENTS = new Set<RightPanelAgentId>(["cursor", "linear"]);
 
 export function isLinearIntegrationAvailable(status: IntegrationsStatus | null): boolean {
   if (!status) return false;
-  if (status.linearApiKey.configured) return true;
   return Boolean(status.linear?.authenticated);
 }
 

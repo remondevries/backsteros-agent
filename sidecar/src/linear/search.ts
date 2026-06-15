@@ -9,7 +9,7 @@ type GraphqlSearchIssueNode = {
   priority?: number | null;
   priorityLabel?: string | null;
   state?: { name?: string | null; type?: string | null; color?: string | null } | null;
-  project?: { name?: string | null } | null;
+  project?: { id?: string | null; name?: string | null } | null;
   assignee?: { displayName?: string | null; avatarUrl?: string | null } | null;
 };
 
@@ -35,6 +35,7 @@ const SEARCH_ISSUES_QUERY = `
           color
         }
         project {
+          id
           name
         }
         assignee {
@@ -65,6 +66,7 @@ function mapSearchIssueNode(node: GraphqlSearchIssueNode): LinearIssueEntity | n
     statusColor: node.state?.color?.trim() || undefined,
     priority: node.priority ?? undefined,
     priorityLabel: node.priorityLabel?.trim() || undefined,
+    projectId: node.project?.id?.trim() || undefined,
     projectName: node.project?.name?.trim() || undefined,
     assigneeName: node.assignee?.displayName?.trim() || undefined,
     assigneeAvatarUrl: node.assignee?.avatarUrl?.trim() || undefined,

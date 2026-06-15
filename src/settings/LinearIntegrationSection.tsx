@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { LinearIssueLinkMode } from "../chat/types";
 import {
   getIntegrationsStatus,
+  disconnectLinearOAuth,
   runIntegrationTest,
   saveLinearOAuthCredentials,
   type IntegrationTestResult,
@@ -17,18 +18,15 @@ import { restartSidecarIfNeeded } from "../lib/restartSidecar";
 import {
   getLinearOAuthStatusLabel,
   isLinearOAuthConnected,
-  isLinearSettingsConnected,
 } from "./integrationConnectionStatus";
 import { LinearProjectPicker } from "./LinearProjectPicker";
+import { LinearWorkspaceTeamFields } from "./LinearWorkspaceTeamFields";
 import { SettingsOptionPicker } from "./SettingsOptionPicker";
 import {
-  ApiKeyField,
   IntegrationSecretInput,
-  IntegrationStatusLine,
   IntegrationStatusMessages,
   IntegrationTestFeedback,
 } from "./integrationShared";
-import { useApiKeyIntegration } from "./useApiKeyIntegration";
 
 const LINEAR_LINK_MODE_OPTIONS: {
   value: LinearIssueLinkMode;
@@ -47,7 +45,7 @@ const LINEAR_LINK_MODE_OPTIONS: {
   },
 ];
 
-export type LinearSettingsView = "general" | "api-key" | "oauth";
+export type LinearSettingsView = "general" | "oauth";
 
 const LINEAR_DEVELOPER_URL = "https://linear.app/settings/api/applications/new";
 
@@ -55,20 +53,45 @@ export function LinearIntegrationSection({
   activeView,
   issueLinkMode,
   groceryLinearProjectId,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
+  workspaceTeamsLoading = false,
   saving,
   onIssueLinkModeChange,
   onGroceryLinearProjectIdChange,
+  onInboxLinearTeamIdChange,
+  onDailyLinearTeamIdChange,
+  onWorkoutsLinearTeamIdChange,
+  onLettersLinearTeamIdChange,
+  onKnowledgeBaseLinearTeamIdChange,
+  onAddressbookLinearTeamIdChange,
   onSecretsUpdated,
 }: {
   activeView: LinearSettingsView;
   issueLinkMode: LinearIssueLinkMode;
   groceryLinearProjectId: string;
+  inboxLinearTeamId: string;
+  dailyLinearTeamId: string;
+  workoutsLinearTeamId: string;
+  lettersLinearTeamId: string;
+  knowledgeBaseLinearTeamId: string;
+  addressbookLinearTeamId: string;
+  workspaceTeamsLoading?: boolean;
   saving: boolean;
   onIssueLinkModeChange: (value: LinearIssueLinkMode) => void;
   onGroceryLinearProjectIdChange: (value: string) => void;
+  onInboxLinearTeamIdChange: (teamId: string) => void;
+  onDailyLinearTeamIdChange: (teamId: string) => void;
+  onWorkoutsLinearTeamIdChange: (teamId: string) => void;
+  onLettersLinearTeamIdChange: (teamId: string) => void;
+  onKnowledgeBaseLinearTeamIdChange: (teamId: string) => void;
+  onAddressbookLinearTeamIdChange: (teamId: string) => void;
   onSecretsUpdated?: () => void | Promise<void>;
 }) {
-  const integration = useApiKeyIntegration("linear", onSecretsUpdated);
   const [status, setStatus] = useState<IntegrationsStatus | null>(null);
   const [clientIdDraft, setClientIdDraft] = useState("");
   const [clientSecretDraft, setClientSecretDraft] = useState("");
@@ -77,6 +100,7 @@ export function LinearIntegrationSection({
     IntegrationTestResult | undefined
   >();
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [oauthMessage, setOauthMessage] = useState<string | null>(null);
 
@@ -93,16 +117,21 @@ export function LinearIntegrationSection({
 
   const linearOAuth = status?.linear;
   const oauthFullyConnected = linearOAuth ? isLinearOAuthConnected(linearOAuth) : false;
+  const canDisconnectOAuth = Boolean(linearOAuth?.authenticated);
+  const credentialsFromEnv = Boolean(linearOAuth?.credentialsFromEnv);
   const credentialsConfigured = Boolean(linearOAuth?.credentialsConfigured);
   const hasCredentialDraft = Boolean(clientIdDraft.trim() || clientSecretDraft.trim());
   const canTestCredentialDraft =
     Boolean(clientIdDraft.trim()) && Boolean(clientSecretDraft.trim());
   const showSavedCredentialActions = credentialsConfigured && !hasCredentialDraft;
   const credentialsStepComplete = showSavedCredentialActions;
-  const oauthBusy = credentialsTesting || connecting;
+  const oauthBusy = credentialsTesting || connecting || disconnecting;
   const connectButtonDisabled = oauthBusy || !credentialsStepComplete;
   const credentialsTestEnabled =
     !oauthBusy && (canTestCredentialDraft || showSavedCredentialActions);
+
+  const selectedIssueLinkMode =
+    LINEAR_LINK_MODE_OPTIONS.find((option) => option.value === issueLinkMode) ?? null;
 
   function resetCredentialsTest() {
     setCredentialsTestResult(undefined);
@@ -212,13 +241,62 @@ export function LinearIntegrationSection({
     }
   }
 
-  const connected = status ? isLinearSettingsConnected(status) : integration.configured;
+  async function handleDisconnectOAuth() {
+    setDisconnecting(true);
+    setOauthError(null);
+    setOauthMessage(null);
+    try {
+      const next = await disconnectLinearOAuth();
+      setStatus(next);
+      await onSecretsUpdated?.();
+      setOauthMessage("Linear account disconnected.");
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : "Failed to disconnect Linear account");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  async function handleRemoveCredentials() {
+    setCredentialsTesting(true);
+    setOauthError(null);
+    setOauthMessage(null);
+    try {
+      const next = await saveLinearOAuthCredentials({ clear: true });
+      setStatus(next);
+      resetCredentialDrafts();
+      resetCredentialsTest();
+      await restartSidecarIfNeeded();
+      await onSecretsUpdated?.();
+      setOauthMessage("Linear OAuth credentials removed.");
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : "Failed to remove Linear OAuth credentials");
+    } finally {
+      setCredentialsTesting(false);
+    }
+  }
 
   return (
     <section className="settings-section">
       {activeView === "general" ? (
         <>
-          <IntegrationStatusLine connected={connected} />
+          <LinearWorkspaceTeamFields
+            layout="settings"
+            inboxTeamId={inboxLinearTeamId}
+            dailyTeamId={dailyLinearTeamId}
+            workoutsTeamId={workoutsLinearTeamId}
+            lettersTeamId={lettersLinearTeamId}
+            knowledgeBaseTeamId={knowledgeBaseLinearTeamId}
+            addressbookTeamId={addressbookLinearTeamId}
+            workspaceTeamsLoading={workspaceTeamsLoading}
+            onInboxTeamIdChange={onInboxLinearTeamIdChange}
+            onDailyTeamIdChange={onDailyLinearTeamIdChange}
+            onWorkoutsTeamIdChange={onWorkoutsLinearTeamIdChange}
+            onLettersTeamIdChange={onLettersLinearTeamIdChange}
+            onKnowledgeBaseTeamIdChange={onKnowledgeBaseLinearTeamIdChange}
+            onAddressbookTeamIdChange={onAddressbookLinearTeamIdChange}
+            disabled={saving}
+          />
 
           <label className="settings-field-label" htmlFor="issue-link-mode">
             Issue link destination
@@ -235,6 +313,11 @@ export function LinearIntegrationSection({
               onChange={onIssueLinkModeChange}
             />
           </div>
+          {selectedIssueLinkMode ? (
+            <p className="settings-hint settings-hint-spaced">
+              Selected: {selectedIssueLinkMode.label} — {selectedIssueLinkMode.description}
+            </p>
+          ) : null}
 
           <label className="settings-field-label" htmlFor="grocery-linear-project">
             Grocery list project
@@ -247,46 +330,57 @@ export function LinearIntegrationSection({
               id="grocery-linear-project"
               value={groceryLinearProjectId}
               disabled={saving}
+              clearAriaLabel="Clear grocery project"
               onChange={onGroceryLinearProjectIdChange}
             />
           </div>
         </>
       ) : null}
 
-      {activeView === "api-key" ? (
-        <>
-          <p className="settings-hint settings-hint-spaced-top">
-            Required for Linear MCP tools and the grocery list automation when OAuth is not used.
-            Keys are stored locally in <code>~/.backsteros-agent/.env</code>.
-          </p>
-
-          <ApiKeyField
-            id="linear-api-key"
-            label="API key"
-            hint="Optional when OAuth is connected."
-            value={integration.draft}
-            configured={integration.configured}
-            savedPreview={integration.savedPreview}
-            unsetPlaceholder="lin_..."
-            allowRemove
-            testState={integration.testState}
-            testResult={integration.testResult}
-            saving={integration.saving}
-            onChange={integration.updateDraft}
-            onTest={() => {
-              void integration.handleTest();
-            }}
-            onRemove={() => {
-              void integration.handleRemove();
-            }}
-          />
-
-          <IntegrationStatusMessages message={integration.message} error={integration.error} />
-        </>
-      ) : null}
-
       {activeView === "oauth" ? (
         <>
+          {credentialsFromEnv ? (
+            <>
+              <p className="settings-hint settings-hint-spaced-top">
+                Linear sign-in is provided by this app. Click below to connect your Linear account.
+              </p>
+              {linearOAuth ? (
+                <p className="settings-hint settings-hint-spaced">
+                  OAuth status: {getLinearOAuthStatusLabel(linearOAuth)}
+                </p>
+              ) : null}
+              <div className="settings-row settings-row-actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={oauthBusy}
+                  onClick={() => {
+                    void startBrowserConnect();
+                  }}
+                >
+                  {connecting
+                    ? "Waiting for sign-in…"
+                    : oauthFullyConnected
+                      ? "Reconnect Linear account"
+                      : "Connect Linear account"}
+                </button>
+                {canDisconnectOAuth ? (
+                  <button
+                    type="button"
+                    className="btn-secondary settings-integration-test-button settings-integration-test-button--remove"
+                    disabled={oauthBusy}
+                    onClick={() => {
+                      void handleDisconnectOAuth();
+                    }}
+                  >
+                    {disconnecting ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                ) : null}
+              </div>
+              <IntegrationStatusMessages message={oauthMessage} error={oauthError} />
+            </>
+          ) : (
+            <>
           <p className="settings-hint settings-hint-spaced-top">
             Create a Linear OAuth app and add the redirect URI below exactly as shown. Linear requires
             an exact match for <code>redirect_uri</code>. Secrets are stored locally in{" "}
@@ -377,35 +471,60 @@ export function LinearIntegrationSection({
                 Save credentials
               </button>
             )}
+            {showSavedCredentialActions && (
+              <button
+                type="button"
+                className="btn-secondary settings-integration-test-button settings-integration-test-button--remove"
+                disabled={oauthBusy}
+                onClick={() => {
+                  void handleRemoveCredentials();
+                }}
+              >
+                Remove
+              </button>
+            )}
           </div>
 
-          <h3 className="settings-subsection-title">Sign in with Linear</h3>
-          <p className="settings-hint settings-hint-spaced-top">
-            Opens your browser so you can authorize BacksterOS Agent to access your Linear account.
-          </p>
-          {!credentialsStepComplete ? (
-            <p className="settings-hint settings-hint-spaced">
-              Enter your OAuth client ID and secret above, then test them to enable sign-in.
-            </p>
+          {credentialsStepComplete ? (
+            <>
+              <h3 className="settings-subsection-title">Sign in with Linear</h3>
+              <p className="settings-hint settings-hint-spaced-top">
+                Opens your browser so you can authorize BacksterOS Agent to access your Linear account.
+              </p>
+              <div className="settings-row settings-row-actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={connectButtonDisabled}
+                  onClick={() => {
+                    void startBrowserConnect();
+                  }}
+                >
+                  {connecting
+                    ? "Waiting for sign-in…"
+                    : oauthFullyConnected
+                      ? "Reconnect Linear account"
+                      : "Connect Linear account"}
+                </button>
+                {canDisconnectOAuth ? (
+                  <button
+                    type="button"
+                    className="btn-secondary settings-integration-test-button settings-integration-test-button--remove"
+                    disabled={oauthBusy}
+                    onClick={() => {
+                      void handleDisconnectOAuth();
+                    }}
+                  >
+                    {disconnecting ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                ) : null}
+              </div>
+            </>
           ) : null}
-          <div className="settings-row settings-row-actions">
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={connectButtonDisabled}
-              onClick={() => {
-                void startBrowserConnect();
-              }}
-            >
-              {connecting
-                ? "Waiting for sign-in…"
-                : oauthFullyConnected
-                  ? "Reconnect Linear account"
-                  : "Connect Linear account"}
-            </button>
-          </div>
 
           <IntegrationStatusMessages message={oauthMessage} error={oauthError} />
+            </>
+          )}
         </>
       ) : null}
     </section>

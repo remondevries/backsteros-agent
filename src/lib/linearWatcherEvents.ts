@@ -6,6 +6,7 @@ import {
   type LinearWatcherStreamEvent,
 } from "./notificationPayloads";
 import { appendLinearWatcherActivityLog } from "./linearWatcherActivityLog";
+import { appendNotificationEdgeCache } from "../platform/notifications";
 import { pushNotification } from "./notifications";
 
 const streamListeners = new Set<(event: LinearWatcherStreamEvent) => void>();
@@ -30,9 +31,11 @@ export function isLinearWatcherPollEvent(
 }
 
 export function linearWatcherEventsUrl(): string {
-  const { baseUrl } = getSidecarConnection();
-  const token = getAuthHeader().replace("Bearer ", "");
-  return `${baseUrl}/linear/watchers/events?auth=${encodeURIComponent(token)}`;
+  const { baseUrl, token } = getSidecarConnection();
+  if (token) {
+    return `${baseUrl}/linear/watchers/events?auth=${encodeURIComponent(token)}`;
+  }
+  return `${baseUrl}/linear/watchers/events`;
 }
 
 export function handleLinearWatcherStreamEvent(event: LinearWatcherStreamEvent): boolean {
@@ -43,6 +46,7 @@ export function handleLinearWatcherStreamEvent(event: LinearWatcherStreamEvent):
   appendLinearWatcherActivityLog(event);
   const notification = linearWatcherChangeToNotification(event);
   pushNotification(notification);
+  appendNotificationEdgeCache(notification);
   return true;
 }
 
@@ -60,9 +64,10 @@ export function subscribeToLinearWatcherEvents(options?: {
     try {
       const response = await fetch(linearWatcherEventsUrl(), {
         headers: {
-          Authorization: getAuthHeader(),
           Accept: "text/event-stream",
+          ...(getAuthHeader() ? { Authorization: getAuthHeader() } : {}),
         },
+        credentials: "include",
         signal: controller.signal,
       });
 

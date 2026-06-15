@@ -3,8 +3,12 @@ import type { LinearIssueEntity } from "./types";
 const LINEAR_IDENTIFIER = /^[A-Z]{1,10}-\d+$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function looksLikeLinearIdentifier(value: string): boolean {
+export function looksLikeLinearIssueIdentifier(value: string): boolean {
   return LINEAR_IDENTIFIER.test(value.trim());
+}
+
+function looksLikeLinearIdentifier(value: string): boolean {
+  return looksLikeLinearIssueIdentifier(value);
 }
 
 function identifierFromUrl(url: string): string | undefined {

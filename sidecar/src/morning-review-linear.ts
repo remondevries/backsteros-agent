@@ -1,5 +1,5 @@
 import { formatDateInTimezone, resolveTodayDailyNoteInfo } from "./daily-note.ts";
-import { getLinearApiKey } from "./config.ts";
+import { linearGraphqlRequest } from "./linear/graphql.ts";
 import { enrichLinearResult, filterOpenLinearIssues } from "./enrichers/linear.ts";
 import { loadUserTimezone } from "./context/profile.ts";
 import type { LinearIssueEntity } from "./types.ts";
@@ -11,7 +11,6 @@ export const GOOD_MORNING_ACTION_ID = "good-morning";
 /** @deprecated Use {@link GOOD_MORNING_ACTION_ID} */
 export const MORNING_REVIEW_ACTION_ID = GOOD_MORNING_ACTION_ID;
 
-const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 const PAGE_SIZE = 50;
 const MAX_ISSUES = 200;
 
@@ -109,43 +108,6 @@ interface GraphqlIssueNode {
 interface GraphqlIssuesPage {
   nodes: GraphqlIssueNode[];
   pageInfo: { hasNextPage: boolean; endCursor?: string | null };
-}
-
-async function linearGraphqlRequest<T>(
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<T> {
-  const apiKey = getLinearApiKey();
-  if (!apiKey) {
-    throw new Error("LINEAR_API_KEY is not configured");
-  }
-
-  const response = await fetch(LINEAR_GRAPHQL_URL, {
-    method: "POST",
-    headers: {
-      Authorization: apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  const body = (await response.json()) as {
-    data?: T;
-    errors?: Array<{ message?: string }>;
-  };
-
-  if (!response.ok || body.errors?.length) {
-    const detail = body.errors
-      ?.map((error) => error.message ?? "Unknown error")
-      .join("; ");
-    throw new Error(detail ?? `Linear API request failed (${response.status})`);
-  }
-
-  if (!body.data) {
-    throw new Error("Linear API returned no data");
-  }
-
-  return body.data;
 }
 
 export function resolveMorningReviewDueDate(

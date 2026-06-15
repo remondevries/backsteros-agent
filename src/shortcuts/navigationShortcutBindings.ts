@@ -1,4 +1,4 @@
-import { SIDEBAR_PRIMARY_ITEMS, SIDEBAR_SECTIONS } from "../app/sidebarNavConfig";
+import { buildSidebarNavOrder, type LinearSidebarTeamConfig } from "../app/sidebarNavConfig";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 
 export type NavigationLeaderShortcutBinding = {
@@ -20,20 +20,18 @@ const NAV_ITEM_SHORTCUT_LETTERS: Record<SidebarNavItemId, string> = {
   contacts: "c",
 };
 
-const SIDEBAR_NAV_ORDER = [
-  ...SIDEBAR_PRIMARY_ITEMS,
-  ...SIDEBAR_SECTIONS.flatMap((section) => section.items),
-];
+const SIDEBAR_NAV_ORDER = buildSidebarNavOrder();
 
-export const SIDEBAR_NAV_ITEM_IDS: SidebarNavItemId[] = SIDEBAR_NAV_ORDER.map((item) => item.id);
+export const SIDEBAR_NAV_ITEM_IDS: SidebarNavItemId[] = SIDEBAR_NAV_ORDER;
 
 export type SidebarNavCycleDirection = "up" | "down";
 
 export function getAdjacentSidebarNavItem(
   current: SidebarNavItemId | null,
   direction: SidebarNavCycleDirection,
+  config?: LinearSidebarTeamConfig,
 ): SidebarNavItemId {
-  const ids = SIDEBAR_NAV_ITEM_IDS;
+  const ids = config !== undefined ? buildSidebarNavOrder(config) : SIDEBAR_NAV_ORDER;
   if (ids.length === 0) {
     return current ?? "inbox";
   }
@@ -52,27 +50,35 @@ export function getAdjacentSidebarNavItem(
   return ids[nextIndex]!;
 }
 
-export const NAVIGATION_LEADER_SHORTCUTS: NavigationLeaderShortcutBinding[] =
-  SIDEBAR_NAV_ORDER.map((item) => {
-    const letter = NAV_ITEM_SHORTCUT_LETTERS[item.id];
+export function buildNavigationLeaderShortcuts(
+  config?: LinearSidebarTeamConfig,
+): NavigationLeaderShortcutBinding[] {
+  return buildSidebarNavOrder(config).map((navItemId) => {
+    const letter = NAV_ITEM_SHORTCUT_LETTERS[navItemId];
     return {
       keys: `g>${letter}`,
       hint: `G ${letter.toUpperCase()}`,
-      navItemId: item.id,
+      navItemId,
     };
   });
+}
+
+export const NAVIGATION_LEADER_SHORTCUTS: NavigationLeaderShortcutBinding[] =
+  buildNavigationLeaderShortcuts();
 
 export const SETTINGS_LEADER_SHORTCUT = {
   keys: "g>s",
   hint: "G S",
 } as const;
 
-const NAVIGATION_SHORTCUT_HINTS = Object.fromEntries(
-  NAVIGATION_LEADER_SHORTCUTS.map((binding) => [binding.navItemId, binding.hint]),
-) as Record<SidebarNavItemId, string>;
-
-export function navigationShortcutHint(navItemId: SidebarNavItemId): string | undefined {
-  return NAVIGATION_SHORTCUT_HINTS[navItemId];
+export function navigationShortcutHint(
+  navItemId: SidebarNavItemId,
+  config?: LinearSidebarTeamConfig,
+): string | undefined {
+  const hints = Object.fromEntries(
+    buildNavigationLeaderShortcuts(config).map((binding) => [binding.navItemId, binding.hint]),
+  ) as Partial<Record<SidebarNavItemId, string>>;
+  return hints[navItemId];
 }
 
 export function navigationShortcutLabel(navItemId: SidebarNavItemId): string {

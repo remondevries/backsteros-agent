@@ -19,6 +19,9 @@ import { LinearStatusIcon } from "../chat/LinearStatusIcon";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
 import { sidebarNavItemIcon } from "./sidebarNavConfig";
+import { resolveLinearIssueTabLabel } from "../lib/inboxDraftIssue";
+import { formatVaultWorkoutDocumentLabel } from "../lib/workouts/workoutsBreadcrumb";
+import { WorkoutsPeriodViewProvider } from "./workouts/WorkoutsPeriodViewContext";
 
 const CONTENT_PANEL_SIDEBAR_WIDTH_KEY = "backsteros.layout.contentPanelWidth";
 const DEFAULT_CONTENT_TAB_LABEL = "Workspace";
@@ -39,7 +42,12 @@ function buildContentTabLabel({
   linearWorkspaceView: ReturnType<typeof useContentPanelNavigation>["linearWorkspaceView"];
 }) {
   if (activeLinearIssue) {
-    return activeLinearIssue.identifier;
+    return resolveLinearIssueTabLabel(activeLinearIssue, {
+      hideIdentifier:
+        activeVaultNavItem === "inbox" ||
+        activeVaultNavItem === "contacts" ||
+        activeVaultNavItem === "workouts",
+    });
   }
 
   if (activeLinearDocument) {
@@ -47,7 +55,9 @@ function buildContentTabLabel({
   }
 
   if (activeVaultDocument) {
-    return activeVaultDocument.title;
+    return activeVaultNavItem === "workouts"
+      ? formatVaultWorkoutDocumentLabel(activeVaultDocument.path, activeVaultDocument.title)
+      : activeVaultDocument.title;
   }
 
   if (activeVaultNavItem === "projects") {
@@ -61,6 +71,19 @@ function buildContentTabLabel({
       return linearSelection.name;
     }
     return "Projects";
+  }
+
+  if (activeVaultNavItem === "organizations") {
+    if (linearSelection?.kind === "team" && linearWorkspaceView) {
+      return `${linearSelection.name} · ${linearWorkspaceViewLabel(
+        linearSelection.kind,
+        linearWorkspaceView,
+      )}`;
+    }
+    if (linearSelection?.kind === "team") {
+      return linearSelection.name;
+    }
+    return sidebarNavItemLabel("organizations");
   }
 
   if (activeVaultNavItem) {
@@ -106,6 +129,13 @@ function ContentPanelFrame({
   hideSidebar = false,
   activeVaultNavItem,
   onVaultNavItemChange,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
+  linearWorkspaceEnabled,
   vaultExplorerEnabled,
   breadcrumbSegments,
   navigationCollapsed = false,
@@ -116,6 +146,13 @@ function ContentPanelFrame({
   hideSidebar?: boolean;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
+  linearWorkspaceEnabled: boolean;
   vaultExplorerEnabled: boolean;
   breadcrumbSegments: ReturnType<typeof buildContentPanelBreadcrumbSegments>;
   navigationCollapsed?: boolean;
@@ -415,6 +452,52 @@ function ContentPanelFrame({
     openNarrowContentSidebar,
   ]);
 
+  const sidebarPanelProps = {
+    activeVaultNavItem,
+    inboxLinearTeamId,
+    dailyLinearTeamId,
+    workoutsLinearTeamId,
+    lettersLinearTeamId,
+    knowledgeBaseLinearTeamId,
+    addressbookLinearTeamId,
+    linearWorkspaceEnabled,
+    vaultExplorerEnabled,
+  };
+  const sidebarElement =
+    narrowContentSidebar && !hideSidebar ? (
+      <div className="content-panel-narrow-sidebar">
+        <div className="content-panel-narrow-sidebar-header">
+          <button
+            type="button"
+            className="content-panel-narrow-sidebar-done"
+            onClick={closeNarrowContentSidebar}
+          >
+            Done
+          </button>
+        </div>
+        <ContentPanelSidebar {...sidebarPanelProps} />
+      </div>
+    ) : !hideSidebar ? (
+      <ResizablePanel
+        side="left"
+        className="app-resizable-panel-inset"
+        storageKey={CONTENT_PANEL_SIDEBAR_WIDTH_KEY}
+        defaultWidth={240}
+        minWidth={180}
+        maxWidth={400}
+        ariaLabel="Content panel sidebar"
+        collapsed={!sidebarOpen}
+      >
+        <ContentPanelSidebar {...sidebarPanelProps} />
+      </ResizablePanel>
+    ) : null;
+  const mainPanelBody = (
+    <>
+      {sidebarElement}
+      {!narrowContentSidebar ? <div className="content-panel-content">{children}</div> : null}
+    </>
+  );
+
   return (
     <div className="content-panel-shell">
       <ContentPanelTabsBar
@@ -438,42 +521,7 @@ function ContentPanelFrame({
       <div className="content-panel">
         <ContentPanelBreadcrumbBar segments={displayedBreadcrumbSegments} />
         <div className="content-panel-main">
-          {narrowContentSidebar && !hideSidebar ? (
-            <div className="content-panel-narrow-sidebar">
-              <div className="content-panel-narrow-sidebar-header">
-                <button
-                  type="button"
-                  className="content-panel-narrow-sidebar-done"
-                  onClick={closeNarrowContentSidebar}
-                >
-                  Done
-                </button>
-              </div>
-              <ContentPanelSidebar
-                activeVaultNavItem={activeVaultNavItem}
-                vaultExplorerEnabled={vaultExplorerEnabled}
-              />
-            </div>
-          ) : !hideSidebar ? (
-            <ResizablePanel
-              side="left"
-              className="app-resizable-panel-inset"
-              storageKey={CONTENT_PANEL_SIDEBAR_WIDTH_KEY}
-              defaultWidth={240}
-              minWidth={180}
-              maxWidth={400}
-              ariaLabel="Content panel sidebar"
-              collapsed={!sidebarOpen}
-            >
-              <ContentPanelSidebar
-                activeVaultNavItem={activeVaultNavItem}
-                vaultExplorerEnabled={vaultExplorerEnabled}
-              />
-            </ResizablePanel>
-          ) : null}
-          {!narrowContentSidebar ? (
-            <div className="content-panel-content">{children}</div>
-          ) : null}
+          {mainPanelBody}
         </div>
       </div>
     </div>
@@ -485,6 +533,13 @@ function ContentPanelWithBreadcrumbs({
   hideSidebar = false,
   activeVaultNavItem,
   onVaultNavItemChange,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
+  linearWorkspaceEnabled,
   vaultExplorerEnabled,
   navigationCollapsed = false,
   onOpenNavigation,
@@ -496,6 +551,13 @@ function ContentPanelWithBreadcrumbs({
   hideSidebar?: boolean;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
+  linearWorkspaceEnabled: boolean;
   vaultExplorerEnabled: boolean;
   navigationCollapsed?: boolean;
   onOpenNavigation?: () => void;
@@ -565,6 +627,13 @@ function ContentPanelWithBreadcrumbs({
       hideSidebar={hideSidebar}
       activeVaultNavItem={activeVaultNavItem}
       onVaultNavItemChange={onVaultNavItemChange}
+      inboxLinearTeamId={inboxLinearTeamId}
+      dailyLinearTeamId={dailyLinearTeamId}
+      workoutsLinearTeamId={workoutsLinearTeamId}
+      lettersLinearTeamId={lettersLinearTeamId}
+      knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+      addressbookLinearTeamId={addressbookLinearTeamId}
+      linearWorkspaceEnabled={linearWorkspaceEnabled}
       vaultExplorerEnabled={vaultExplorerEnabled}
       breadcrumbSegments={breadcrumbSegments}
       navigationCollapsed={navigationCollapsed}
@@ -580,6 +649,13 @@ export function ContentPanel({
   hideSidebar = false,
   activeVaultNavItem,
   onVaultNavItemChange,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
+  linearWorkspaceEnabled,
   vaultExplorerEnabled,
   navigationCollapsed = false,
   onOpenNavigation,
@@ -591,6 +667,13 @@ export function ContentPanel({
   hideSidebar?: boolean;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
+  linearWorkspaceEnabled: boolean;
   vaultExplorerEnabled: boolean;
   navigationCollapsed?: boolean;
   onOpenNavigation?: () => void;
@@ -600,16 +683,24 @@ export function ContentPanel({
 }) {
   return (
     <ContentListNavigationProvider>
-      <ContentListNavigationLayoutSync
-        activeVaultNavItem={activeVaultNavItem}
-        hideSidebar={hideSidebar}
-        settingsOpen={settingsOpen}
-      />
-      <ContentPanelWithBreadcrumbs
+      <WorkoutsPeriodViewProvider>
+        <ContentListNavigationLayoutSync
+          activeVaultNavItem={activeVaultNavItem}
+          hideSidebar={hideSidebar}
+          settingsOpen={settingsOpen}
+        />
+        <ContentPanelWithBreadcrumbs
         sidebarOpen={sidebarOpen}
         hideSidebar={hideSidebar}
         activeVaultNavItem={activeVaultNavItem}
         onVaultNavItemChange={onVaultNavItemChange}
+        inboxLinearTeamId={inboxLinearTeamId}
+        dailyLinearTeamId={dailyLinearTeamId}
+        workoutsLinearTeamId={workoutsLinearTeamId}
+        lettersLinearTeamId={lettersLinearTeamId}
+        knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+        addressbookLinearTeamId={addressbookLinearTeamId}
+        linearWorkspaceEnabled={linearWorkspaceEnabled}
         vaultExplorerEnabled={vaultExplorerEnabled}
         navigationCollapsed={navigationCollapsed}
         onOpenNavigation={onOpenNavigation}
@@ -618,12 +709,25 @@ export function ContentPanel({
       >
         <ContentPanelMainSlot
           settingsOpen={settingsOpen}
+          linearWorkspaceEnabled={linearWorkspaceEnabled}
           vaultStructureEnabled={vaultExplorerEnabled}
           activeVaultNavItem={activeVaultNavItem}
+          lettersLinearTeamId={lettersLinearTeamId}
+          inboxLinearTeamId={inboxLinearTeamId}
+          workoutsLinearTeamId={workoutsLinearTeamId}
+          workspaceTeamConfig={{
+            inboxLinearTeamId,
+            dailyLinearTeamId,
+            workoutsLinearTeamId,
+            lettersLinearTeamId,
+            knowledgeBaseLinearTeamId,
+            addressbookLinearTeamId,
+          }}
         >
           {children}
         </ContentPanelMainSlot>
       </ContentPanelWithBreadcrumbs>
+      </WorkoutsPeriodViewProvider>
     </ContentListNavigationProvider>
   );
 }

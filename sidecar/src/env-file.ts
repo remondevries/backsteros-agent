@@ -101,10 +101,11 @@ export function applyEnvRecord(record: Record<string, string>, overwrite = false
 
 const SYNCED_ENV_KEYS = [
   "CURSOR_API_KEY",
-  "LINEAR_API_KEY",
   "GEMINI_API_KEY",
   "GOOGLE_OAUTH_CREDENTIALS",
   "LINEAR_OAUTH_CREDENTIALS",
+  "LINEAR_OAUTH_CLIENT_ID",
+  "LINEAR_OAUTH_CLIENT_SECRET",
   "GOOGLE_CALENDAR_ACCOUNT",
 ] as const;
 

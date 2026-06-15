@@ -1,12 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useCommandPaletteActions } from "../command-palette/useCommandPaletteActions";
 import type { CommandPaletteItem } from "../command-palette/types";
 import {
-  NAVIGATION_LEADER_SHORTCUTS,
+  buildNavigationLeaderShortcuts,
   navigationShortcutLabel,
   SETTINGS_LEADER_SHORTCUT,
 } from "../shortcuts/navigationShortcutBindings";
+import type { LinearSidebarTeamConfig } from "../app/sidebarNavConfig";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
 import { LEADER_SEQUENCE_HOTKEY_OPTIONS } from "./hotkeyOptions";
@@ -26,15 +27,22 @@ function NavigationLeaderShortcut({
 
 export function AppNavigationShortcuts({
   enabled,
+  linearSidebarTeamConfig,
   onVaultNavItemChange,
   onOpenSettings,
   onSettingsTabChange,
 }: {
   enabled: boolean;
+  linearSidebarTeamConfig?: LinearSidebarTeamConfig;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   onOpenSettings: () => void;
   onSettingsTabChange: (tab: SettingsTabId) => void;
 }) {
+  const leaderShortcuts = useMemo(
+    () => buildNavigationLeaderShortcuts(linearSidebarTeamConfig),
+    [linearSidebarTeamConfig],
+  );
+
   const performItem = useCommandPaletteActions({
     onVaultNavItemChange,
     onOpenSettings,
@@ -68,7 +76,7 @@ export function AppNavigationShortcuts({
 
   return (
     <>
-      {NAVIGATION_LEADER_SHORTCUTS.map((binding) => (
+      {leaderShortcuts.map((binding) => (
         <NavigationLeaderShortcut
           key={binding.keys}
           keys={binding.keys}

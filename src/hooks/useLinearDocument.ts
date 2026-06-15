@@ -5,6 +5,10 @@ import {
   type LinearDocumentContent,
 } from "../lib/api";
 import { onLinearDocumentListChange } from "../lib/linearDocumentListEvents";
+import {
+  clearLinearDocumentContentSeed,
+  peekLinearDocumentContentSeed,
+} from "../lib/linearDocumentContentSeed";
 
 export function useLinearDocument(documentId: string, enabled = true) {
   const [document, setDocument] = useState<LinearDocumentContent | null>(null);
@@ -21,8 +25,15 @@ export function useLinearDocument(documentId: string, enabled = true) {
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const seed = peekLinearDocumentContentSeed(documentId);
+    if (seed) {
+      setDocument(seed);
+      setLoading(false);
+      setError(null);
+    } else {
+      setLoading(true);
+      setError(null);
+    }
 
     void fetchLinearDocument(documentId).then((result) => {
       if (cancelled) return;
@@ -32,6 +43,7 @@ export function useLinearDocument(documentId: string, enabled = true) {
       } else {
         setDocument(result.document);
         setError(null);
+        clearLinearDocumentContentSeed(documentId);
       }
       setLoading(false);
     });
@@ -70,7 +82,13 @@ export function useLinearDocument(documentId: string, enabled = true) {
   }, [documentId, enabled, refresh]);
 
   const save = useCallback(
-    async (updates: { title?: string; content?: string }) => {
+    async (updates: {
+      title?: string;
+      content?: string;
+      projectId?: string | null;
+      teamId?: string;
+      issueId?: string | null;
+    }) => {
       const result = await updateLinearDocument(documentId, updates);
       if (result.error || !result.document) {
         return {
@@ -84,5 +102,26 @@ export function useLinearDocument(documentId: string, enabled = true) {
     [documentId],
   );
 
-  return { document, loading, refreshing, error, save, refresh };
+  const assignProject = useCallback(
+    async (projectId: string) => {
+      const result = await save({ projectId });
+      return { error: result.error, document: result.document };
+    },
+    [save],
+  );
+
+  const updateProperties = useCallback(
+    async (updates: {
+      teamId?: string;
+      projectId?: string | null;
+      title?: string;
+      issueId?: string | null;
+    }) => {
+      const result = await save(updates);
+      return { error: result.error, document: result.document };
+    },
+    [save],
+  );
+
+  return { document, loading, refreshing, error, save, assignProject, updateProperties, refresh };
 }

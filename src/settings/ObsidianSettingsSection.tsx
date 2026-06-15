@@ -1,4 +1,4 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { pickDirectory } from "../platform/dialog";
 
 import { getSettingsTabStatusLabel, isSettingsTabConnected } from "./integrationConnectionStatus";
 
@@ -18,17 +18,9 @@ export function ObsidianSettingsSection({
   onManualVaultNameChange: (value: string) => void;
 }) {
   async function pickFolder() {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: notesPath ?? defaultNotesPath,
-      });
-      if (typeof selected === "string") {
-        onManualPathChange(selected);
-      }
-    } catch {
-      // Browser dev mode: keep manual path input
+    const selected = await pickDirectory(notesPath ?? defaultNotesPath);
+    if (selected) {
+      onManualPathChange(selected);
     }
   }
 

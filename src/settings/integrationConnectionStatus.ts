@@ -2,11 +2,13 @@ import type { IntegrationsStatus } from "../lib/api";
 import type { SettingsTabId } from "./settingsTabs";
 
 const INTEGRATION_TABS = new Set<SettingsTabId>([
+  "account",
   "cursor",
   "linear",
   "gemini",
   "google-calendar",
   "google-gmail",
+  "whoop",
 ]);
 
 export type SettingsConnectionContext = {
@@ -15,7 +17,7 @@ export type SettingsConnectionContext = {
 };
 
 export function tabShowsConnectionIndicator(tabId: SettingsTabId): boolean {
-  return tabId === "obsidian" || INTEGRATION_TABS.has(tabId);
+  return tabId === "obsidian" || tabId === "account" || INTEGRATION_TABS.has(tabId);
 }
 
 /** @deprecated Use tabShowsConnectionIndicator */
@@ -27,6 +29,16 @@ export function isGoogleCalendarConnected(
   calendar: IntegrationsStatus["googleCalendar"],
 ): boolean {
   return calendar.credentialsConfigured && calendar.authenticated;
+}
+
+export function isWhoopConnected(whoop: IntegrationsStatus["whoop"]): boolean {
+  return whoop.authenticated;
+}
+
+export function getWhoopStatusLabel(whoop: IntegrationsStatus["whoop"]): string {
+  if (isWhoopConnected(whoop)) return "Connected";
+  if (whoop.configured) return "Needs tokens";
+  return "Not connected";
 }
 
 export function isLinearOAuthConnected(linear: IntegrationsStatus["linear"]): boolean {
@@ -41,7 +53,7 @@ export function getLinearOAuthStatusLabel(linear: IntegrationsStatus["linear"]):
 }
 
 export function isLinearSettingsConnected(status: IntegrationsStatus): boolean {
-  return status.linearApiKey.configured || isLinearOAuthConnected(status.linear);
+  return isLinearOAuthConnected(status.linear);
 }
 
 export function getGoogleCalendarStatusLabel(
@@ -57,6 +69,17 @@ export function isSettingsTabConnected(
   tabId: SettingsTabId,
   context: SettingsConnectionContext,
 ): boolean {
+  if (tabId === "account") {
+    const status = context.integrationsStatus;
+    if (!status) return false;
+    return (
+      status.cursorApiKey.configured ||
+      isLinearSettingsConnected(status) ||
+      status.geminiApiKey.configured ||
+      isGoogleCalendarConnected(status.googleCalendar)
+    );
+  }
+
   if (tabId === "obsidian") {
     return Boolean(context.savedNotesPath?.trim());
   }
@@ -69,6 +92,7 @@ export function isSettingsTabConnected(
   if (tabId === "gemini") return status.geminiApiKey.configured;
   if (tabId === "google-calendar") return isGoogleCalendarConnected(status.googleCalendar);
   if (tabId === "google-gmail") return false;
+  if (tabId === "whoop") return isWhoopConnected(status.whoop);
 
   return false;
 }
@@ -85,6 +109,10 @@ export function getSettingsTabStatusLabel(
 
   if (tabId === "linear" && context.integrationsStatus) {
     return getLinearOAuthStatusLabel(context.integrationsStatus.linear);
+  }
+
+  if (tabId === "whoop" && context.integrationsStatus) {
+    return getWhoopStatusLabel(context.integrationsStatus.whoop);
   }
 
   return "Not connected";

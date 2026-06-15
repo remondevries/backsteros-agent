@@ -5,15 +5,16 @@ import {
   getCursorApiKey,
   getGeminiApiKey,
   getGoogleOAuthCredentialsPath,
-  getLinearApiKey,
-  getLinearOAuthCredentialsPath,
+  getLinearOAuthClientCredentials,
   isGoogleCalendarAuthenticated,
   isGoogleCalendarConfigured,
+  isLinearOAuthAuthenticated,
   isLinearOAuthConfigured,
 } from "./config.ts";
 import { fetchCalendarEventsToday } from "./morning-review-calendar.ts";
+import { getLinearAuthToken } from "./linear/auth-token.ts";
 import { linearGraphqlRequest } from "./linear/graphql.ts";
-import { parseOAuthCredentialsJson, parseLinearOAuthCredentialsJson } from "./integrations-secrets.ts";
+import { parseOAuthCredentialsJson } from "./integrations-secrets.ts";
 
 const TEST_TIMEOUT_MS = 12_000;
 
@@ -39,7 +40,6 @@ export type IntegrationTestReport = Record<IntegrationConnectTestTarget, Integra
 
 export interface IntegrationTestCredentials {
   cursorApiKey?: string;
-  linearApiKey?: string;
   geminiApiKey?: string;
   googleOAuthClientId?: string;
   googleOAuthClientSecret?: string;
@@ -84,20 +84,16 @@ export async function testCursorIntegration(
   }
 }
 
-export async function testLinearIntegration(
-  apiKeyOverride?: string,
-): Promise<IntegrationTestResult> {
-  const apiKey = apiKeyOverride?.trim() || getLinearApiKey();
-  if (!apiKey) {
-    return failure("Linear API key is not configured.");
+export async function testLinearIntegration(): Promise<IntegrationTestResult> {
+  const token = getLinearAuthToken();
+  if (!token) {
+    return failure("Linear OAuth is not connected.");
   }
 
   try {
     const data = await withTimeout(
       linearGraphqlRequest<{ viewer: { name?: string; email?: string } }>(
         `query IntegrationTestViewer { viewer { name email } }`,
-        {},
-        { apiKey },
       ),
       "Linear API",
     );
@@ -262,13 +258,8 @@ export async function testLinearOAuthCredentials(
     return failure("Linear OAuth credentials are not configured.");
   }
 
-  const credentialsPath = getLinearOAuthCredentialsPath();
-  if (!credentialsPath) {
-    return failure("Linear OAuth credentials are not configured.");
-  }
-
   try {
-    const parsed = parseLinearOAuthCredentialsJson(JSON.parse(readFileSync(credentialsPath, "utf8")));
+    const parsed = getLinearOAuthClientCredentials();
     return validateLinearOAuthCredentialPair(parsed.client_id, parsed.client_secret);
   } catch {
     return failure("Saved Linear OAuth credentials could not be read.");
@@ -281,7 +272,6 @@ function credentialOverrideForTarget(
 ): string | undefined {
   if (!credentials) return undefined;
   if (target === "cursor") return credentials.cursorApiKey;
-  if (target === "linear") return credentials.linearApiKey;
   if (target === "gemini") return credentials.geminiApiKey;
   return undefined;
 }
@@ -299,7 +289,7 @@ export async function runIntegrationTest(
 
   const override = credentialOverrideForTarget(target, credentials);
   if (target === "cursor") return testCursorIntegration(override);
-  if (target === "linear") return testLinearIntegration(override);
+  if (target === "linear") return testLinearIntegration();
   if (target === "gemini") return testGeminiIntegration(override);
   return testGoogleCalendarIntegration();
 }

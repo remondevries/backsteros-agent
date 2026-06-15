@@ -1,14 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchLinearTeams, type LinearTeamSummary } from "../lib/api";
+import {
+  excludeWorkspaceSetupLinearTeams,
+  workspaceSetupLinearTeamIdSet,
+} from "../lib/workspaceSetupTeamIds";
 import {
   EMPTY_BREADCRUMB_SEGMENTS,
   useContentPanelSidebarBreadcrumbs,
 } from "./contentPanelNavigation";
+import type { LinearSidebarTeamConfig } from "./sidebarNavConfig";
 
-export function OrganizationTeamsList({ enabled }: { enabled: boolean }) {
+export function OrganizationTeamsList({
+  enabled,
+  workspaceTeamConfig = {},
+}: {
+  enabled: boolean;
+  workspaceTeamConfig?: LinearSidebarTeamConfig;
+}) {
   const [teams, setTeams] = useState<LinearTeamSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const excludedTeamIds = useMemo(
+    () => workspaceSetupLinearTeamIdSet(workspaceTeamConfig),
+    [workspaceTeamConfig],
+  );
+
+  const visibleTeams = useMemo(
+    () => excludeWorkspaceSetupLinearTeams(teams, excludedTeamIds),
+    [excludedTeamIds, teams],
+  );
 
   useContentPanelSidebarBreadcrumbs(EMPTY_BREADCRUMB_SEGMENTS, enabled);
 
@@ -52,9 +73,9 @@ export function OrganizationTeamsList({ enabled }: { enabled: boolean }) {
       ) : null}
 
       {!loading && !error ? (
-        teams.length > 0 ? (
+        visibleTeams.length > 0 ? (
           <ul className="vault-folder-explorer-list">
-            {teams.map((team) => (
+            {visibleTeams.map((team) => (
               <li key={team.id} className="vault-folder-explorer-item">
                 <span className="vault-folder-explorer-entry vault-folder-explorer-entry-file">
                   <span className="vault-folder-explorer-entry-name">{team.name}</span>

@@ -167,6 +167,7 @@ export function isLinearPickDueDateValue(value: string): boolean {
 export function buildLinearDueDateDropdownOptions(
   currentDueDate: string | null | undefined,
   now = new Date(),
+  noDueDateLabel = "No due date",
 ): SearchableDropdownOption[] {
   const today = formatLinearDueDateYmd(now);
   const tomorrow = formatLinearDueDateYmd(addLocalDays(now, 1));
@@ -201,7 +202,7 @@ export function buildLinearDueDateDropdownOptions(
 
   options.push({
     value: LINEAR_NO_DUE_DATE_VALUE,
-    label: "No due date",
+    label: noDueDateLabel,
     shortcut: searchableDropdownShortcut(options.length),
     searchTerms: "none clear remove",
   });

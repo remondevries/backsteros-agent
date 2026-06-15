@@ -9,6 +9,13 @@ export const LETTER_LABEL = "Letter";
 export const LETTER_CONFIRM_PLACEHOLDER =
   "Confirm or correct: from, organization, received date, status…";
 
+/** Labels for the linked-issue due date field in letter sidebars (stored as Linear dueDate). */
+export const LETTER_RECEIVED_DATE_PROPERTY_LABELS = {
+  emptyLabel: "Received",
+  changeLabel: "Change received date",
+  clearOptionLabel: "Date received",
+} as const;
+
 export function isLetterMessage(quickActionId?: string): boolean {
   return quickActionId === LETTER_ACTION_ID;
 }

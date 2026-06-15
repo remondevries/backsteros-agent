@@ -1,30 +1,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinearIssueEntity } from "../../chat/types";
-import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useDocumentDeleteBreadcrumbAction } from "../../hooks/useDocumentDeleteBreadcrumbAction";
 import { useVaultDocument } from "../../hooks/useVaultDocument";
-import { useVaultDocumentWhoopSnapshot } from "../../hooks/useVaultDocumentWhoopSnapshot";
-import { useLinearIssuesByDueDates } from "../../hooks/useLinearIssuesByDueDates";
+import { deleteVaultDocument } from "../../lib/api";
 import { isDailyVaultNotePath } from "../../lib/vaultNotePaths";
-import { dailyDateFromPath } from "../../lib/vaultDates";
+import { dailyDateFromPath, parseDailyJournalDate } from "../../lib/vaultDates";
 import { notifyVaultContentChanged } from "../../lib/vaultContentEvents";
+import { vaultDocumentDisplayName } from "../../lib/sidebarNoteDeletion";
+import type { SidebarNavItemId } from "../../lib/sidebarNavItems";
+import { documentBodyPlaceholder, documentTitlePlaceholder } from "../../lib/documentTitlePlaceholder";
 import {
   handleVaultDocumentTitleEnter,
   registerVaultDocumentTitleFocus,
 } from "../../lib/vaultDocumentTitleFocus";
-import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
 import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
-import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
-import { ProjectIssueRow } from "../project-issues/ProjectIssueRow";
 import { requestLinearIssueViewMode } from "../project-issues/issueViewModeIntent";
-import { LinearIcon } from "../../chat/LinearIcon";
-import { DocumentNoteIcon } from "./DocumentNoteIcon";
-import { VaultDocumentWhoopHeader } from "./VaultDocumentWhoopHeader";
+import { DailyJournalDocumentLeading } from "./DailyJournalDocumentLeading";
+import { DailyNoteDueDateIssuesSection } from "./DailyNoteDueDateIssuesSection";
+import { MeetingDocumentLeading } from "./MeetingDocumentLeading";
+import { DocumentPdfLinkAction } from "./DocumentPdfLinkAction";
+import { DeleteNoteConfirmDialog } from "../../ui/components/DeleteNoteConfirmDialog";
 
 const SAVE_DEBOUNCE_MS = 800;
 
-export function VaultDocumentView({ path }: { path: string }) {
+export function VaultDocumentView({
+  path,
+  dailyJournalSection = false,
+  meetingsSection = false,
+  workoutsLinearTeamId = null,
+  activeVaultNavItem = null,
+}: {
+  path: string;
+  dailyJournalSection?: boolean;
+  meetingsSection?: boolean;
+  workoutsLinearTeamId?: string | null;
+  activeVaultNavItem?: SidebarNavItemId | null;
+}) {
   const isDailyNote = isDailyVaultNotePath(path);
   const dailyDateHint = isDailyNote ? dailyDateFromPath(path) : null;
   const {
@@ -32,18 +45,17 @@ export function VaultDocumentView({ path }: { path: string }) {
     updateActiveVaultDocument,
     setActiveLinearIssue,
     activeLinearIssue,
+    clearActiveVaultDocument,
   } = useContentPanelNavigation();
   const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
   const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
-  const { snapshot: whoopSnapshot, loading: whoopLoading } = useVaultDocumentWhoopSnapshot(
-    isDailyNote ? document : null,
-    { refreshKey: whoopRefreshKey, expectedPath: path, expectedDate: dailyDateHint },
-  );
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(titleDraft);
   const bodyRef = useRef(bodyDraft);
@@ -53,22 +65,40 @@ export function VaultDocumentView({ path }: { path: string }) {
   const preserveEditStateOnPathChangeRef = useRef(false);
   const focusTitleRequested =
     activeVaultDocument?.focusTitle === true && activeVaultDocument.path === path;
-  const dueDate = document?.date?.trim() || dailyDateHint || null;
-  const dueDatesForIssues = useMemo(
-    () => (isDailyNote && dueDate ? [dueDate] : []),
-    [dueDate, isDailyNote],
+  const dueDate =
+    dailyDateHint ||
+    parseDailyJournalDate(titleDraft) ||
+    document?.date?.trim() ||
+    null;
+  const dailyWhoopDate =
+    dailyJournalSection && isDailyNote
+      ? dueDate
+      : null;
+  const showDailyJournalLayout = Boolean(dailyWhoopDate);
+  const titlePlaceholder = useMemo(
+    () =>
+      documentTitlePlaceholder({
+        activeVaultNavItem,
+        dailyJournalSection,
+        meetingsSection,
+      }),
+    [activeVaultNavItem, dailyJournalSection, meetingsSection],
   );
-  const {
-    issuesByDueDate,
-    loading: dueDateIssuesLoading,
-    error: dueDateIssuesError,
-  } = useLinearIssuesByDueDates(dueDatesForIssues, isDailyNote && Boolean(dueDate));
-  const dueDateIssues = dueDate ? (issuesByDueDate[dueDate] ?? []) : [];
+
+  const bodyPlaceholder = useMemo(
+    () =>
+      documentBodyPlaceholder({
+        activeVaultNavItem,
+        dailyJournalSection,
+        meetingsSection,
+      }),
+    [activeVaultNavItem, dailyJournalSection, meetingsSection],
+  );
   titleRef.current = titleDraft;
   bodyRef.current = bodyDraft;
 
   useContentPanelBarState({
-    saving,
+    saving: saving || deleting,
     dirty,
     error: saveError ?? error,
     loading: loading && !document,
@@ -103,6 +133,7 @@ export function VaultDocumentView({ path }: { path: string }) {
   useEffect(() => {
     if (!focusTitleRequested || focusHandledRef.current) return;
     if (!document || document.path !== path) return;
+    if (isDailyNote) return;
     focusHandledRef.current = true;
     const input = titleInputRef.current;
     if (input) {
@@ -110,7 +141,7 @@ export function VaultDocumentView({ path }: { path: string }) {
       input.select();
     }
     updateActiveVaultDocument({ focusTitle: false });
-  }, [document, focusTitleRequested, path, updateActiveVaultDocument]);
+  }, [document, focusTitleRequested, isDailyNote, path, updateActiveVaultDocument]);
 
   const focusSnapshot = useMemo(() => {
     if (!document || document.path !== path) return null;
@@ -125,6 +156,7 @@ export function VaultDocumentView({ path }: { path: string }) {
 
   useEffect(() => {
     if (!document || document.path !== path) return undefined;
+    if (isDailyNote) return undefined;
     return registerVaultDocumentTitleFocus({
       focusTitle: () => {
         const input = titleInputRef.current;
@@ -133,10 +165,7 @@ export function VaultDocumentView({ path }: { path: string }) {
         input.select();
       },
     });
-  }, [document, path]);
-
-  const groupedDueDateIssues = useMemo(() => groupLinearIssuesByStatus(dueDateIssues), [dueDateIssues]);
-  const showStatusGrouping = groupedDueDateIssues.length > 1;
+  }, [document, isDailyNote, path]);
 
   const openLinearIssue = useCallback(
     (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
@@ -149,6 +178,7 @@ export function VaultDocumentView({ path }: { path: string }) {
         title: issue.title,
         status: issue.status,
         stateType: issue.stateType,
+        projectName: issue.projectName?.trim() || undefined,
         sourceVaultDocumentPath: path,
         sourceVaultDocumentTitle: titleDraft.trim() || document?.title || dailyDateHint || "Daily",
       });
@@ -156,46 +186,27 @@ export function VaultDocumentView({ path }: { path: string }) {
     [dailyDateHint, document?.title, path, setActiveLinearIssue, titleDraft],
   );
 
-  const dailyIssueListNavItems = useMemo(
-    () =>
-      groupedDueDateIssues.flatMap((group) =>
-        group.issues.map((issue) => ({
-          id: issue.id,
-          select: () => openLinearIssue(issue),
-        })),
-      ),
-    [groupedDueDateIssues, openLinearIssue],
-  );
-
   const selectedDailyIssueId = useMemo(() => {
     if (!activeLinearIssue) return null;
     if (activeLinearIssue.sourceVaultDocumentPath !== path) return null;
-    return dueDateIssues.some((issue) => issue.id === activeLinearIssue.id)
-      ? activeLinearIssue.id
-      : null;
-  }, [activeLinearIssue, dueDateIssues, path]);
-
-  useContentListNavigationRegistration({
-    region: "main",
-    enabled: isDailyNote && !dueDateIssuesLoading && dailyIssueListNavItems.length > 0,
-    priority: 8,
-    items: dailyIssueListNavItems,
-    selectedId: selectedDailyIssueId,
-  });
+    return activeLinearIssue.id;
+  }, [activeLinearIssue, path]);
 
   const persist = useCallback(
     async (title: string, body: string) => {
       setSaving(true);
       setSaveError(null);
       try {
-        const result = await save({ title, body });
+        const result = await save(isDailyNote ? { body } : { title, body });
         if (result.error) {
           setSaveError(result.error);
           return;
         }
         setDirty(false);
         const savedDocument = result.document;
-        const nextTitle = title.trim() || savedDocument?.title || document?.title || "Untitled";
+        const nextTitle = isDailyNote
+          ? document?.title?.trim() || dailyDateHint || title.trim() || "Untitled"
+          : title.trim() || savedDocument?.title || document?.title || "Untitled";
         if (savedDocument && savedDocument.path !== path) {
           preserveEditStateOnPathChangeRef.current = true;
           updateActiveVaultDocument({
@@ -212,7 +223,7 @@ export function VaultDocumentView({ path }: { path: string }) {
         setSaving(false);
       }
     },
-    [document?.title, path, save, updateActiveVaultDocument],
+    [dailyDateHint, document?.title, isDailyNote, path, save, updateActiveVaultDocument],
   );
 
   const scheduleSave = useCallback(
@@ -270,35 +281,90 @@ export function VaultDocumentView({ path }: { path: string }) {
     }
   };
 
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setSaveError(null);
+    try {
+      const result = await deleteVaultDocument(path);
+      if (result.error) {
+        setSaveError(result.error);
+        return;
+      }
+      setDeleteConfirmOpen(false);
+      clearActiveVaultDocument();
+      notifyVaultContentChanged();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to delete note");
+    } finally {
+      setDeleting(false);
+    }
+  }, [clearActiveVaultDocument, deleting, path]);
+
+  useDocumentDeleteBreadcrumbAction(
+    document
+      ? {
+          deleting,
+          onDelete: () => setDeleteConfirmOpen(true),
+        }
+      : null,
+  );
+
   if (!document) {
     return <div className="vault-document-scroll" />;
   }
 
   return (
-    <div className="vault-document-scroll">
-      <article className={`vault-document${isDailyNote ? " vault-document--daily" : ""}`}>
-        {isDailyNote && whoopSnapshot ? <VaultDocumentWhoopHeader snapshot={whoopSnapshot} /> : null}
-        {isDailyNote && !whoopSnapshot && whoopLoading && document.date ? (
-          <p className="vault-document-whoop-status">Loading Whoop…</p>
-        ) : null}
+    <>
+      <DeleteNoteConfirmDialog
+        open={deleteConfirmOpen}
+        fileName={vaultDocumentDisplayName(path, titleDraft || document.title)}
+        deleting={deleting}
+        onCancel={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+        }}
+        onConfirm={() => {
+          void handleDelete();
+        }}
+      />
+      <DocumentPdfLinkAction content={bodyDraft}>
+      <div className="vault-document-scroll">
+        <article
+          className={`vault-document${showDailyJournalLayout ? " vault-document--daily" : ""}`}
+        >
         <header className="vault-document-header">
-          {!isDailyNote ? (
-            <div className="vault-document-icon" aria-hidden="true">
-              <DocumentNoteIcon size={16} />
-            </div>
-          ) : null}
-          <input
-            ref={titleInputRef}
-            type="text"
-            className="vault-document-title"
-            value={titleDraft}
-            onChange={(event) => handleTitleChange(event.target.value)}
-            onFocus={handleTitleFocus}
-            onBlur={handleBlur}
-            onKeyDown={handleVaultDocumentTitleEnter}
-            placeholder="Untitled"
-            aria-label="Document title"
-          />
+          {meetingsSection ? (
+            <MeetingDocumentLeading />
+          ) : (
+            <DailyJournalDocumentLeading
+              date={dailyWhoopDate}
+              enabled={dailyJournalSection && isDailyNote}
+              refreshKey={whoopRefreshKey}
+              workoutsLinearTeamId={workoutsLinearTeamId}
+            />
+          )}
+          {isDailyNote ? (
+            <h1
+              className="vault-document-title vault-document-title--readonly"
+              aria-label="Document title"
+            >
+              {titleDraft || document.title}
+            </h1>
+          ) : (
+            <input
+              ref={titleInputRef}
+              type="text"
+              className="vault-document-title"
+              value={titleDraft}
+              onChange={(event) => handleTitleChange(event.target.value)}
+              onFocus={handleTitleFocus}
+              onBlur={handleBlur}
+              onKeyDown={handleVaultDocumentTitleEnter}
+              placeholder={titlePlaceholder}
+              aria-label="Document title"
+            />
+          )}
         </header>
         <div className="vault-document-body-editor">
           <TiptapEditor
@@ -307,97 +373,22 @@ export function VaultDocumentView({ path }: { path: string }) {
             onFocus={handleBodyFocus}
             onBlur={handleBlur}
             format="markdown"
-            placeholder="Start writing…"
+            hidePdfLinks
+            placeholder={bodyPlaceholder}
             className="vault-document-tiptap"
           />
         </div>
         {isDailyNote && dueDate ? (
-          <section className="vault-document-linear-issues">
-            <p className="vault-document-linear-issues-title">
-              <span className="vault-document-linear-issues-title-icon" aria-hidden="true">
-                <LinearIcon size={14} />
-              </span>
-              <span>Linear</span>
-            </p>
-            {dueDateIssuesLoading ? (
-              <p className="vault-document-linear-issues-status">Loading issues…</p>
-            ) : null}
-            {!dueDateIssuesLoading && dueDateIssuesError ? (
-              <p className="vault-document-linear-issues-status vault-document-linear-issues-status-error">
-                {dueDateIssuesError}
-              </p>
-            ) : null}
-            {!dueDateIssuesLoading && !dueDateIssuesError ? (
-              dueDateIssues.length > 0 ? (
-                showStatusGrouping ? (
-                  <div className="vault-document-linear-issues-groups">
-                    {groupedDueDateIssues.map((group) => (
-                      <section key={group.status} className="vault-document-linear-issues-group">
-                        <p className="vault-document-linear-issues-group-header">
-                          <span className="vault-document-linear-issues-group-icon" aria-hidden="true">
-                            <LinearStatusIcon
-                              status={group.status}
-                              stateType={group.stateType}
-                              title={group.status}
-                            />
-                          </span>
-                          <span className="vault-document-linear-issues-group-title">{group.status}</span>
-                          <span className="vault-document-linear-issues-group-count">{group.issues.length}</span>
-                        </p>
-                        <ul className="workspace-status-list vault-document-linear-issues-list">
-                          {group.issues.map((issue) => (
-                            <ProjectIssueRow
-                              key={issue.id}
-                              issue={issue}
-                              grouped={false}
-                              leadingIcon="status"
-                              showPrimaryLabel={false}
-                              showProjectLabel
-                              showDueMeta={false}
-                              showEstimateMeta={false}
-                              onClick={() => {
-                                openLinearIssue(issue);
-                              }}
-                              onTerminalIndicatorClick={() => {
-                                openLinearIssue(issue, "terminal");
-                              }}
-                            />
-                          ))}
-                        </ul>
-                      </section>
-                    ))}
-                  </div>
-                ) : (
-                  <ul className="workspace-status-list vault-document-linear-issues-list">
-                    {dueDateIssues.map((issue) => (
-                      <ProjectIssueRow
-                        key={issue.id}
-                        issue={issue}
-                        grouped={false}
-                        leadingIcon="status"
-                        showPrimaryLabel={false}
-                        showProjectLabel
-                        showDueMeta={false}
-                        showEstimateMeta={false}
-                        onClick={() => {
-                          openLinearIssue(issue);
-                        }}
-                        onTerminalIndicatorClick={() => {
-                          openLinearIssue(issue, "terminal");
-                        }}
-                      />
-                    ))}
-                  </ul>
-                )
-              ) : (
-                <p className="vault-document-linear-issues-status">
-                  No Linear issues due on this date.
-                </p>
-              )
-            ) : null}
-          </section>
+          <DailyNoteDueDateIssuesSection
+            dueDate={dueDate}
+            enabled={Boolean(dueDate)}
+            onOpenIssue={openLinearIssue}
+            selectedIssueId={selectedDailyIssueId}
+          />
         ) : null}
       </article>
     </div>
+    </DocumentPdfLinkAction>
+    </>
   );
 }

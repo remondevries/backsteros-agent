@@ -242,3 +242,95 @@ export async function resolveTaskLabelId(teamId: string): Promise<string | undef
 
   return data.team?.labels?.nodes?.[0]?.id?.trim() || undefined;
 }
+
+export type LinearProjectStatusSummary = {
+  id: string;
+  name: string;
+  type: string;
+  position?: number;
+  color?: string;
+};
+
+const PROJECT_STATUSES_QUERY = `
+  query ProjectStatuses($first: Int!, $after: String) {
+    projectStatuses(first: $first, after: $after) {
+      nodes {
+        id
+        name
+        type
+        position
+        color
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+function normalizeProjectStatusNode(
+  node: {
+    id?: string;
+    name?: string;
+    type?: string;
+    position?: number | null;
+    color?: string | null;
+  } | null | undefined,
+): LinearProjectStatusSummary | null {
+  if (!node?.id?.trim() || !node.name?.trim() || !node.type?.trim()) {
+    return null;
+  }
+
+  return {
+    id: node.id.trim(),
+    name: node.name.trim(),
+    type: node.type.trim(),
+    position: Number.isFinite(node.position) ? Number(node.position) : undefined,
+    color: node.color?.trim() || undefined,
+  };
+}
+
+function sortProjectStatuses(states: LinearProjectStatusSummary[]): LinearProjectStatusSummary[] {
+  return [...states].sort((left, right) => {
+    const leftPosition = Number.isFinite(left.position) ? Number(left.position) : Number.NaN;
+    const rightPosition = Number.isFinite(right.position) ? Number(right.position) : Number.NaN;
+    if (Number.isFinite(leftPosition) && Number.isFinite(rightPosition) && leftPosition !== rightPosition) {
+      return leftPosition - rightPosition;
+    }
+    if (Number.isFinite(leftPosition) && !Number.isFinite(rightPosition)) return -1;
+    if (!Number.isFinite(leftPosition) && Number.isFinite(rightPosition)) return 1;
+    return left.name.localeCompare(right.name);
+  });
+}
+
+export async function fetchLinearProjectStatuses(): Promise<LinearProjectStatusSummary[]> {
+  const statuses: LinearProjectStatusSummary[] = [];
+  let after: string | null = null;
+
+  for (;;) {
+    const data = await linearGraphqlRequest<{
+      projectStatuses?: {
+        nodes?: Array<{
+          id?: string;
+          name?: string;
+          type?: string;
+          position?: number | null;
+          color?: string | null;
+        }>;
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+      };
+    }>(PROJECT_STATUSES_QUERY, { first: 50, after });
+
+    for (const node of data.projectStatuses?.nodes ?? []) {
+      const status = normalizeProjectStatusNode(node);
+      if (status) statuses.push(status);
+    }
+
+    const pageInfo = data.projectStatuses?.pageInfo;
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) break;
+    after = pageInfo.endCursor;
+  }
+
+  return sortProjectStatuses(statuses);
+}

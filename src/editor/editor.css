@@ -42,9 +42,9 @@
   margin: 0;
 }
 
-.tiptap-editor-content[data-placeholder]:empty::before {
+.tiptap-editor-content[data-placeholder].tiptap-show-placeholder::before {
   content: attr(data-placeholder);
-  color: var(--text-faint);
+  color: var(--text-placeholder);
   pointer-events: none;
   float: left;
   height: 0;
@@ -85,4 +85,9 @@
   margin-top: 8px;
   color: var(--text-subtle);
   font-size: 12px;
+}
+
+.tiptap-hidden-pdf-link,
+.tiptap-hidden-pdf-link-block {
+  display: none !important;
 }

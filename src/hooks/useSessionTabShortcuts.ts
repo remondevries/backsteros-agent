@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { isTauriRuntime } from "../platform/runtime";
 
 type SessionTabShortcutHandlers = {
   onNewTab: () => void;
@@ -21,6 +22,11 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 async function closeAppWindow() {
+  if (!isTauriRuntime()) {
+    window.close();
+    return;
+  }
+
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     await getCurrentWindow().close();

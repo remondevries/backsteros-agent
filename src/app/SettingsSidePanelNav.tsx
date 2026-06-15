@@ -1,29 +1,27 @@
 import { useState, type ReactNode } from "react";
-import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
-  isSettingsTabConnected,
-  tabShowsConnectionIndicator,
-} from "../settings/integrationConnectionStatus";
-import { SettingsConnectionDot } from "../settings/SettingsConnectionDot";
-import { useIntegrationsStatus } from "../settings/useIntegrationsStatus";
+  getVisibleSettingsTabs,
+  type SettingsTabId,
+} from "../settings/settingsTabs";
+import { useAdministratorAccess } from "../settings/useAdministratorAccess";
 import { SidebarChevronIcon } from "./SidebarNavIcons";
 
-type SettingsNavSectionId = "general" | "integration";
+type SettingsNavSectionId = "general" | "integration" | "extension" | "administrator";
 
 const SETTINGS_NAV_SECTION_LABEL: Record<SettingsNavSectionId, string> = {
   general: "General",
   integration: "Integrations",
+  extension: "Extensions",
+  administrator: "Administrator",
 };
 
 function SettingsNavItem({
   label,
   active,
-  showConnectionDot,
   onClick,
 }: {
   label: string;
   active: boolean;
-  showConnectionDot?: boolean;
   onClick: () => void;
 }) {
   const className = [
@@ -42,9 +40,6 @@ function SettingsNavItem({
       onClick={onClick}
     >
       <span className="left-side-panel-item-label">{label}</span>
-      {showConnectionDot ? (
-        <SettingsConnectionDot className="left-side-panel-settings-dot" />
-      ) : null}
     </button>
   );
 }
@@ -80,26 +75,28 @@ export function SettingsSidePanelNav({
   activeTab,
   onTabChange,
   onBack,
-  savedNotesPath,
 }: {
   activeTab: SettingsTabId;
   onTabChange: (tab: SettingsTabId) => void;
   onBack?: () => void;
-  savedNotesPath: string | null;
 }) {
-  const { status: integrationsStatus } = useIntegrationsStatus(true);
+  const { isAdministrator } = useAdministratorAccess();
   const [expandedSections, setExpandedSections] = useState<Record<SettingsNavSectionId, boolean>>({
     general: true,
     integration: true,
+    extension: true,
+    administrator: true,
   });
-  const connectionContext = {
-    integrationsStatus,
-    savedNotesPath,
+  const visibleSettingsTabs = getVisibleSettingsTabs({ isAdministrator });
+  const settingsTabsBySection: Record<SettingsNavSectionId, typeof visibleSettingsTabs> = {
+    general: visibleSettingsTabs.filter((tab) => tab.group === "general"),
+    integration: visibleSettingsTabs.filter((tab) => tab.group === "integration"),
+    extension: visibleSettingsTabs.filter((tab) => tab.group === "extension"),
+    administrator: visibleSettingsTabs.filter((tab) => tab.group === "administrator"),
   };
-  const settingsTabsBySection: Record<SettingsNavSectionId, typeof SETTINGS_TABS> = {
-    general: SETTINGS_TABS.filter((tab) => tab.group === "general"),
-    integration: SETTINGS_TABS.filter((tab) => tab.group === "integration"),
-  };
+  const sectionOrder: SettingsNavSectionId[] = isAdministrator
+    ? ["general", "integration", "extension", "administrator"]
+    : ["general", "integration", "extension"];
 
   return (
     <nav className="left-side-panel left-side-panel-settings" aria-label="Settings">
@@ -113,14 +110,17 @@ export function SettingsSidePanelNav({
                 aria-label="Back to app"
                 onClick={onBack}
               >
-                <SidebarChevronIcon className="left-side-panel-settings-back-icon" expanded={false} />
+                <SidebarChevronIcon
+                  className="left-side-panel-settings-back-icon"
+                  pointing="left"
+                />
               </button>
             ) : null}
             <h2 className="left-side-panel-settings-title">Settings</h2>
           </header>
 
           <div className="left-side-panel-list">
-            {(Object.keys(settingsTabsBySection) as SettingsNavSectionId[]).map((sectionId) => (
+            {sectionOrder.map((sectionId) => (
               <SettingsNavSection
                 key={sectionId}
                 label={SETTINGS_NAV_SECTION_LABEL[sectionId]}
@@ -132,21 +132,14 @@ export function SettingsSidePanelNav({
                   }));
                 }}
               >
-                {settingsTabsBySection[sectionId].map((tab) => {
-                  const showConnectionDot =
-                    tabShowsConnectionIndicator(tab.id) &&
-                    isSettingsTabConnected(tab.id, connectionContext);
-
-                  return (
-                    <SettingsNavItem
-                      key={tab.id}
-                      label={tab.label}
-                      active={activeTab === tab.id}
-                      showConnectionDot={showConnectionDot}
-                      onClick={() => onTabChange(tab.id)}
-                    />
-                  );
-                })}
+                {settingsTabsBySection[sectionId].map((tab) => (
+                  <SettingsNavItem
+                    key={tab.id}
+                    label={tab.label}
+                    active={activeTab === tab.id}
+                    onClick={() => onTabChange(tab.id)}
+                  />
+                ))}
               </SettingsNavSection>
             ))}
           </div>

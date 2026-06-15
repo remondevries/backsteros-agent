@@ -1,4 +1,8 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { getLinearOAuthTokenPath } from "./config.ts";
 import {
   fetchIssuesCompletedToday,
   fetchIssuesDueToday,
@@ -7,15 +11,31 @@ import {
 } from "./morning-review-linear.ts";
 
 const originalFetch = globalThis.fetch;
-const originalApiKey = process.env.LINEAR_API_KEY;
+let dataDir: string;
+let previousDataDir: string | undefined;
+
+function seedLinearOAuthToken() {
+  writeFileSync(
+    getLinearOAuthTokenPath(),
+    `${JSON.stringify({ access_token: "test-oauth-token" })}\n`,
+    { mode: 0o600 },
+  );
+}
+
+beforeEach(() => {
+  previousDataDir = process.env.BACKSTER_DATA_DIR;
+  dataDir = mkdtempSync(join(tmpdir(), "backster-morning-linear-"));
+  process.env.BACKSTER_DATA_DIR = dataDir;
+});
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  if (originalApiKey === undefined) {
-    delete process.env.LINEAR_API_KEY;
+  if (previousDataDir === undefined) {
+    delete process.env.BACKSTER_DATA_DIR;
   } else {
-    process.env.LINEAR_API_KEY = originalApiKey;
+    process.env.BACKSTER_DATA_DIR = previousDataDir;
   }
+  rmSync(dataDir, { recursive: true, force: true });
 });
 
 describe("resolveMorningReviewDueDate", () => {
@@ -38,7 +58,7 @@ describe("morningReviewLinearContext", () => {
 
 describe("fetchIssuesDueToday", () => {
   test("returns parsed open issues due today", async () => {
-    process.env.LINEAR_API_KEY = "test-key";
+    seedLinearOAuthToken();
 
     globalThis.fetch = mock(async (_input, init) => {
       const body = JSON.parse(String(init?.body)) as {
@@ -95,7 +115,7 @@ describe("fetchIssuesDueToday", () => {
   });
 
   test("paginates until all pages are fetched", async () => {
-    process.env.LINEAR_API_KEY = "test-key";
+    seedLinearOAuthToken();
     let callCount = 0;
 
     globalThis.fetch = mock(async (_input, init) => {
@@ -159,7 +179,7 @@ describe("fetchIssuesDueToday", () => {
 
 describe("fetchIssuesCompletedToday", () => {
   test("returns issues completed with due date today", async () => {
-    process.env.LINEAR_API_KEY = "test-key";
+    seedLinearOAuthToken();
 
     globalThis.fetch = mock(async (_input, init) => {
       const body = JSON.parse(String(init?.body)) as {

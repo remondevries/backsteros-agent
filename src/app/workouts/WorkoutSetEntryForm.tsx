@@ -101,7 +101,7 @@ export function WorkoutSetEntryForm({
         </label>
       </div>
       {error ? <p className="workout-set-entry-error">{error}</p> : null}
-      <button type="submit" className="workout-set-entry-submit" disabled={saving}>
+      <button type="submit" className="btn-primary" disabled={saving}>
         {saving ? "Saving…" : "Add set"}
       </button>
     </form>

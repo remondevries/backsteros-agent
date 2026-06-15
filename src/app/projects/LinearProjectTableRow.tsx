@@ -1,6 +1,7 @@
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { LinearProjectIcon } from "../../chat/LinearProjectIcon";
-import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
+import { LinearProjectStatusIcon } from "../../chat/LinearProjectStatusIcon";
+import type { LinearProjectStatusForIcon } from "../../lib/linearProjectStatusIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
 import type { LinearProjectSummary } from "../../lib/api";
 import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
@@ -15,10 +16,12 @@ import { LinearProjectHealthLabel } from "./LinearProjectHealthLabel";
 
 export function LinearProjectTableRow({
   project,
+  projectStatuses,
   selected,
   onSelect,
 }: {
   project: LinearProjectSummary;
+  projectStatuses?: LinearProjectStatusForIcon[];
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -69,7 +72,14 @@ export function LinearProjectTableRow({
         </span>
         <span className="linear-project-table-row__status">
           {statusName ? (
-            <LinearStatusIcon status={statusName} stateType={statusType} title={statusName} />
+            <LinearProjectStatusIcon
+              status={statusName}
+              stateType={statusType}
+              stateId={project.status?.id}
+              statusPosition={project.status?.position}
+              projectStatuses={projectStatuses}
+              title={statusName}
+            />
           ) : null}
           {progressLabel ? (
             <span className="linear-project-table-row__progress">{progressLabel}</span>

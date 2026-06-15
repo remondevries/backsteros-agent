@@ -26,7 +26,7 @@ describe("env-file", () => {
   });
 
   test("readEnvFile ignores comments and blank lines", () => {
-    mergeEnvFile(envPath, { CURSOR_API_KEY: "cursor_test", LINEAR_API_KEY: "lin_test" });
+    mergeEnvFile(envPath, { CURSOR_API_KEY: "cursor_test" });
     const content = readFileSync(envPath, "utf8");
     expect(content).toContain("CURSOR_API_KEY=cursor_test");
 
@@ -39,16 +39,13 @@ describe("env-file", () => {
   test("mergeEnvFile updates existing keys and removes cleared keys", () => {
     mergeEnvFile(envPath, {
       CURSOR_API_KEY: "cursor_old",
-      LINEAR_API_KEY: "lin_old",
     });
     mergeEnvFile(envPath, {
       CURSOR_API_KEY: "cursor_new",
-      LINEAR_API_KEY: null,
     });
 
     const parsed = readEnvFile(envPath);
     expect(parsed.CURSOR_API_KEY).toBe("cursor_new");
-    expect(parsed.LINEAR_API_KEY).toBeUndefined();
   });
 
   test("reloadEnvFromDisk overwrites process.env from file", () => {

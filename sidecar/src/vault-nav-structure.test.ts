@@ -49,6 +49,21 @@ describe("vault-nav-structure", () => {
     ]);
   });
 
+  test("lists Daily notes with the newest date first", () => {
+    const notesPath = makeNotesDir();
+    ensureVaultNavFolders(notesPath);
+    writeFileSync(join(notesPath, "Daily", "2026-05-02.md"), "# May", "utf8");
+    writeFileSync(join(notesPath, "Daily", "2026-06-13.md"), "# June", "utf8");
+    writeFileSync(join(notesPath, "Daily", "2026-06-01.md"), "# June 1", "utf8");
+
+    const entries = listVaultDirectoryEntries(notesPath, "Daily");
+    expect(entries.map((entry) => entry.name)).toEqual([
+      "2026-06-13.md",
+      "2026-06-01.md",
+      "2026-05-02.md",
+    ]);
+  });
+
   test("rejects paths outside navigation folders", () => {
     const notesPath = makeNotesDir();
     ensureVaultNavFolders(notesPath);

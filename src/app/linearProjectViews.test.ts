@@ -26,10 +26,10 @@ describe("linearProjectViews", () => {
     expect(LINEAR_TEAM_VIEWS.map((view) => view.label)).toEqual([
       "Overview",
       "Projects",
-      "Documents",
       "Meetings",
       "Letters",
-      "Activities",
+      "Documents",
+      "Issues",
     ]);
   });
 
@@ -47,12 +47,12 @@ describe("linearProjectViews", () => {
 
   test("recognizes valid team view ids", () => {
     expect(isLinearTeamViewId("projects")).toBe(true);
-    expect(isLinearTeamViewId("issues")).toBe(false);
+    expect(isLinearTeamViewId("issues")).toBe(true);
   });
 
   test("validates view ids for the active selection kind", () => {
     expect(isLinearWorkspaceViewIdForKind("team", "projects")).toBe(true);
-    expect(isLinearWorkspaceViewIdForKind("team", "issues")).toBe(false);
+    expect(isLinearWorkspaceViewIdForKind("team", "issues")).toBe(true);
     expect(isLinearWorkspaceViewIdForKind("project", "issues")).toBe(true);
     expect(isLinearWorkspaceViewIdForKind("project", "projects")).toBe(false);
   });

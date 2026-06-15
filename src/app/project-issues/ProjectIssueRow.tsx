@@ -1,5 +1,6 @@
 import { useMemo, type MouseEvent } from "react";
 import { DotScrollLoader } from "../../chat/DotScrollLoader";
+import type { LinearWorkflowStateForIcon } from "../../lib/linearStatusIcon";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { getPriorityLabel } from "../../chat/linearPriority";
@@ -43,22 +44,30 @@ export function ProjectIssueRow({
   grouped = true,
   dragging = false,
   leadingIcon = "priority",
+  leadingStatusOverride,
+  showMeta = true,
   showPrimaryLabel = true,
   showProjectLabel = false,
+  showIdentifier = true,
   showDueMeta = true,
   showEstimateMeta = true,
   onClick,
   onTerminalIndicatorClick,
   onPointerDragStart,
+  workflowStates,
 }: {
   issue: LinearIssueEntity;
   grouped?: boolean;
   dragging?: boolean;
   leadingIcon?: "priority" | "status";
+  leadingStatusOverride?: "triage";
+  showMeta?: boolean;
   showPrimaryLabel?: boolean;
   showProjectLabel?: boolean;
+  showIdentifier?: boolean;
   showDueMeta?: boolean;
   showEstimateMeta?: boolean;
+  workflowStates?: LinearWorkflowStateForIcon[];
   onClick: () => void;
   onTerminalIndicatorClick?: () => void;
   onPointerDragStart?: (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => void;
@@ -69,11 +78,16 @@ export function ProjectIssueRow({
   const terminalAgentWaiting = useLeafAgentWaiting(terminalLeafId);
   const labels = issue.labels ?? [];
   const primaryLabel = labels[0];
-  const dueLabel = showDueMeta ? formatIssueDueMetaLabel(issue.dueDate) : null;
+  const dueLabel = showMeta && showDueMeta ? formatIssueDueMetaLabel(issue.dueDate) : null;
   const hasEstimate = issue.estimate != null;
   const priorityLabel =
     issue.priorityLabel || getPriorityLabel(issue.priority);
-  const leadingTitle = leadingIcon === "status" ? (issue.status?.trim() || "Unknown") : priorityLabel;
+  const leadingTitle =
+    leadingStatusOverride === "triage"
+      ? "Triage"
+      : leadingIcon === "status"
+        ? (issue.status?.trim() || "Unknown")
+        : priorityLabel;
   const keyboardFocused = useContentListItemKeyboardFocused(issue.id);
 
   const rowClass = [
@@ -125,28 +139,39 @@ export function ProjectIssueRow({
           onClick();
         }}
       >
-        <span className="project-issue-row__leading" title={leadingTitle}>
-          {leadingIcon === "status" ? (
-            <LinearStatusIcon status={issue.status} stateType={issue.stateType} title={leadingTitle} />
-          ) : (
-            <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
-          )}
-        </span>
-        <span className="project-issue-row__id" title={issue.identifier}>
-          {issue.identifier}
-        </span>
+        {showMeta ? (
+          <span className="project-issue-row__leading" title={leadingTitle}>
+            {leadingIcon === "status" ? (
+              <LinearStatusIcon
+                status={leadingStatusOverride === "triage" ? "Triage" : issue.status}
+                stateType={leadingStatusOverride === "triage" ? "triage" : issue.stateType}
+                stateId={leadingStatusOverride === "triage" ? undefined : issue.stateId}
+                statusColor={leadingStatusOverride === "triage" ? undefined : issue.statusColor}
+                workflowStates={workflowStates}
+                title={leadingTitle}
+              />
+            ) : (
+              <LinearPriorityIcon priority={issue.priority} title={priorityLabel} />
+            )}
+          </span>
+        ) : null}
+        {showMeta && showIdentifier && issue.identifier ? (
+          <span className="project-issue-row__id" title={issue.identifier}>
+            {issue.identifier}
+          </span>
+        ) : null}
         <span className="project-issue-row__title" title={issue.title}>
           <span className="project-issue-row__title-text">
             {linearIssueTitleForCardDisplay(issue.title)}
           </span>
-          {terminalSessionActive && terminalAgentWorking ? (
+          {showMeta && terminalSessionActive && terminalAgentWorking ? (
             <DotScrollLoader
               className="project-issue-row__agent-loader project-issue-row__terminal-indicator"
               aria-label="Agent working in terminal"
               data-terminal-indicator="true"
             />
           ) : null}
-          {terminalSessionActive && terminalAgentWaiting ? (
+          {showMeta && terminalSessionActive && terminalAgentWaiting ? (
             <DotScrollLoader
               className="project-issue-row__agent-loader project-issue-row__terminal-indicator"
               status="waiting"
@@ -154,7 +179,7 @@ export function ProjectIssueRow({
               data-terminal-indicator="true"
             />
           ) : null}
-          {terminalSessionActive && !terminalAgentWorking && !terminalAgentWaiting ? (
+          {showMeta && terminalSessionActive && !terminalAgentWorking && !terminalAgentWaiting ? (
             <span
               className="linear-issue-terminal-session-dot project-issue-row__terminal-dot project-issue-row__terminal-indicator"
               aria-hidden="true"
@@ -162,7 +187,7 @@ export function ProjectIssueRow({
             />
           ) : null}
         </span>
-        {showPrimaryLabel && primaryLabel ? (
+        {showMeta && showPrimaryLabel && primaryLabel ? (
           <span className="project-issue-row__pill" title={labelTitle}>
             <span
               className="project-issue-row__pill-dot"
@@ -172,7 +197,7 @@ export function ProjectIssueRow({
             <span className="project-issue-row__pill-label">{primaryLabelDisplay}</span>
           </span>
         ) : null}
-        {showProjectLabel && issue.projectName ? (
+        {showMeta && showProjectLabel && issue.projectName ? (
           <span
             className="project-issue-row__pill project-issue-row__pill--project"
             title={githubLabelHoverTitle(issue.projectName)}
@@ -186,7 +211,7 @@ export function ProjectIssueRow({
             <span className="project-issue-row__pill-label">{dueLabel}</span>
           </span>
         ) : null}
-        {showEstimateMeta && !dueLabel && hasEstimate ? (
+        {showMeta && showEstimateMeta && !dueLabel && hasEstimate ? (
           <span className="project-issue-row__pill project-issue-row__pill--estimate">
             <span className="project-issue-row__pill-icon" aria-hidden="true">
               <LinearIssueEstimateIcon />

@@ -9,7 +9,6 @@ import {
 describe("integrationConnectionStatus", () => {
   const status = {
     cursorApiKey: { configured: true },
-    linearApiKey: { configured: false },
     geminiApiKey: { configured: true },
     googleCalendar: {
       credentialsConfigured: true,
@@ -19,9 +18,15 @@ describe("integrationConnectionStatus", () => {
     },
     linear: {
       credentialsConfigured: false,
+      credentialsFromEnv: false,
       authenticated: false,
       clientId: { configured: false },
       clientSecret: { configured: false },
+    },
+    whoop: {
+      configured: false,
+      authenticated: false,
+      envPath: "/Users/me/.backsteros-agent/totem.env",
     },
   };
 
@@ -41,6 +46,7 @@ describe("integrationConnectionStatus", () => {
           ...status,
           linear: {
             credentialsConfigured: true,
+            credentialsFromEnv: false,
             authenticated: true,
             clientId: { configured: true },
             clientSecret: { configured: true },

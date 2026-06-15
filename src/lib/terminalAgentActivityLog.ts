@@ -4,6 +4,7 @@ import {
   appendTerminalAgentActivityLog,
   type TerminalAgentLogState,
 } from "./linearWatcherActivityLog";
+import { isTauriRuntime } from "../platform/runtime";
 
 export type TerminalAgentLogContext = {
   issueId: string;
@@ -74,7 +75,7 @@ let bridgeReady = false;
  * activity log. Safe to call from multiple mount points.
  */
 export function ensureTerminalAgentActivityLogBridge(): void {
-  if (bridgeReady || typeof window === "undefined") return;
+  if (bridgeReady || typeof window === "undefined" || !isTauriRuntime()) return;
   bridgeReady = true;
 
   subscribeAgentTransitions((ptyId, kind, agent) => {

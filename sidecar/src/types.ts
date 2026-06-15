@@ -14,6 +14,7 @@ export interface LinearIssueEntity {
   assigneeName?: string;
   assigneeAvatarUrl?: string;
   assigneeId?: string;
+  projectId?: string;
   projectName?: string;
   dueDate?: string;
 }

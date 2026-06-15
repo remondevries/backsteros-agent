@@ -1,10 +1,17 @@
 import type { ProjectDocumentEntity } from "../../lib/documentStatusGroups";
+import { isLinearMeetingDocumentIcon } from "../../lib/linearDocumentIcons";
+import { linearLinkedDocumentDisplayTitle } from "../../lib/linearLinkedDocumentTitle";
+import { meetingDocumentDisplayTitle } from "../../lib/meetingDocumentTitle";
 import { contentListItemDataAttributes } from "../../lib/contentListNavigation";
 import {
   useContentListItemKeyboardFocused,
 } from "../../lib/contentListNavigationReact";
 import { formatIssueDueMetaLabel } from "../../lib/linearIssueDisplay";
-import { DocumentNoteIcon } from "./DocumentNoteIcon";
+import { LinearTeamIcon } from "../SidebarNavIcons";
+import {
+  LinearDocumentNoteIcon,
+  type LinearDocumentNoteIconFallback,
+} from "./LinearDocumentNoteIcon";
 
 function CalendarIcon() {
   return (
@@ -26,15 +33,27 @@ function CalendarIcon() {
 export function ProjectDocumentRow({
   document,
   grouped = true,
+  showMeta = true,
+  showOrganization = false,
+  iconFallback = "document",
   onClick,
 }: {
   document: ProjectDocumentEntity;
   grouped?: boolean;
+  showMeta?: boolean;
+  showOrganization?: boolean;
+  iconFallback?: LinearDocumentNoteIconFallback;
   onClick: () => void;
 }) {
-  const dateLabel = formatIssueDueMetaLabel(document.date);
+  const dateLabel = showMeta ? formatIssueDueMetaLabel(document.date) : null;
+  const organizationLabel = document.organization?.trim() || null;
+  const rowTitle = isLinearMeetingDocumentIcon(document.icon)
+    ? meetingDocumentDisplayTitle(document.title)
+    : linearLinkedDocumentDisplayTitle(document.title);
   const showCategory =
-    Boolean(document.category) && document.category.trim().toLowerCase() !== "document";
+    showMeta &&
+    Boolean(document.category) &&
+    document.category.trim().toLowerCase() !== "document";
   const keyboardFocused = useContentListItemKeyboardFocused(document.linearDocumentId);
   const rowClass = [
     "project-document-row",
@@ -53,17 +72,27 @@ export function ProjectDocumentRow({
         onClick={onClick}
       >
         <span className="project-document-row__leading">
-          <DocumentNoteIcon className="project-document-row__icon" />
+          <LinearDocumentNoteIcon
+            icon={document.icon}
+            className="project-document-row__icon"
+            fallback={iconFallback}
+          />
         </span>
-        <span className="project-document-row__title" title={document.title}>
-          {document.title}
+        <span className="project-document-row__title" title={rowTitle}>
+          {rowTitle}
         </span>
+        {showOrganization && organizationLabel ? (
+          <span className="project-document-row__pill" title={organizationLabel}>
+            <LinearTeamIcon className="project-document-row__pill-icon" />
+            <span className="project-document-row__pill-label">{organizationLabel}</span>
+          </span>
+        ) : null}
         {showCategory ? (
           <span className="project-document-row__pill" title={document.category}>
             <span className="project-document-row__pill-label">{document.category}</span>
           </span>
         ) : null}
-        {document.owner ? (
+        {showMeta && document.owner ? (
           <span className="project-document-row__pill" title={document.owner}>
             <span className="project-document-row__pill-label">{document.owner}</span>
           </span>

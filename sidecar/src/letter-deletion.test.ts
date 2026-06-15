@@ -59,12 +59,23 @@ describe("letter deletion", () => {
     );
   });
 
-  test("deleteWorkspaceFile removes only one file outside Letters", () => {
+  test("deleteWorkspaceFile rejects daily notes", () => {
     tempDir = mkdtempSync(join(tmpdir(), "letter-delete-"));
     mkdirSync(join(tempDir, "Daily"), { recursive: true });
     writeFileSync(join(tempDir, "Daily/2025-06-21.md"), "# Daily", "utf8");
 
-    const deleted = deleteWorkspaceFile(tempDir, "Daily/2025-06-21.md");
-    expect(deleted).toEqual(["Daily/2025-06-21.md"]);
+    expect(() => deleteWorkspaceFile(tempDir, "Daily/2025-06-21.md")).toThrow(
+      "Daily notes cannot be deleted",
+    );
+    expect(existsSync(join(tempDir, "Daily/2025-06-21.md"))).toBe(true);
+  });
+
+  test("deleteWorkspaceFile removes only one file outside Letters", () => {
+    tempDir = mkdtempSync(join(tmpdir(), "letter-delete-"));
+    mkdirSync(join(tempDir, "Inbox"), { recursive: true });
+    writeFileSync(join(tempDir, "Inbox/note.md"), "# Note", "utf8");
+
+    const deleted = deleteWorkspaceFile(tempDir, "Inbox/note.md");
+    expect(deleted).toEqual(["Inbox/note.md"]);
   });
 });

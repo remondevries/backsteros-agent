@@ -1,9 +1,11 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useId } from "react";
+import { useCallback, useEffect, useId } from "react";
 import { MARKDOWN_BODY_CLASS } from "../markdown/markdownBodyClass";
 import { BlockCaretExtension } from "./BlockCaretExtension";
+import { HideLeadingAttachmentLinkExtension } from "./HideLeadingAttachmentLinkExtension";
+import { HidePdfLinksExtension } from "./HidePdfLinksExtension";
 import {
   handleTiptapEditorFocusBlur,
   noteTiptapEditorFocusRestore,
@@ -19,6 +21,10 @@ export type TiptapEditorProps = {
   onBlur?: () => void;
   placeholder?: string;
   format?: "plain" | "markdown";
+  /** Hide markdown links whose label ends with `.pdf` (still stored in value). */
+  hidePdfLinks?: boolean;
+  /** Hide the first paragraph when it is a single markdown link (still stored in value). */
+  hideLeadingAttachmentLink?: boolean;
 };
 
 export function TiptapEditor({
@@ -30,12 +36,30 @@ export function TiptapEditor({
   onBlur,
   placeholder,
   format = "plain",
+  hidePdfLinks = false,
+  hideLeadingAttachmentLink = false,
 }: TiptapEditorProps) {
   const isMarkdown = format === "markdown";
   const editorId = useId();
 
+  const syncPlaceholderVisibility = useCallback(
+    (editorInstance: NonNullable<ReturnType<typeof useEditor>>) => {
+      if (!placeholder) return;
+      const dom = editorInstance.view.dom as HTMLElement;
+      const showPlaceholder = editorInstance.isEmpty && !editorInstance.isFocused;
+      dom.classList.toggle("tiptap-show-placeholder", showPlaceholder);
+    },
+    [placeholder],
+  );
+
   const editor = useEditor({
-    extensions: [StarterKit, BlockCaretExtension, ...(isMarkdown ? [Markdown] : [])],
+    extensions: [
+      StarterKit,
+      BlockCaretExtension,
+      ...(isMarkdown ? [Markdown] : []),
+      ...(hidePdfLinks ? [HidePdfLinksExtension] : []),
+      ...(hideLeadingAttachmentLink ? [HideLeadingAttachmentLinkExtension] : []),
+    ],
     content: value,
     ...(isMarkdown ? { contentType: "markdown" as const } : {}),
     editable: !disabled,
@@ -109,12 +133,33 @@ export function TiptapEditor({
         editor.commands.setContent(value, { emitUpdate: false });
       }
     }
-  }, [editor, isMarkdown, value]);
+    syncPlaceholderVisibility(editor);
+  }, [editor, isMarkdown, syncPlaceholderVisibility, value]);
 
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(!disabled);
   }, [editor, disabled]);
 
+  useEffect(() => {
+    if (!editor || !placeholder) return undefined;
+
+    const sync = () => {
+      syncPlaceholderVisibility(editor);
+    };
+
+    sync();
+    editor.on("update", sync);
+    editor.on("focus", sync);
+    editor.on("blur", sync);
+
+    return () => {
+      editor.off("update", sync);
+      editor.off("focus", sync);
+      editor.off("blur", sync);
+      editor.view.dom.classList.remove("tiptap-show-placeholder");
+    };
+  }, [editor, placeholder, syncPlaceholderVisibility]);
+
   return <EditorContent editor={editor} className="tiptap-editor-root" />;
-}
+};

@@ -1,5 +1,7 @@
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import type { SettingsTabId } from "../settings/settingsTabs";
+import type { LinearSidebarTeamConfig } from "../app/sidebarNavConfig";
+import { useLeaderKeyRegistration } from "./leaderSequenceGate";
 import { AppNavigationShortcuts } from "./AppNavigationShortcuts";
 import { ContentListNavigationShortcuts } from "./ContentListNavigationShortcuts";
 import { ContentPanelBackShortcuts } from "./ContentPanelBackShortcuts";
@@ -18,6 +20,7 @@ import { useCommandPaletteShortcut } from "./useCommandPaletteShortcut";
 export function AppShellShortcuts({
   settingsOpen,
   commandPaletteOpen,
+  linearSidebarTeamConfig,
   activeVaultNavItem,
   onVaultNavItemChange,
   onOpenSettings,
@@ -27,9 +30,11 @@ export function AppShellShortcuts({
   onToggleContentPanelSidebar,
   onOpenRightSidePanel,
   rightSidePanelOpen,
+  rightPanelChatBlocked = false,
 }: {
   settingsOpen: boolean;
   commandPaletteOpen: boolean;
+  linearSidebarTeamConfig?: LinearSidebarTeamConfig;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
   onOpenSettings: () => void;
@@ -39,10 +44,13 @@ export function AppShellShortcuts({
   onToggleContentPanelSidebar: () => void;
   onOpenRightSidePanel: () => void;
   rightSidePanelOpen: boolean;
+  rightPanelChatBlocked?: boolean;
 }) {
   const globalShortcutsEnabled = !settingsOpen && !commandPaletteOpen;
   const panelShortcutsEnabled = !settingsOpen;
+  const rightPanelShortcutsEnabled = panelShortcutsEnabled && !rightPanelChatBlocked;
 
+  useLeaderKeyRegistration(globalShortcutsEnabled);
   useCommandPaletteShortcut({ enabled: !settingsOpen });
 
   return (
@@ -59,12 +67,13 @@ export function AppShellShortcuts({
       <LinearIssuePropertyShortcuts enabled={globalShortcutsEnabled} />
       <VaultDocumentTitleFocusShortcuts enabled={globalShortcutsEnabled} />
       <RightPanelChatFocusShortcuts
-        enabled={globalShortcutsEnabled}
+        enabled={globalShortcutsEnabled && !rightPanelChatBlocked}
         rightSidePanelOpen={rightSidePanelOpen}
         onOpenRightSidePanel={onOpenRightSidePanel}
       />
       <PanelToggleShortcuts
         enabled={panelShortcutsEnabled}
+        rightPanelToggleEnabled={rightPanelShortcutsEnabled}
         onToggleLeftSidePanel={onToggleLeftSidePanel}
         onToggleRightSidePanel={onToggleRightSidePanel}
         onToggleContentPanelSidebar={onToggleContentPanelSidebar}
@@ -72,12 +81,14 @@ export function AppShellShortcuts({
       <SidebarNavCycleShortcuts
         enabled={globalShortcutsEnabled}
         activeVaultNavItem={activeVaultNavItem}
+        linearSidebarTeamConfig={linearSidebarTeamConfig}
         onVaultNavItemChange={onVaultNavItemChange}
       />
       <SidebarNoteCreationShortcuts enabled={globalShortcutsEnabled} />
       <SidebarNoteDeletionShortcuts enabled={globalShortcutsEnabled} />
       <AppNavigationShortcuts
         enabled={globalShortcutsEnabled}
+        linearSidebarTeamConfig={linearSidebarTeamConfig}
         onVaultNavItemChange={onVaultNavItemChange}
         onOpenSettings={onOpenSettings}
         onSettingsTabChange={onSettingsTabChange}

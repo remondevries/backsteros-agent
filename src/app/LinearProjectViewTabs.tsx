@@ -8,6 +8,8 @@ import {
   type LinearProjectCollectionMode,
   type LinearProjectCollectionToggleOption,
 } from "./LinearProjectListBoardToggle";
+import { useContentPanelChrome } from "./contentPanelChromeContext";
+import { GroupHeaderAddButton } from "./workspace-list/GroupHeaderAddButton";
 
 export function LinearProjectViewTabs({
   selectionKind,
@@ -31,7 +33,9 @@ export function LinearProjectViewTabs({
   issuesSettingsActive?: boolean;
 }) {
   const views = linearWorkspaceViewsForKind(selectionKind);
-  const showRightControls = showCollectionModeToggle;
+  const { projectDocumentsCreateAction: workspaceTabCreateAction } = useContentPanelChrome();
+  const showTabCreateButton = workspaceTabCreateAction !== null;
+  const showRightControls = showCollectionModeToggle || showTabCreateButton;
 
   return (
     <div className="linear-project-view-tabs">
@@ -57,6 +61,13 @@ export function LinearProjectViewTabs({
       </div>
       {showRightControls ? (
         <div className="linear-project-view-tabs-controls">
+          {showTabCreateButton && workspaceTabCreateAction ? (
+            <GroupHeaderAddButton
+              label={workspaceTabCreateAction.label}
+              disabled={workspaceTabCreateAction.disabled}
+              onClick={workspaceTabCreateAction.onCreate}
+            />
+          ) : null}
           {showCollectionModeToggle ? (
             <LinearProjectListBoardToggle
               mode={collectionMode}

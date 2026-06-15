@@ -1,6 +1,8 @@
 export type LinearDocumentListPatch = {
   title?: string;
   updatedAt?: string;
+  linkedIssueId?: string;
+  linkedIssueIdentifier?: string;
 };
 
 export type LinearDocumentListChange =

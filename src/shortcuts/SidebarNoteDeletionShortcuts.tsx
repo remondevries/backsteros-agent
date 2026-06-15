@@ -4,6 +4,7 @@ import {
   isSidebarNoteDeletionShortcutBlocked,
   triggerSidebarNoteDeletionRequest,
 } from "../lib/sidebarNoteDeletion";
+import { isLeaderSequencePending } from "./leaderSequenceGate";
 
 export function SidebarNoteDeletionShortcuts({ enabled }: { enabled: boolean }) {
   useEffect(() => {
@@ -13,6 +14,7 @@ export function SidebarNoteDeletionShortcuts({ enabled }: { enabled: boolean }) 
       if (event.key.toLowerCase() !== "d") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (isSidebarNoteDeletionConfirmOpen()) return;
+      if (isLeaderSequencePending()) return;
       if (isSidebarNoteDeletionShortcutBlocked(event.target)) return;
       if (!triggerSidebarNoteDeletionRequest()) return;
 

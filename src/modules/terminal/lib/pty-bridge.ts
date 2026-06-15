@@ -1,5 +1,3 @@
-import { invoke, Channel } from "@tauri-apps/api/core";
-
 const textEncoder = new TextEncoder();
 
 export type PtyHandlers = {
@@ -20,6 +18,8 @@ export async function openPty(
   handlers: PtyHandlers,
   cwd?: string,
 ): Promise<PtySession> {
+  const { invoke, Channel } = await import("@tauri-apps/api/core");
+
   const onData = new Channel<ArrayBuffer>();
   const onExit = new Channel<number>();
 

@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
+import type { LinearSidebarTeamConfig } from "../app/sidebarNavConfig";
 import { APP_HOTKEY_OPTIONS } from "./hotkeyOptions";
 import {
   getAdjacentSidebarNavItem,
@@ -32,20 +33,26 @@ function SidebarNavCycleShortcut({
 export function SidebarNavCycleShortcuts({
   enabled,
   activeVaultNavItem,
+  linearSidebarTeamConfig,
   onVaultNavItemChange,
 }: {
   enabled: boolean;
   activeVaultNavItem: SidebarNavItemId | null;
+  linearSidebarTeamConfig?: LinearSidebarTeamConfig;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
 }) {
   const cycle = useCallback(
     (direction: SidebarNavCycleDirection) => {
-      const nextItem = getAdjacentSidebarNavItem(activeVaultNavItem, direction);
+      const nextItem = getAdjacentSidebarNavItem(
+        activeVaultNavItem,
+        direction,
+        linearSidebarTeamConfig,
+      );
       if (nextItem !== activeVaultNavItem) {
         onVaultNavItemChange(nextItem);
       }
     },
-    [activeVaultNavItem, onVaultNavItemChange],
+    [activeVaultNavItem, linearSidebarTeamConfig, onVaultNavItemChange],
   );
 
   return (

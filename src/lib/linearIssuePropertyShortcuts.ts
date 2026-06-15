@@ -1,4 +1,4 @@
-export type LinearIssuePropertyShortcutKey = "s" | "p" | "a" | "e" | "l";
+export type LinearIssuePropertyShortcutKey = "s" | "p" | "a" | "e" | "l" | "o";
 
 export type LinearIssuePropertyShortcutActions = {
   openStatus?: () => boolean;
@@ -6,6 +6,8 @@ export type LinearIssuePropertyShortcutActions = {
   openAssignee?: () => boolean;
   openEstimate?: () => boolean;
   openLabels?: () => boolean;
+  openOrganization?: () => boolean;
+  openProject?: () => boolean;
 };
 
 let registration: LinearIssuePropertyShortcutActions | null = null;
@@ -21,8 +23,16 @@ export function registerLinearIssuePropertyShortcuts(
   };
 }
 
-export function triggerLinearIssuePropertyShortcut(key: LinearIssuePropertyShortcutKey): boolean {
+export function triggerLinearIssuePropertyShortcut(
+  key: LinearIssuePropertyShortcutKey,
+  options?: { shiftKey?: boolean },
+): boolean {
   if (!registration) return false;
+
+  if (options?.shiftKey && key === "p") {
+    if (!registration.openProject) return false;
+    return registration.openProject();
+  }
 
   const action =
     key === "s"
@@ -33,7 +43,9 @@ export function triggerLinearIssuePropertyShortcut(key: LinearIssuePropertyShort
           ? registration.openAssignee
           : key === "e"
             ? registration.openEstimate
-            : registration.openLabels;
+            : key === "l"
+              ? registration.openLabels
+              : registration.openOrganization;
 
   if (!action) return false;
   return action();

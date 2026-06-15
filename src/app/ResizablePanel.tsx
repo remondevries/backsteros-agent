@@ -1,22 +1,35 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useResizablePanel } from "./useResizablePanel";
 
 export function ResizablePanel({
+  id,
   side,
   storageKey,
   defaultWidth,
   minWidth,
   maxWidth,
+  containerRef,
+  defaultWidthRatio,
+  maxWidthRatio,
+  resetWidthOnExpand = false,
+  fitContent = false,
   className,
   ariaLabel,
   collapsed = false,
   children,
 }: {
+  id?: string;
   side: "left" | "right";
   storageKey: string;
   defaultWidth: number;
   minWidth: number;
   maxWidth: number;
+  containerRef?: RefObject<HTMLElement | null>;
+  defaultWidthRatio?: number;
+  maxWidthRatio?: number;
+  resetWidthOnExpand?: boolean;
+  /** Shrink the panel to its content width (respects min/max). Hides the resize handle. */
+  fitContent?: boolean;
   className?: string;
   ariaLabel?: string;
   collapsed?: boolean;
@@ -28,6 +41,11 @@ export function ResizablePanel({
     defaultWidth,
     minWidth,
     maxWidth,
+    containerRef,
+    defaultWidthRatio,
+    maxWidthRatio,
+    resetWidthOnExpand,
+    expanded: !collapsed,
   });
 
   const panelClass = [
@@ -40,16 +58,23 @@ export function ResizablePanel({
     .filter(Boolean)
     .join(" ");
 
+  const panelStyle = collapsed
+    ? { width: 0 }
+    : fitContent
+      ? { width: "fit-content" as const, minWidth, maxWidth }
+      : { width };
+
   return (
     <aside
+      id={id}
       className={panelClass}
-      style={{ width: collapsed ? 0 : width }}
+      style={panelStyle}
       aria-label={ariaLabel}
       aria-hidden={collapsed || undefined}
       hidden={collapsed || undefined}
     >
       <div className="app-resizable-panel-content">{children}</div>
-      {!collapsed ? (
+      {!collapsed && !fitContent ? (
         <div
           className="app-resizable-panel-handle"
           role="separator"

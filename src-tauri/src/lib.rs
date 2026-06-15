@@ -62,7 +62,15 @@ pub fn run() {
                 )?;
             }
 
-            if let Err(error) = sidecar::start_sidecar(app.handle()) {
+            if let Some(remote_url) = sidecar::remote_server_url() {
+                if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+                    if let Ok(parsed) = tauri::Url::parse(&remote_url) {
+                        let _ = window.navigate(parsed);
+                    } else {
+                        eprintln!("Invalid BACKSTER_SERVER_URL: {remote_url}");
+                    }
+                }
+            } else if let Err(error) = sidecar::start_sidecar(app.handle()) {
                 eprintln!("Failed to start agent server: {error}");
             }
             hotkeys::register_hotkeys(app.handle())?;

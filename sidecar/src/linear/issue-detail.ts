@@ -17,7 +17,22 @@ export type LinearIssueWorkflowState = {
   id: string;
   name: string;
   type: string;
+  color?: string;
+  position?: number;
 };
+
+function sortWorkflowStates(states: LinearIssueWorkflowState[]): LinearIssueWorkflowState[] {
+  return [...states].sort((left, right) => {
+    const leftPosition = Number.isFinite(left.position) ? Number(left.position) : Number.NaN;
+    const rightPosition = Number.isFinite(right.position) ? Number(right.position) : Number.NaN;
+    if (Number.isFinite(leftPosition) && Number.isFinite(rightPosition) && leftPosition !== rightPosition) {
+      return leftPosition - rightPosition;
+    }
+    if (Number.isFinite(leftPosition) && !Number.isFinite(rightPosition)) return -1;
+    if (!Number.isFinite(leftPosition) && Number.isFinite(rightPosition)) return 1;
+    return left.name.localeCompare(right.name);
+  });
+}
 
 export type LinearIssueDetail = {
   id: string;
@@ -38,6 +53,8 @@ export type LinearIssueDetail = {
   dueDate: string | null;
   estimate: number | null;
   branchName: string | null;
+  teamId: string | null;
+  teamName: string | null;
   projectId: string | null;
   projectName: string | null;
   labels: LinearIssueDetailLabel[];
@@ -62,6 +79,8 @@ export type LinearIssueDetailUpdateInput = {
   title?: string;
   assigneeId?: string | null;
   dueDate?: string | null;
+  teamId?: string;
+  projectId?: string | null;
 };
 
 type GraphqlIssueDetailNode = {
@@ -75,13 +94,27 @@ type GraphqlIssueDetailNode = {
   branchName?: string | null;
   priority?: number | null;
   priorityLabel?: string | null;
-  state?: { id?: string | null; name?: string | null; type?: string | null; color?: string | null } | null;
+  state?: {
+    id?: string | null;
+    name?: string | null;
+    type?: string | null;
+    color?: string | null;
+    position?: number | null;
+  } | null;
   assignee?: { id?: string | null; name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
   project?: { id?: string | null; name?: string | null } | null;
   labels?: { nodes?: Array<{ id?: string | null; name?: string | null; color?: string | null } | null> | null } | null;
   team?: {
+    id?: string | null;
+    name?: string | null;
     states?: {
-      nodes?: Array<{ id?: string | null; name?: string | null; type?: string | null } | null> | null;
+      nodes?: Array<{
+        id?: string | null;
+        name?: string | null;
+        type?: string | null;
+        color?: string | null;
+        position?: number | null;
+      } | null> | null;
     } | null;
     labels?: {
       nodes?: Array<{ id?: string | null; name?: string | null; color?: string | null } | null> | null;
@@ -117,11 +150,13 @@ const ISSUE_DETAIL_QUERY = `
       branchName
       priority
       priorityLabel
-      state { id name type color }
+      state { id name type color position }
       assignee { id name displayName avatarUrl }
       project { id name }
       labels(first: 20) { nodes { id name color } }
       team {
+        id
+        name
         issueEstimationType
         issueEstimationAllowZero
         issueEstimationExtended
@@ -129,7 +164,7 @@ const ISSUE_DETAIL_QUERY = `
           nodes { id name displayName avatarUrl }
         }
         states {
-          nodes { id name type }
+          nodes { id name type color position }
         }
         labels(first: 100) {
           nodes { id name color }
@@ -206,15 +241,19 @@ function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined):
   const labels = mapIssueLabels(issue.labels?.nodes);
   const availableLabels = mapIssueLabels(issue.team?.labels?.nodes);
 
-  const workflowStates = (issue.team?.states?.nodes ?? [])
-    .map((entry) => {
-      const id = (entry?.id ?? "").trim();
-      const name = (entry?.name ?? "").trim();
-      const type = (entry?.type ?? "").trim();
-      if (!id || !name || !type) return null;
-      return { id, name, type } satisfies LinearIssueWorkflowState;
-    })
-    .filter((entry): entry is LinearIssueWorkflowState => Boolean(entry));
+  const workflowStates = sortWorkflowStates(
+    (issue.team?.states?.nodes ?? [])
+      .map((entry) => {
+        const id = (entry?.id ?? "").trim();
+        const name = (entry?.name ?? "").trim();
+        const type = (entry?.type ?? "").trim();
+        if (!id || !name || !type) return null;
+        const color = (entry?.color ?? "").trim() || undefined;
+        const position = Number.isFinite(entry?.position) ? Number(entry?.position) : undefined;
+        return { id, name, type, color, position } satisfies LinearIssueWorkflowState;
+      })
+      .filter((entry): entry is LinearIssueWorkflowState => Boolean(entry)),
+  );
 
   const teamMembers = mapTeamMembers(issue.team?.members?.nodes);
 
@@ -246,6 +285,8 @@ function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined):
     dueDate: issue.dueDate ?? null,
     estimate: issue.estimate ?? null,
     branchName: (issue.branchName ?? "").trim() || null,
+    teamId: (issue.team?.id ?? "").trim() || null,
+    teamName: (issue.team?.name ?? "").trim() || null,
     projectId: (issue.project?.id ?? "").trim() || null,
     projectName: (issue.project?.name ?? "").trim() || null,
     labels,
@@ -254,6 +295,153 @@ function mapLinearIssueDetail(issue: GraphqlIssueDetailNode | null | undefined):
     teamMembers,
     teamEstimation,
   };
+}
+
+export type LinearIssueSubIssue = {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+};
+
+export type LinearIssueLinkedCustomer = {
+  id: string;
+  name: string;
+};
+
+type GraphqlIssueSubIssueNode = {
+  id?: string | null;
+  identifier?: string | null;
+  title?: string | null;
+  description?: string | null;
+};
+
+type GraphqlIssueCustomerNeedNode = {
+  customer?: {
+    id?: string | null;
+    name?: string | null;
+  } | null;
+};
+
+type GraphqlIssueSubIssuesResponse = {
+  issue?: {
+    children?: {
+      nodes?: Array<GraphqlIssueSubIssueNode | null> | null;
+    } | null;
+  } | null;
+};
+
+type GraphqlIssueLinkedCustomersResponse = {
+  issue?: {
+    needs?: {
+      nodes?: Array<GraphqlIssueCustomerNeedNode | null> | null;
+    } | null;
+  } | null;
+};
+
+const ISSUE_SUB_ISSUES_QUERY = `
+  query BacksterIssueSubIssues($issueId: String!) {
+    issue(id: $issueId) {
+      children {
+        nodes {
+          id
+          identifier
+          title
+          description
+        }
+      }
+    }
+  }
+`;
+
+const ISSUE_LINKED_CUSTOMERS_QUERY = `
+  query BacksterIssueLinkedCustomers($issueId: String!) {
+    issue(id: $issueId) {
+      needs(first: 20) {
+        nodes {
+          customer {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+function mapLinearIssueSubIssue(
+  node: GraphqlIssueSubIssueNode | null | undefined,
+): LinearIssueSubIssue | null {
+  const id = (node?.id ?? "").trim();
+  const identifier = (node?.identifier ?? "").trim();
+  const title = (node?.title ?? "").trim();
+  if (!id || !identifier || !title) return null;
+  return {
+    id,
+    identifier,
+    title,
+    description: typeof node?.description === "string" ? node.description : null,
+  };
+}
+
+function mapLinearIssueLinkedCustomers(
+  nodes: Array<GraphqlIssueCustomerNeedNode | null> | null | undefined,
+): LinearIssueLinkedCustomer[] {
+  const byId = new Map<string, LinearIssueLinkedCustomer>();
+  for (const node of nodes ?? []) {
+    const id = (node?.customer?.id ?? "").trim();
+    const name = (node?.customer?.name ?? "").trim();
+    if (!id || !name) continue;
+    byId.set(id, { id, name });
+  }
+  return [...byId.values()].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+  );
+}
+
+export type LinearIssueContactContext = {
+  subIssues: LinearIssueSubIssue[];
+  linkedCustomers: LinearIssueLinkedCustomer[];
+};
+
+export async function fetchLinearIssueLinkedCustomers(issueId: string): Promise<LinearIssueLinkedCustomer[]> {
+  const id = issueId.trim();
+  if (!id) return [];
+
+  try {
+    const response = await linearGraphqlRequest<GraphqlIssueLinkedCustomersResponse>(
+      ISSUE_LINKED_CUSTOMERS_QUERY,
+      { issueId: id },
+    );
+    return mapLinearIssueLinkedCustomers(response.issue?.needs?.nodes);
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchLinearIssueContactContext(issueId: string): Promise<LinearIssueContactContext> {
+  const id = issueId.trim();
+  if (!id) return { subIssues: [], linkedCustomers: [] };
+
+  const response = await linearGraphqlRequest<GraphqlIssueSubIssuesResponse>(ISSUE_SUB_ISSUES_QUERY, {
+    issueId: id,
+  });
+
+  const subIssues = (response.issue?.children?.nodes ?? [])
+    .map((node) => mapLinearIssueSubIssue(node))
+    .filter((entry): entry is LinearIssueSubIssue => Boolean(entry))
+    .sort((left, right) =>
+      left.title.localeCompare(right.title, undefined, { sensitivity: "base" }),
+    );
+
+  const linkedCustomers = await fetchLinearIssueLinkedCustomers(id);
+
+  return { subIssues, linkedCustomers };
+}
+
+export async function fetchLinearIssueSubIssues(issueId: string): Promise<LinearIssueSubIssue[]> {
+  const context = await fetchLinearIssueContactContext(issueId);
+  return context.subIssues;
 }
 
 export async function fetchLinearIssueDetail(issueId: string): Promise<LinearIssueDetail | null> {
@@ -282,11 +470,13 @@ const ISSUE_UPDATE_MUTATION = `
         branchName
         priority
         priorityLabel
-        state { id name type color }
+        state { id name type color position }
         assignee { id name displayName avatarUrl }
         project { id name }
         labels(first: 20) { nodes { id name color } }
         team {
+          id
+          name
           issueEstimationType
           issueEstimationAllowZero
           issueEstimationExtended
@@ -294,7 +484,7 @@ const ISSUE_UPDATE_MUTATION = `
             nodes { id name displayName avatarUrl }
           }
           states {
-            nodes { id name type }
+            nodes { id name type color position }
           }
           labels(first: 100) {
             nodes { id name color }
@@ -355,6 +545,18 @@ export async function updateLinearIssueDetail(
     } else if (typeof input.dueDate === "string") {
       const dueDate = input.dueDate.trim().slice(0, 10);
       if (dueDate) payload.dueDate = dueDate;
+    }
+  }
+  if (typeof input.teamId === "string") {
+    const teamId = input.teamId.trim();
+    if (teamId) payload.teamId = teamId;
+  }
+  if ("projectId" in input) {
+    if (input.projectId === null) {
+      payload.projectId = null;
+    } else if (typeof input.projectId === "string") {
+      const projectId = input.projectId.trim();
+      payload.projectId = projectId || null;
     }
   }
   if (!Object.keys(payload).length) return null;

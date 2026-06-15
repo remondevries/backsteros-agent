@@ -231,12 +231,14 @@ function ProjectWatchersIssueCard({
   onOpenTerminal,
   onPointerDragStart,
   dragging,
+  workflowStates,
 }: {
   issue: LinearIssueEntity;
   onOpen: (issue: LinearIssueEntity) => void;
   onOpenTerminal: (issue: LinearIssueEntity) => void;
   onPointerDragStart: (issue: LinearIssueEntity, event: MouseEvent<HTMLButtonElement>) => void;
   dragging: boolean;
+  workflowStates?: Array<{ id: string; name: string; type: string; color?: string; position?: number }>;
 }) {
   const terminalLeafId = useMemo(() => resolveTerminalLeafId(issue.id), [issue.id]);
   const terminalSessionActive = useLeafSessionActive(terminalLeafId);
@@ -332,6 +334,9 @@ function ProjectWatchersIssueCard({
               <LinearStatusIcon
                 status={issue.status}
                 stateType={issue.stateType}
+                stateId={issue.stateId}
+                statusColor={issue.statusColor}
+                workflowStates={workflowStates}
                 title={issue.status?.trim() || "Unknown"}
               />
             ) : null}
@@ -429,6 +434,7 @@ export function ProjectWatchersKanbanPanel({
         title: issue.title,
         status: issue.status,
         stateType: issue.stateType,
+        projectName: issue.projectName?.trim() || undefined,
       });
     },
     [setActiveLinearIssue],
@@ -746,6 +752,7 @@ export function ProjectWatchersKanbanPanel({
                 onOpenTerminal={() => {}}
                 onPointerDragStart={() => {}}
                 dragging={false}
+                workflowStates={workflowStates}
               />
             </ul>,
             document.body,
@@ -792,6 +799,9 @@ export function ProjectWatchersKanbanPanel({
                 <LinearStatusIcon
                   status={group.displayStatus}
                   stateType={group.stateType}
+                  stateId={group.stateId}
+                  statusColor={group.statusColor}
+                  workflowStates={workflowStates}
                   title={group.displayStatus}
                 />
                 <span>{group.displayStatus}</span>
@@ -820,6 +830,7 @@ export function ProjectWatchersKanbanPanel({
                         }}
                         onPointerDragStart={handlePointerDragStart}
                         dragging={draggingIssueId === issue.id}
+                        workflowStates={workflowStates}
                       />
                     )}
                   />
@@ -840,6 +851,7 @@ export function ProjectWatchersKanbanPanel({
                       }}
                       onPointerDragStart={handlePointerDragStart}
                       dragging={draggingIssueId === issue.id}
+                      workflowStates={workflowStates}
                     />
                   </Fragment>
                   ))

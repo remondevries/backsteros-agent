@@ -16,6 +16,7 @@ describe("sidebarNoteDeletion", () => {
     const unregister = registerSidebarNoteDeletion({
       openDeleteConfirm: () => {
         called += 1;
+        return true;
       },
     });
 

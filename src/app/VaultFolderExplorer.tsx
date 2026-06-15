@@ -3,10 +3,11 @@ import type { LinearIssueEntity } from "../chat/types";
 import { createVaultDocument } from "../lib/api";
 import { useLinearIssuesByDueDates } from "../hooks/useLinearIssuesByDueDates";
 import {
-  parseEntryDate,
-  resolveEntryDueDateKey,
-  resolveIsoWeekLabel,
-} from "../lib/vaultDates";
+  compareDateKeysNewestFirst,
+  groupVaultDailyEntriesByMonth,
+  resolveVaultDailyDueDateKey,
+} from "../lib/dailyDocumentMonthGroups";
+import { resolveEntryDueDateKey } from "../lib/vaultDates";
 import { vaultNavItemLabel, type VaultNavItemId } from "../lib/vaultNavFolders";
 import { formatVaultNoteDisplayName } from "../lib/vaultNoteDisplayName";
 import { vaultFolderTitle } from "../lib/vaultFolderContext";
@@ -24,7 +25,7 @@ import { formatWorkoutDayLabel } from "../lib/workouts/workoutsBreadcrumb";
 import { workoutDateKeyFromPath } from "../lib/workouts/workoutDays";
 import {
   buildVaultFolderNavItems,
-  DAILY_WEEK_GROUP_HEADER_PREFIX,
+  DAILY_MONTH_GROUP_HEADER_PREFIX,
   resolveVaultFolderSelectedListId,
   WORKOUTS_DASHBOARD_LIST_ID,
 } from "../lib/buildVaultFolderNavItems";
@@ -89,7 +90,7 @@ export function VaultFolderExplorer({
   const [relativePath, setRelativePath] = useState<string>(rootPath);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  const [collapsedWeekGroups, setCollapsedWeekGroups] = useState<Set<string>>(() => new Set());
+  const [collapsedMonthGroups, setCollapsedMonthGroups] = useState<Set<string>>(() => new Set());
 
   const flattenFolders =
     activeNavItem === "meetings" ||
@@ -226,6 +227,23 @@ export function VaultFolderExplorer({
           return rightDate.localeCompare(leftDate);
         });
     }
+    if (activeNavItem === "daily") {
+      const directories = entries.filter((entry) => entry.kind === "directory");
+      const files = entries
+        .filter((entry) => entry.kind === "file")
+        .slice()
+        .sort((left, right) => {
+          const leftDate = resolveVaultDailyDueDateKey(left) ?? "";
+          const rightDate = resolveVaultDailyDueDateKey(right) ?? "";
+          if (leftDate && rightDate) {
+            return compareDateKeysNewestFirst(leftDate, rightDate);
+          }
+          if (leftDate) return -1;
+          if (rightDate) return 1;
+          return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+        });
+      return [...directories, ...files];
+    }
     if (entries.length <= 1) return entries;
     const directories = entries.filter((entry) => entry.kind === "directory");
     const filesNewestFirst = entries
@@ -247,51 +265,28 @@ export function VaultFolderExplorer({
     });
   }, [debouncedSearchQuery, orderedEntries]);
 
-  const showDailyWeekGroups = activeNavItem === "daily";
+  const showDailyMonthGroups = activeNavItem === "daily";
   const dailyDueDates = useMemo(() => {
-    if (!showDailyWeekGroups) return [] as string[];
+    if (!showDailyMonthGroups) return [] as string[];
     const dueDates = new Set<string>();
     for (const entry of orderedEntries) {
       if (entry.kind !== "file") continue;
-      const dueDate = resolveEntryDueDateKey(entry.date);
+      const dueDate =
+        resolveVaultDailyDueDateKey(entry) ?? resolveEntryDueDateKey(entry.date);
       if (dueDate) dueDates.add(dueDate);
     }
     return [...dueDates].sort((left, right) => right.localeCompare(left));
-  }, [orderedEntries, showDailyWeekGroups]);
+  }, [orderedEntries, showDailyMonthGroups]);
 
   const dailyIssuesByDueDate = useLinearIssuesByDueDates(
     dailyDueDates,
-    enabled && showDailyWeekGroups,
+    enabled && showDailyMonthGroups,
   ).issuesByDueDate;
 
   const groupedDailyEntries = useMemo(() => {
-    if (!showDailyWeekGroups) return [];
-
-    const groups: Array<{
-      key: string;
-      label: string;
-      entries: (typeof filteredEntries)[number][];
-    }> = [];
-    const byKey = new Map<string, (typeof groups)[number]>();
-
-    for (const entry of filteredEntries) {
-      if (entry.kind !== "file") continue;
-      const parsedDate = parseEntryDate(entry.date);
-      const label = parsedDate ? resolveIsoWeekLabel(parsedDate) : "Unknown week";
-      const key = parsedDate
-        ? `${parsedDate.getUTCFullYear()}-${label}`
-        : `unknown-week-${label}`;
-      let group = byKey.get(key);
-      if (!group) {
-        group = { key, label, entries: [] };
-        byKey.set(key, group);
-        groups.push(group);
-      }
-      group.entries.push(entry);
-    }
-
-    return groups;
-  }, [filteredEntries, showDailyWeekGroups]);
+    if (!showDailyMonthGroups) return [];
+    return groupVaultDailyEntriesByMonth(filteredEntries);
+  }, [filteredEntries, showDailyMonthGroups]);
 
   const nonFileEntries = useMemo(
     () => filteredEntries.filter((entry) => entry.kind !== "file"),
@@ -312,13 +307,14 @@ export function VaultFolderExplorer({
         title: issue.title,
         status: issue.status,
         stateType: issue.stateType,
+        projectName: issue.projectName?.trim() || undefined,
       });
     },
     [setActiveLinearIssue],
   );
 
-  const toggleWeekGroup = useCallback((groupKey: string) => {
-    setCollapsedWeekGroups((current) => {
+  const toggleMonthGroup = useCallback((groupKey: string) => {
+    setCollapsedMonthGroups((current) => {
       const next = new Set(current);
       if (next.has(groupKey)) {
         next.delete(groupKey);
@@ -335,10 +331,10 @@ export function VaultFolderExplorer({
     () =>
       buildVaultFolderNavItems({
         activeNavItem,
-        showDailyWeekGroups,
+        showDailyMonthGroups,
         nonFileEntries,
         groupedDailyEntries,
-        collapsedWeekGroups,
+        collapsedMonthGroups,
         filteredEntries,
         dailyIssuesByDueDate,
         handlers: {
@@ -346,21 +342,21 @@ export function VaultFolderExplorer({
           openDirectory: (path) => setRelativePath(path),
           openFile: openVaultNote,
           openLinearIssue: (issue) => openLinearIssue(issue),
-          toggleWeekGroup,
+          toggleMonthGroup,
         },
       }),
     [
       activeNavItem,
       clearActiveVaultDocument,
-      collapsedWeekGroups,
+      collapsedMonthGroups,
       dailyIssuesByDueDate,
       filteredEntries,
       groupedDailyEntries,
       nonFileEntries,
       openLinearIssue,
       openVaultNote,
-      showDailyWeekGroups,
-      toggleWeekGroup,
+      showDailyMonthGroups,
+      toggleMonthGroup,
     ],
   );
 
@@ -390,15 +386,16 @@ export function VaultFolderExplorer({
     return titles;
   }, [orderedEntries]);
 
-  const openDeleteConfirm = useCallback(() => {
-    if (deleting) return;
+  const openDeleteConfirm = useCallback((): boolean => {
+    if (deleting) return false;
     const controller = getContentListNavigationController();
     const focusedId = controller?.getFocusedId() ?? keyboardFocusedId;
     const targetPath = resolveSidebarNoteDeletionTarget(focusedId);
-    if (!targetPath) return;
+    if (!targetPath) return false;
     setDeleteError(null);
     setDeleteTargetPath(targetPath);
     setDeleteConfirmOpen(true);
+    return true;
   }, [deleting, keyboardFocusedId]);
 
   const closeDeleteConfirm = useCallback(() => {
@@ -507,7 +504,7 @@ export function VaultFolderExplorer({
                 </button>
               </li>
             ) : null}
-            {showDailyWeekGroups ? (
+            {showDailyMonthGroups ? (
               <>
                 {nonFileEntries.map((entry) => (
                   <li key={entry.path} className="vault-folder-explorer-item">
@@ -531,32 +528,31 @@ export function VaultFolderExplorer({
                 ))}
 
                 {groupedDailyEntries.map((group) => {
-                  const collapsed = collapsedWeekGroups.has(group.key);
-                  const weekHeaderId = contentListGroupHeaderId(
-                    DAILY_WEEK_GROUP_HEADER_PREFIX,
+                  const collapsed = collapsedMonthGroups.has(group.key);
+                  const monthHeaderId = contentListGroupHeaderId(
+                    DAILY_MONTH_GROUP_HEADER_PREFIX,
                     group.key,
                   );
                   return (
                     <li key={group.key} className="vault-folder-explorer-week-group">
                       <button
                         type="button"
-                        {...contentListItemDataAttributes(weekHeaderId)}
+                        {...contentListItemDataAttributes(monthHeaderId)}
                         className={[
                           "vault-folder-explorer-week-header",
-                          keyboardNavActive && keyboardFocusedId === weekHeaderId
+                          keyboardNavActive && keyboardFocusedId === monthHeaderId
                             ? "vault-folder-explorer-entry-keyboard-focused"
                             : null,
                         ]
                           .filter(Boolean)
                           .join(" ")}
                         aria-expanded={!collapsed}
-                        onClick={() => toggleWeekGroup(group.key)}
+                        onClick={() => toggleMonthGroup(group.key)}
                       >
                         <span className="workspace-status-group__chevron-slot" aria-hidden="true">
                           <GroupChevron expanded={!collapsed} />
                         </span>
                         <span className="sidebar-list-group-title">{group.label}</span>
-                        <span className="sidebar-list-group-count">{group.entries.length}</span>
                       </button>
                       {!collapsed ? (
                         <ul className="vault-folder-explorer-week-group-list">

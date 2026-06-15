@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { DAILY_NOTE_FOLDER, isDailyJournalDocumentTitle } from "./daily-note.ts";
 import { normalizeVaultRelativePath, shouldSkipVaultDirectory } from "./vault-paths.ts";
 import { resolveVaultNoteWhoopStats, type VaultNoteWhoopStats } from "./vault/vault-whoop-stats.ts";
 
@@ -121,6 +122,19 @@ export function listVaultDirectoryEntries(
   entries.sort((left, right) => {
     if (left.kind !== right.kind) {
       return left.kind === "directory" ? -1 : 1;
+    }
+    if (normalized === DAILY_NOTE_FOLDER) {
+      const leftDate = isDailyJournalDocumentTitle(left.name.replace(/\.md$/i, ""))
+        ? left.name.replace(/\.md$/i, "")
+        : null;
+      const rightDate = isDailyJournalDocumentTitle(right.name.replace(/\.md$/i, ""))
+        ? right.name.replace(/\.md$/i, "")
+        : null;
+      if (leftDate && rightDate) {
+        return rightDate.localeCompare(leftDate);
+      }
+      if (leftDate) return -1;
+      if (rightDate) return 1;
     }
     return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
   });

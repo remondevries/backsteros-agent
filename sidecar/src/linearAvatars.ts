@@ -1,4 +1,4 @@
-import { getLinearApiKey } from "./config.ts";
+import { getLinearAuthToken, linearAuthorizationHeader } from "./linear/auth-token.ts";
 import type { LinearIssueEntity } from "./types.ts";
 
 const avatarCache = new Map<string, string | null>();
@@ -9,8 +9,8 @@ export async function fetchLinearUserAvatar(userId: string): Promise<string | un
     return cached ?? undefined;
   }
 
-  const apiKey = getLinearApiKey();
-  if (!apiKey) {
+  const token = getLinearAuthToken();
+  if (!token) {
     avatarCache.set(userId, null);
     return undefined;
   }
@@ -19,7 +19,7 @@ export async function fetchLinearUserAvatar(userId: string): Promise<string | un
     const response = await fetch("https://api.linear.app/graphql", {
       method: "POST",
       headers: {
-        Authorization: apiKey,
+        Authorization: linearAuthorizationHeader(token),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

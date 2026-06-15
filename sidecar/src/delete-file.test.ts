@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   respondToPendingDeleteFile,
+  resolveDeleteFileRequest,
   setPendingDeleteFile,
 } from "./delete-file.ts";
 
@@ -28,5 +29,24 @@ describe("respondToPendingDeleteFile", () => {
     const result = respondToPendingDeleteFile(notesPath, sessionId, "confirm");
     expect(result.response).toBe("I have deleted the note.");
     expect(result.deleted).toEqual(["Inbox/test.md"]);
+  });
+
+  test("refuses to delete daily notes", () => {
+    const notesPath = mkdtempSync(join(tmpdir(), "delete-file-"));
+    mkdirSync(join(notesPath, "Daily"), { recursive: true });
+    writeFileSync(join(notesPath, "Daily/2025-06-10.md"), "# Daily", "utf8");
+
+    const resolution = resolveDeleteFileRequest(notesPath, "Daily/2025-06-10.md");
+    expect(resolution).toEqual({
+      kind: "reply",
+      response: "Daily notes cannot be deleted.",
+    });
+
+    const sessionId = "session-daily";
+    setPendingDeleteFile(sessionId, { path: "Daily/2025-06-10.md" });
+    expect(respondToPendingDeleteFile(notesPath, sessionId, "confirm")).toEqual({
+      response: "Daily notes cannot be deleted.",
+    });
+    expect(existsSync(join(notesPath, "Daily/2025-06-10.md"))).toBe(true);
   });
 });

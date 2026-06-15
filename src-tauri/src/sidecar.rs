@@ -49,6 +49,17 @@ fn read_env_value(key: &str) -> Option<String> {
     None
 }
 
+pub fn remote_server_url() -> Option<String> {
+    std::env::var("BACKSTER_SERVER_URL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn should_embed_sidecar() -> bool {
+    remote_server_url().is_none()
+}
+
 impl SidecarState {
     pub fn new() -> Self {
         let token = std::env::var("SIDECAR_TOKEN")
@@ -64,6 +75,14 @@ impl SidecarState {
     }
 
     pub fn connection(&self) -> SidecarConnection {
+        if let Some(url) = remote_server_url() {
+            let base_url = url.trim_end_matches('/').to_string();
+            return SidecarConnection {
+                base_url,
+                token: String::new(),
+            };
+        }
+
         SidecarConnection {
             base_url: format!("http://127.0.0.1:{}", self.port),
             token: self.token.clone(),
@@ -182,13 +201,20 @@ pub fn start_sidecar(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
 
+    if !should_embed_sidecar() {
+        log::info!(
+            "Remote server mode: skipping embedded sidecar (BACKSTER_SERVER_URL is set)"
+        );
+        return Ok(());
+    }
+
     restart_sidecar(app).map_err(|error| {
         tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, error))
     })
 }
 
 pub fn restart_sidecar(app: &AppHandle) -> Result<(), String> {
-    if cfg!(debug_assertions) {
+    if cfg!(debug_assertions) || !should_embed_sidecar() {
         return Ok(());
     }
 

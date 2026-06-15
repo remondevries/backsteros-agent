@@ -13,20 +13,20 @@ import { apiKeyLabel, type ApiKeyTarget, type FieldTestState } from "./integrati
 function credentialForDraft(target: ApiKeyTarget, draft: string): IntegrationTestCredentials {
   if (!draft) return {};
   if (target === "cursor") return { cursorApiKey: draft };
-  if (target === "linear") return { linearApiKey: draft };
   return { geminiApiKey: draft };
 }
 
 function secretFieldForTarget(status: IntegrationsStatus | null, target: ApiKeyTarget) {
   if (target === "cursor") return status?.cursorApiKey;
-  if (target === "linear") return status?.linearApiKey;
   return status?.geminiApiKey;
 }
 
 export function useApiKeyIntegration(
   target: ApiKeyTarget,
   onSecretsUpdated?: () => void | Promise<void>,
+  options?: { stayOnSuccess?: boolean },
 ) {
+  const stayOnSuccess = options?.stayOnSuccess ?? false;
   const [status, setStatus] = useState<IntegrationsStatus | null>(null);
   const [draft, setDraft] = useState("");
   const [testState, setTestState] = useState<FieldTestState>("idle");
@@ -51,6 +51,13 @@ export function useApiKeyIntegration(
     setTestResult(undefined);
   }
 
+  function resetForRetry() {
+    setDraft("");
+    resetTestState();
+    setError(null);
+    setMessage(null);
+  }
+
   function updateDraft(value: string) {
     setDraft(value);
     resetTestState();
@@ -60,16 +67,19 @@ export function useApiKeyIntegration(
     const payload =
       target === "cursor"
         ? { cursorApiKey: apiKey }
-        : target === "linear"
-          ? { linearApiKey: apiKey }
-          : { geminiApiKey: apiKey };
+        : { geminiApiKey: apiKey };
     const next = await updateIntegrationSecrets(payload);
     setStatus(next);
     setDraft("");
-    resetTestState();
+    if (!stayOnSuccess) {
+      resetTestState();
+      await restartSidecarIfNeeded();
+      await onSecretsUpdated?.();
+      setMessage(`${apiKeyLabel(target)} API key saved.`);
+      return;
+    }
+
     await restartSidecarIfNeeded();
-    await onSecretsUpdated?.();
-    setMessage(`${apiKeyLabel(target)} API key saved.`);
   }
 
   async function handleTest() {
@@ -89,8 +99,13 @@ export function useApiKeyIntegration(
         setTestState("saving");
         try {
           await saveDraft(trimmedDraft);
-          setTestResult({ ok: true, message: result.message });
-          setTestState("idle");
+          if (stayOnSuccess) {
+            setTestResult(undefined);
+            setTestState("success");
+          } else {
+            setTestResult({ ok: true, message: result.message });
+            setTestState("idle");
+          }
         } catch (err) {
           const failure = {
             ok: false,
@@ -102,8 +117,13 @@ export function useApiKeyIntegration(
         return;
       }
 
-      setTestResult(result);
-      setTestState("idle");
+      if (stayOnSuccess && result.ok) {
+        setTestResult(undefined);
+        setTestState("success");
+      } else {
+        setTestResult(result);
+        setTestState("idle");
+      }
     } catch (err) {
       const failure = {
         ok: false,
@@ -122,9 +142,7 @@ export function useApiKeyIntegration(
       const payload =
         target === "cursor"
           ? { cursorApiKey: "" }
-          : target === "linear"
-            ? { linearApiKey: "" }
-            : { geminiApiKey: "" };
+          : { geminiApiKey: "" };
       const next = await updateIntegrationSecrets(payload);
       setStatus(next);
       setDraft("");
@@ -153,5 +171,6 @@ export function useApiKeyIntegration(
     error,
     handleTest,
     handleRemove,
+    resetForRetry,
   };
 }

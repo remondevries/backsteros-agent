@@ -1,60 +1,154 @@
+import { isLinearProductMode } from "../lib/productMode";
+
 export type SettingsTabId =
   | "general"
-  | "obsidian"
+  | "account"
   | "cursor"
   | "linear"
   | "gemini"
   | "google-calendar"
-  | "google-gmail";
+  | "google-gmail"
+  | "obsidian"
+  | "whoop"
+  | "ui-preview"
+  | "user-management"
+  | "connections";
 
-export type SettingsTabGroup = "general" | "integration";
+export type SettingsTabGroup = "general" | "integration" | "extension" | "administrator";
 
-export const SETTINGS_TABS: {
+/** Tabs shown in the settings sidebar. */
+export const SETTINGS_NAV_TABS: {
   id: SettingsTabId;
   label: string;
   description: string;
   group: SettingsTabGroup;
 }[] = [
   {
-    id: "general",
-    label: "General",
-    description: "Profiles, accessibility, and composer",
+    id: "account",
+    label: "Account",
+    description: "Your Linear identity, account data, and server sign-in",
     group: "general",
   },
   {
-    id: "obsidian",
-    label: "Local vault",
-    description: "Local notes folder and vault name",
-    group: "integration",
+    id: "general",
+    label: "Development platform",
+    description: "Projects folder for Issue Terminal",
+    group: "general",
   },
   {
     id: "linear",
     label: "Linear",
-    description: "General, API key, and OAuth",
+    description: "API key, OAuth, issue links, and grocery list project",
     group: "integration",
   },
   {
     id: "cursor",
     label: "Cursor",
-    description: "API key for chat",
+    description: "API key, composer mode, agent profiles, and model selection",
     group: "integration",
   },
   {
     id: "gemini",
     label: "Gemini",
-    description: "API key for lookup",
-    group: "integration",
+    description: "API key for lookup and extraction",
+    group: "extension",
   },
   {
     id: "google-calendar",
     label: "Google Calendar",
     description: "OAuth and calendar access",
-    group: "integration",
+    group: "extension",
   },
   {
     id: "google-gmail",
     label: "Google Gmail",
     description: "OAuth and inbox access",
-    group: "integration",
+    group: "extension",
+  },
+  {
+    id: "obsidian",
+    label: "Local vault",
+    description: "Local notes folder and vault name",
+    group: "extension",
+  },
+  {
+    id: "whoop",
+    label: "Whoop",
+    description: "Recovery, sleep, and strain data via Totem",
+    group: "extension",
+  },
+  {
+    id: "ui-preview",
+    label: "UI Preview",
+    description: "Preview run UI fixtures for development",
+    group: "administrator",
+  },
+  {
+    id: "user-management",
+    label: "User management",
+    description: "All stored per-user account files on this server",
+    group: "administrator",
   },
 ];
+
+export const SETTINGS_TABS = SETTINGS_NAV_TABS;
+
+/** Sidebar order within the General settings group. */
+const GENERAL_GROUP_TAB_ORDER: SettingsTabId[] = ["account", "general"];
+
+function orderSettingsNavTabs<T extends { id: SettingsTabId; group: SettingsTabGroup }>(tabs: T[]): T[] {
+  const baseOrder = new Map(tabs.map((tab, index) => [tab.id, index]));
+  return [...tabs].sort((a, b) => {
+    const aPreferred = GENERAL_GROUP_TAB_ORDER.indexOf(a.id);
+    const bPreferred = GENERAL_GROUP_TAB_ORDER.indexOf(b.id);
+    if (aPreferred !== -1 && bPreferred !== -1) {
+      return aPreferred - bPreferred;
+    }
+    return (baseOrder.get(a.id) ?? 0) - (baseOrder.get(b.id) ?? 0);
+  });
+}
+
+const INTEGRATION_TAB_IDS = new Set<SettingsTabId>([
+  "account",
+  "cursor",
+  "linear",
+  "gemini",
+  "google-calendar",
+  "google-gmail",
+  "obsidian",
+  "whoop",
+]);
+
+const ADMINISTRATOR_TAB_IDS = new Set<SettingsTabId>(["ui-preview", "user-management"]);
+
+export function isIntegrationNavTab(tabId: SettingsTabId): boolean {
+  return INTEGRATION_TAB_IDS.has(tabId);
+}
+
+export function isAdministratorNavTab(tabId: SettingsTabId): boolean {
+  return ADMINISTRATOR_TAB_IDS.has(tabId);
+}
+
+/** @deprecated Persisted tab id from before integrations sidebar refactor. */
+export function isLegacyConnectionsSettingsTab(tabId: string): boolean {
+  return tabId === "connections";
+}
+
+export function normalizeSettingsTabId(tabId: SettingsTabId): SettingsTabId {
+  if (tabId === "connections") {
+    return "account";
+  }
+  return tabId;
+}
+
+export function getVisibleSettingsTabs(options?: { isAdministrator?: boolean }) {
+  let navTabs = isLinearProductMode()
+    ? SETTINGS_NAV_TABS.filter((tab) => tab.id !== "obsidian")
+    : SETTINGS_NAV_TABS;
+
+  if (!options?.isAdministrator) {
+    navTabs = navTabs.filter((tab) => tab.group !== "administrator");
+  }
+
+  return orderSettingsNavTabs(navTabs);
+}

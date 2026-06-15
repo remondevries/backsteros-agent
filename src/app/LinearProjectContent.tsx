@@ -7,10 +7,16 @@ import { useLinearWorkspaceFocusSnapshot } from "../hooks/useLinearWorkspaceFocu
 import { registerLinearProjectViewNavigation } from "../lib/linearProjectViewNavigation";
 import { registerContentPanelLocalBack } from "../lib/contentPanelLocalBack";
 import { ProjectDocumentsPanel } from "./project-documents/ProjectDocumentsPanel";
+import { ProjectMeetingsPanel } from "./project-documents/ProjectMeetingsPanel";
+import { ProjectLettersPanel } from "./project-documents/ProjectLettersPanel";
+import { TeamMeetingsPanel } from "./project-documents/TeamMeetingsPanel";
+import { TeamLettersPanel } from "./project-documents/TeamLettersPanel";
 import { ProjectIssuesPanel } from "./project-issues/ProjectIssuesPanel";
+import { TeamIssuesPanel } from "./project-issues/TeamIssuesPanel";
 import { ProjectWatchersKanbanPanel } from "./project-issues/ProjectWatchersKanbanPanel";
 import { LinearIssueWatchersConfigPanel } from "./project-issues/LinearIssueWatchersConfigPanel";
 import { ProjectOverviewPanel } from "./project-overview/ProjectOverviewPanel";
+import { LinearProjectsTableView } from "./projects/LinearProjectsTableView";
 import { LinearProjectViewTabs } from "./LinearProjectViewTabs";
 import type { LinearProjectCollectionToggleOption } from "./LinearProjectListBoardToggle";
 import { useLinearProjectWatcherPollProgress } from "../hooks/useLinearProjectWatcherPollProgress";
@@ -68,6 +74,30 @@ function LinearWorkspaceDetailBody({
         enabled
       />
     );
+  }
+
+  if (activeView === "meetings" && selection.kind === "project") {
+    return <ProjectMeetingsPanel projectId={selection.id} enabled />;
+  }
+
+  if (activeView === "meetings" && selection.kind === "team") {
+    return <TeamMeetingsPanel teamId={selection.id} enabled />;
+  }
+
+  if (activeView === "letters" && selection.kind === "project") {
+    return <ProjectLettersPanel projectId={selection.id} enabled />;
+  }
+
+  if (activeView === "letters" && selection.kind === "team") {
+    return <TeamLettersPanel teamId={selection.id} enabled />;
+  }
+
+  if (activeView === "projects" && selection.kind === "team") {
+    return <LinearProjectsTableView enabled teamId={selection.id} />;
+  }
+
+  if (activeView === "issues" && selection.kind === "team") {
+    return <TeamIssuesPanel teamId={selection.id} enabled />;
   }
 
   if (activeView === "overview" && selection.kind === "team") {

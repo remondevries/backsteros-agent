@@ -1,25 +1,31 @@
 import type { AppView } from "../app/appViews";
 import type { SettingsTabId } from "../settings/settingsTabs";
+import { normalizeSettingsTabId } from "../settings/settingsTabs";
 import { isSidebarNavItemId, type SidebarNavItemId } from "../lib/sidebarNavItems";
 
 const APP_STATE_STORAGE_KEY = "backsteros.app.state";
 
 const APP_VIEWS = new Set<AppView>(["chat"]);
 
-const SETTINGS_TABS = new Set<SettingsTabId>([
+const SETTINGS_TABS = new Set<SettingsTabId | "connections">([
   "general",
+  "account",
+  "connections",
   "obsidian",
   "linear",
   "cursor",
   "gemini",
   "google-calendar",
   "google-gmail",
+  "whoop",
+  "ui-preview",
+  "user-management",
 ]);
 
 export type PersistedAppState = {
   appView?: AppView;
   showSettings?: boolean;
-  activeSettingsTab?: SettingsTabId;
+  activeSettingsTab?: SettingsTabId | "connections";
   activeVaultNavItem?: SidebarNavItemId;
 };
 
@@ -45,7 +51,8 @@ export function readPersistedShowSettings(): boolean {
 
 export function readPersistedSettingsTab(): SettingsTabId | null {
   const tab = readRawState().activeSettingsTab;
-  return tab && SETTINGS_TABS.has(tab) ? tab : null;
+  if (!tab || !SETTINGS_TABS.has(tab)) return null;
+  return normalizeSettingsTabId(tab as SettingsTabId);
 }
 
 export function readPersistedVaultNavItem(): SidebarNavItemId | null {

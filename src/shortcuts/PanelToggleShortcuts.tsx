@@ -17,11 +17,13 @@ const PANEL_TOGGLE_KEYS: Record<string, (typeof PANEL_TOGGLE_SHORTCUTS)[number][
 
 export function PanelToggleShortcuts({
   enabled,
+  rightPanelToggleEnabled = true,
   onToggleLeftSidePanel,
   onToggleRightSidePanel,
   onToggleContentPanelSidebar,
 }: {
   enabled: boolean;
+  rightPanelToggleEnabled?: boolean;
   onToggleLeftSidePanel: () => void;
   onToggleRightSidePanel: () => void;
   onToggleContentPanelSidebar: () => void;
@@ -41,6 +43,7 @@ export function PanelToggleShortcuts({
 
       const action = PANEL_TOGGLE_KEYS[event.key];
       if (!action) return;
+      if (action === "right" && !rightPanelToggleEnabled) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -54,6 +57,7 @@ export function PanelToggleShortcuts({
     onToggleContentPanelSidebar,
     onToggleLeftSidePanel,
     onToggleRightSidePanel,
+    rightPanelToggleEnabled,
   ]);
 
   return null;

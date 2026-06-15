@@ -74,7 +74,7 @@ export function LinearDashboard({ isActive = true }: { isActive?: boolean }) {
         <p className="app-dashboard-empty">Loading Linear issues…</p>
       ) : !configured ? (
         <div className="app-dashboard-empty-state">
-          <p>Linear is not configured. Add LINEAR_API_KEY to ~/.backsteros-agent/.env.</p>
+          <p>Linear is not connected. Open Settings → Linear → OAuth and sign in with Linear.</p>
         </div>
       ) : error && issues.length === 0 ? (
         <div className="app-dashboard-empty-state">

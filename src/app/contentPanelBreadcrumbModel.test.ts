@@ -16,6 +16,83 @@ describe("contentPanelBreadcrumbModel", () => {
     ]);
   });
 
+  test("shows inbox root when browsing linear inbox list", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "inbox",
+        sidebarSegments: [],
+      }),
+    ).toEqual([{ id: "nav-inbox", label: "Inbox", navItemId: "inbox" }]);
+  });
+
+  test("builds inbox breadcrumbs with content mode and issue", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "inbox",
+        sidebarSegments: [{ id: "inbox-content-issues", label: "Issues" }],
+        activeLinearIssue: {
+          id: "issue-1",
+          identifier: "INB-1",
+          title: "Fix breadcrumb",
+        },
+      }),
+    ).toEqual([
+      { id: "nav-inbox", label: "Inbox", navItemId: "inbox" },
+      { id: "inbox-content-issues", label: "Issues" },
+      { id: "linear-issue-issue-1", label: "Fix breadcrumb" },
+    ]);
+  });
+
+  test("builds inbox breadcrumbs with documents mode and document title", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "inbox",
+        sidebarSegments: [{ id: "inbox-content-documents", label: "Documents" }],
+        activeLinearDocument: { id: "doc-1", title: "Meeting notes" },
+      }),
+    ).toEqual([
+      { id: "nav-inbox", label: "Inbox", navItemId: "inbox" },
+      { id: "inbox-content-documents", label: "Documents" },
+      { id: "linear-doc-doc-1", label: "Meeting notes" },
+    ]);
+  });
+
+  test("shows only contacts root when sidebar has no nested segments", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "contacts",
+        sidebarSegments: [],
+      }),
+    ).toEqual([{ id: "nav-contacts", label: "Contacts", navItemId: "contacts" }]);
+  });
+
+  test("hides issue identifier in contacts breadcrumb", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "contacts",
+        sidebarSegments: [],
+        activeLinearIssue: {
+          id: "issue-1",
+          identifier: "A-1",
+          title: "Remon de Vries",
+        },
+      }),
+    ).toEqual([
+      { id: "nav-contacts", label: "Contacts", navItemId: "contacts" },
+      { id: "linear-issue-issue-1", label: "Remon de Vries" },
+    ]);
+  });
+
   test("combines vault nav and sidebar path", () => {
     const segments = buildContentPanelBreadcrumbSegments({
       settingsOpen: false,
@@ -172,6 +249,24 @@ describe("contentPanelBreadcrumbModel", () => {
       { id: "nav-daily", label: "Daily", navItemId: "daily" },
       { id: "vault-doc-Daily/2026-06-13.md", label: "2026-06-13" },
       { id: "linear-issue-issue-1", label: "BOS-70 Define Linear rules for agent issue operations" },
+    ]);
+  });
+
+  test("formats workout session breadcrumbs without csv filenames", () => {
+    expect(
+      buildContentPanelBreadcrumbSegments({
+        settingsOpen: false,
+        activeSettingsTab: "general",
+        activeVaultNavItem: "workouts",
+        sidebarSegments: [],
+        activeVaultDocument: {
+          path: "Workouts/2026-05-24.csv",
+          title: "2026-05-24.csv",
+        },
+      }),
+    ).toEqual([
+      { id: "nav-workouts", label: "Workouts", navItemId: "workouts" },
+      { id: "vault-doc-Workouts/2026-05-24.csv", label: "May 24" },
     ]);
   });
 });

@@ -1,21 +1,91 @@
-import { useMemo } from "react";
-import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
+import { useMemo, useState } from "react";
+import { useProjectsBrowseSearchBreadcrumbAction } from "../../hooks/useProjectsBrowseSearchBreadcrumbAction";
+import { useWorkspaceSetupTeamProjectIds } from "../../hooks/useWorkspaceSetupTeamProjectIds";
+import { LinearProjectStatusIcon } from "../../chat/LinearProjectStatusIcon";
 import { useLinearProjects } from "../../hooks/useLinearProjects";
-import { groupLinearProjectsByStatus } from "../../lib/linearProjectGroups";
+import { useLinearTeamProjects } from "../../hooks/useLinearTeamProjects";
+import { groupLinearProjectsByWorkflow } from "../../lib/linearProjectGroups";
+import { excludeWorkspaceSetupTeamProjects } from "../../lib/workspaceSetupTeamIds";
 import { buildStatusGroupedNavItems } from "../../lib/buildStatusGroupedNavItems";
 import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
 import { groupVariantFromStatusKey } from "../../lib/groupVariantFromStatusKey";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
+import type { LinearSidebarTeamConfig } from "../sidebarNavConfig";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
 import { useCollapsibleGroups } from "../workspace-list/useCollapsibleGroups";
 import { LinearProjectTableRow } from "./LinearProjectTableRow";
 
-export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
+function matchesProjectSearch(value: string, query: string) {
+  return value.toLowerCase().includes(query);
+}
+
+export function LinearProjectsTableView({
+  enabled,
+  teamId = null,
+  workspaceTeamConfig = {},
+}: {
+  enabled: boolean;
+  teamId?: string | null;
+  workspaceTeamConfig?: LinearSidebarTeamConfig;
+}) {
   const { linearSelection, setLinearSelection } = useContentPanelNavigation();
-  const { projects, loading, error } = useLinearProjects(enabled);
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedTeamId = teamId?.trim() || null;
+  const filterByTeam = Boolean(normalizedTeamId);
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+
+  useProjectsBrowseSearchBreadcrumbAction(
+    enabled
+      ? {
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: filterByTeam ? "Search organization projects…" : "Search projects…",
+          ariaLabel: filterByTeam ? "Search organization projects" : "Search projects",
+          disabled: !enabled,
+        }
+      : null,
+  );
+  const { projects: allProjects, projectStatuses, loading: allLoading, error: allError } =
+    useLinearProjects(enabled);
+  const {
+    projects: teamProjects,
+    loading: teamLoading,
+    error: teamError,
+  } = useLinearTeamProjects(normalizedTeamId, enabled && filterByTeam);
+  const {
+    excludedProjectIds,
+    loading: workspaceExclusionsLoading,
+    error: workspaceExclusionsError,
+  } = useWorkspaceSetupTeamProjectIds(workspaceTeamConfig, enabled && !filterByTeam);
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
 
-  const groups = useMemo(() => groupLinearProjectsByStatus(projects), [projects]);
+  const projects = useMemo(() => {
+    if (filterByTeam) {
+      const teamProjectIds = new Set(teamProjects.map((project) => project.id));
+      return allProjects.filter((project) => teamProjectIds.has(project.id));
+    }
+    return excludeWorkspaceSetupTeamProjects(allProjects, excludedProjectIds);
+  }, [allProjects, excludedProjectIds, filterByTeam, teamProjects]);
+
+  const filteredProjects = useMemo(() => {
+    if (!normalizedSearch) return projects;
+    return projects.filter(
+      (project) =>
+        matchesProjectSearch(project.name, normalizedSearch) ||
+        (project.status?.name ? matchesProjectSearch(project.status.name, normalizedSearch) : false) ||
+        (project.slugId ? matchesProjectSearch(project.slugId, normalizedSearch) : false),
+    );
+  }, [normalizedSearch, projects]);
+
+  const loading = filterByTeam
+    ? allLoading || teamLoading
+    : allLoading || workspaceExclusionsLoading;
+  const error = allError ?? teamError ?? workspaceExclusionsError;
+
+  const groups = useMemo(
+    () => groupLinearProjectsByWorkflow(filteredProjects, projectStatuses),
+    [filteredProjects, projectStatuses],
+  );
 
   const statusGroups = useMemo(
     () =>
@@ -26,14 +96,17 @@ export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
         items: group.projects,
         variant: groupVariantFromStatusKey(group.label),
         icon: group.status ? (
-          <LinearStatusIcon
+          <LinearProjectStatusIcon
             status={group.status.name}
             stateType={group.status.type}
+            stateId={group.status.id}
+            statusPosition={group.status.position}
+            projectStatuses={projectStatuses}
             title={group.status.name}
           />
         ) : undefined,
       })),
-    [groups],
+    [groups, projectStatuses],
   );
 
   const listNavItems = useMemo(
@@ -95,8 +168,14 @@ export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
           <p className="linear-projects-table__status linear-projects-table__status--error">
             {error}
           </p>
-        ) : statusGroups.length === 0 ? (
-          <p className="linear-projects-table__status">No projects found in your Linear workspace.</p>
+        ) : groups.length === 0 ? (
+          <p className="linear-projects-table__status">
+            {normalizedSearch
+              ? "No projects match your search."
+              : filterByTeam
+                ? "No projects for this organization yet."
+                : "No projects found in your Linear workspace."}
+          </p>
         ) : (
           <div className="workspace-status-list-scroll">
             <StatusGroupedList
@@ -110,6 +189,7 @@ export function LinearProjectsTableView({ enabled }: { enabled: boolean }) {
                 <LinearProjectTableRow
                   key={project.id}
                   project={project}
+                  projectStatuses={projectStatuses}
                   selected={
                     linearSelection?.kind === "project" && linearSelection.id === project.id
                   }

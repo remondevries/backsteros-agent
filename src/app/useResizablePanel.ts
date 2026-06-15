@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 const RESIZING_CLASS = "app-panel-resizing";
 
@@ -17,36 +17,121 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function resolveWidthFromContainer({
+  container,
+  ratio,
+  minWidth,
+  maxWidth,
+  maxWidthRatio,
+}: {
+  container: HTMLElement | null;
+  ratio: number;
+  minWidth: number;
+  maxWidth: number;
+  maxWidthRatio?: number;
+}): number {
+  if (!container) {
+    return minWidth;
+  }
+
+  const containerWidth = container.clientWidth;
+  const resolvedMax =
+    maxWidthRatio != null
+      ? Math.min(maxWidth, Math.max(minWidth, containerWidth * maxWidthRatio))
+      : maxWidth;
+  const target = containerWidth * ratio;
+  return clamp(target, minWidth, resolvedMax);
+}
+
 export function useResizablePanel({
   side,
   storageKey,
   defaultWidth,
   minWidth,
   maxWidth,
+  containerRef,
+  defaultWidthRatio,
+  maxWidthRatio,
+  resetWidthOnExpand = false,
+  expanded = true,
 }: {
   side: "left" | "right";
   storageKey: string;
   defaultWidth: number;
   minWidth: number;
   maxWidth: number;
+  containerRef?: RefObject<HTMLElement | null>;
+  defaultWidthRatio?: number;
+  maxWidthRatio?: number;
+  resetWidthOnExpand?: boolean;
+  expanded?: boolean;
 }) {
-  const [width, setWidth] = useState(() =>
-    clamp(readStoredWidth(storageKey, defaultWidth), minWidth, maxWidth),
+  const resolveWidth = useCallback(
+    (ratio: number) =>
+      resolveWidthFromContainer({
+        container: containerRef?.current ?? null,
+        ratio,
+        minWidth,
+        maxWidth,
+        maxWidthRatio,
+      }),
+    [containerRef, maxWidth, maxWidthRatio, minWidth],
   );
+
+  const resolveMaxWidth = useCallback(() => {
+    if (maxWidthRatio != null && containerRef?.current) {
+      return Math.max(
+        minWidth,
+        Math.min(maxWidth, containerRef.current.clientWidth * maxWidthRatio),
+      );
+    }
+    return maxWidth;
+  }, [containerRef, maxWidth, maxWidthRatio, minWidth]);
+
+  const [width, setWidth] = useState(() => {
+    if (defaultWidthRatio != null) {
+      return resolveWidthFromContainer({
+        container: containerRef?.current ?? null,
+        ratio: defaultWidthRatio,
+        minWidth,
+        maxWidth,
+        maxWidthRatio,
+      });
+    }
+    const fallback = resetWidthOnExpand
+      ? defaultWidth
+      : readStoredWidth(storageKey, defaultWidth);
+    return clamp(fallback, minWidth, maxWidth);
+  });
   const [isResizing, setIsResizing] = useState(false);
   const widthRef = useRef(width);
   widthRef.current = width;
 
   const persistWidth = useCallback(
     (nextWidth: number) => {
+      if (resetWidthOnExpand) return;
       try {
         localStorage.setItem(storageKey, String(nextWidth));
       } catch {
         // Ignore storage failures.
       }
     },
-    [storageKey],
+    [resetWidthOnExpand, storageKey],
   );
+
+  useEffect(() => {
+    if (!resetWidthOnExpand || !expanded || defaultWidthRatio == null) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const nextWidth = resolveWidth(defaultWidthRatio);
+      widthRef.current = nextWidth;
+      setWidth(nextWidth);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [defaultWidthRatio, expanded, resetWidthOnExpand, resolveWidth]);
 
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -62,7 +147,7 @@ export function useResizablePanel({
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const delta =
           side === "left" ? moveEvent.clientX - startX : startX - moveEvent.clientX;
-        const nextWidth = clamp(startWidth + delta, minWidth, maxWidth);
+        const nextWidth = clamp(startWidth + delta, minWidth, resolveMaxWidth());
         widthRef.current = nextWidth;
         setWidth(nextWidth);
       };
@@ -78,7 +163,7 @@ export function useResizablePanel({
       document.addEventListener("pointermove", handlePointerMove);
       document.addEventListener("pointerup", handlePointerUp);
     },
-    [maxWidth, minWidth, persistWidth, side],
+    [maxWidth, minWidth, persistWidth, resolveMaxWidth, side],
   );
 
   useEffect(() => {

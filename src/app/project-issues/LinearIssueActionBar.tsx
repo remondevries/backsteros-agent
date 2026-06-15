@@ -1,10 +1,6 @@
 import { useCallback, type ReactNode } from "react";
 import type { LinearIssueDetail } from "../../lib/api";
-import { CursorIcon } from "../../chat/CursorIcon";
-import {
-  buildLinearIssueCursorLink,
-  copyTextToClipboardWithNotification,
-} from "../../lib/linearIssueActions";
+import { copyTextToClipboardWithNotification } from "../../lib/linearIssueActions";
 
 function ActionButton({
   label,
@@ -65,17 +61,6 @@ function IdIcon() {
   );
 }
 
-function BranchIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
   const handleCopyLink = useCallback(async () => {
     await copyTextToClipboardWithNotification(issue.url, {
@@ -90,25 +75,6 @@ export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
       issueId: issue.id,
     });
   }, [issue.id, issue.identifier]);
-
-  const handleCopyBranch = useCallback(async () => {
-    if (!issue.branchName) return;
-    await copyTextToClipboardWithNotification(issue.branchName, {
-      message: "Branch copied to clipboard",
-      issueId: issue.id,
-    });
-  }, [issue.branchName, issue.id]);
-
-  const handleCopyCursorLink = useCallback(async () => {
-    const cursorLink = buildLinearIssueCursorLink({
-      url: issue.url,
-      branchName: issue.branchName,
-    });
-    await copyTextToClipboardWithNotification(cursorLink, {
-      message: "Cursor link copied to clipboard",
-      issueId: issue.id,
-    });
-  }, [issue.branchName, issue.id, issue.url]);
 
   return (
     <div className="linear-issue-action-bar" aria-label="Issue actions">
@@ -126,25 +92,6 @@ export function LinearIssueActionBar({ issue }: { issue: LinearIssueDetail }) {
           onClick={() => void handleCopyIdentifier()}
         >
           <IdIcon />
-        </ActionButton>
-        <ActionButton
-          label="Copy git branch"
-          title={issue.branchName ? `Copy ${issue.branchName}` : "No git branch"}
-          disabled={!issue.branchName}
-          onClick={() => void handleCopyBranch()}
-        >
-          <BranchIcon />
-        </ActionButton>
-        <ActionButton
-          label="Copy Cursor link"
-          title={
-            issue.branchName
-              ? `Copy Cursor branch link for ${issue.branchName}`
-              : "Copy Cursor link"
-          }
-          onClick={() => void handleCopyCursorLink()}
-        >
-          <CursorIcon size={14} />
         </ActionButton>
       </div>
     </div>

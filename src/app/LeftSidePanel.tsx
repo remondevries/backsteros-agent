@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  SIDEBAR_PRIMARY_ITEMS,
-  SIDEBAR_SECTIONS,
+  getSidebarPrimaryItems,
+  getSidebarSections,
   type SidebarNavItemId,
 } from "./sidebarNavConfig";
 import { BacksterIcon } from "../chat/BacksterIcon";
@@ -72,7 +72,12 @@ export function LeftSidePanel({
   onSettingsTabChange,
   onOpenSettings,
   onExitSettings,
-  savedNotesPath,
+  inboxLinearTeamId,
+  dailyLinearTeamId,
+  workoutsLinearTeamId,
+  lettersLinearTeamId,
+  knowledgeBaseLinearTeamId,
+  addressbookLinearTeamId,
   activeVaultNavItem,
   onVaultNavItemChange,
 }: {
@@ -81,10 +86,25 @@ export function LeftSidePanel({
   onSettingsTabChange: (tab: SettingsTabId) => void;
   onOpenSettings: () => void;
   onExitSettings?: () => void;
-  savedNotesPath: string | null;
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
 }) {
+  const linearSidebarTeamConfig = {
+    inboxLinearTeamId,
+    dailyLinearTeamId,
+    workoutsLinearTeamId,
+    lettersLinearTeamId,
+    knowledgeBaseLinearTeamId,
+    addressbookLinearTeamId,
+  };
+  const primaryNavItems = getSidebarPrimaryItems(linearSidebarTeamConfig);
+  const sidebarSections = getSidebarSections(linearSidebarTeamConfig);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     workspace: true,
     people: true,
@@ -130,7 +150,6 @@ export function LeftSidePanel({
         activeTab={activeSettingsTab}
         onTabChange={onSettingsTabChange}
         onBack={onExitSettings}
-        savedNotesPath={savedNotesPath}
       />
     );
   }
@@ -195,7 +214,7 @@ export function LeftSidePanel({
           </header>
 
           <div className="left-side-panel-list">
-            {SIDEBAR_PRIMARY_ITEMS.map((item) => (
+            {primaryNavItems.map((item) => (
               <LeftSidePanelNavItem
                 key={item.id}
                 label={item.label}
@@ -205,7 +224,7 @@ export function LeftSidePanel({
               />
             ))}
 
-            {SIDEBAR_SECTIONS.map((section) => (
+            {sidebarSections.map((section) => (
               <LeftSidePanelNavSection
                 key={section.id}
                 label={section.label}

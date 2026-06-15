@@ -92,7 +92,9 @@ export function pushNotification(payload: AppNotificationPayload): string | null
       ? toast.info(payload.title, toastOptions)
       : payload.kind === "error"
         ? toast.error(payload.title, toastOptions)
-        : toast(payload.title, toastOptions);
+        : payload.kind === "success"
+          ? toast.success(payload.title, toastOptions)
+          : toast(payload.title, toastOptions);
 
   return String(toastId);
 }

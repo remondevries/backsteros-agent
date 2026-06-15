@@ -1,40 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   composerModeFromSettings,
   settingsFromComposerMode,
   type ComposerMode,
 } from "../chat/composerMode";
 import type { LinearIssueLinkMode } from "../chat/types";
-import { getProfileContent, getSettings, peekCachedSettings, updateProfileContent, updateSettings, type ProfileKind } from "../lib/api";
+import { getProfileContent, getSettings, getAccountWorkspace, peekCachedSettings, updateProfileContent, updateSettings, updateAccountWorkspace, type ProfileKind } from "../lib/api";
 import { setLinearIssueLinkMode } from "../lib/linear/linearLink";
 import { resolveProfilePaths } from "../lib/profilePaths";
-import { CursorIntegrationSection } from "./CursorIntegrationSection";
-import { GeneralSettingsSection } from "./GeneralSettingsSection";
-import { GeminiIntegrationSection } from "./GeminiIntegrationSection";
-import { GoogleCalendarIntegrationSection } from "./GoogleCalendarIntegrationSection";
-import { GoogleGmailIntegrationSection } from "./GoogleGmailIntegrationSection";
+import { AdministratorSettingsSection } from "./AdministratorSettingsSection";
 import {
-  isSettingsTabConnected,
-} from "./integrationConnectionStatus";
-import { LinearIntegrationSection, type LinearSettingsView } from "./LinearIntegrationSection";
+  IntegrationSettingsSection,
+} from "./ConnectionsSettingsSection";
+import { GeneralSettingsSection } from "./GeneralSettingsSection";
+import type { LinearSettingsView } from "./LinearIntegrationSection";
+import type { CursorSettingsView } from "./CursorIntegrationSection";
 import { ObsidianSettingsSection } from "./ObsidianSettingsSection";
 import { ProfileEditorSection } from "./ProfileEditorSection";
-import { SettingsConnectionBadge } from "./SettingsConnectionBadge";
 import { SettingsSectionToggle } from "./SettingsSectionToggle";
-import { SETTINGS_TABS, type SettingsTabId } from "./settingsTabs";
+import { getVisibleSettingsTabs, isAdministratorNavTab, isIntegrationNavTab, type SettingsTabId } from "./settingsTabs";
 import { useIntegrationsStatus } from "./useIntegrationsStatus";
+import { useAdministratorAccess } from "./useAdministratorAccess";
 
 const LINEAR_VIEW_OPTIONS: { value: LinearSettingsView; label: string }[] = [
   { value: "general", label: "General" },
-  { value: "api-key", label: "API Key" },
   { value: "oauth", label: "OAuth" },
 ];
 
-const LINEAR_VIEW_DESCRIPTIONS: Record<LinearSettingsView, string> = {
-  general: "Connection status, issue links, and grocery list project.",
-  "api-key": "Personal API key for Linear MCP tools and automations.",
-  oauth: "OAuth app credentials and browser sign-in for issue control.",
-};
+const CURSOR_VIEW_OPTIONS: { value: CursorSettingsView; label: string }[] = [
+  { value: "general", label: "General" },
+  { value: "api-key", label: "API Key" },
+];
 
 export function SettingsPanel({
   activeTab,
@@ -44,8 +40,18 @@ export function SettingsPanel({
   initialModelMode: _initialModelMode = "auto",
   initialUserProfilePath,
   initialAgentProfilePath,
+  initialInboxLinearTeamId,
+  initialDailyLinearTeamId,
+  initialWorkoutsLinearTeamId,
+  initialLettersLinearTeamId,
+  initialKnowledgeBaseLinearTeamId,
+  initialAddressbookLinearTeamId,
   onUpdated,
   onSecretsUpdated,
+  onWorkspaceTeamsUpdated,
+  vaultEnabled = true,
+  onServerAccessSaved,
+  onAccountDeleted,
 }: {
   activeTab: SettingsTabId;
   notesPath: string | null;
@@ -54,8 +60,25 @@ export function SettingsPanel({
   initialModelMode?: string;
   initialUserProfilePath?: string;
   initialAgentProfilePath?: string;
+  initialInboxLinearTeamId?: string | null;
+  initialDailyLinearTeamId?: string | null;
+  initialWorkoutsLinearTeamId?: string | null;
+  initialLettersLinearTeamId?: string | null;
+  initialKnowledgeBaseLinearTeamId?: string | null;
+  initialAddressbookLinearTeamId?: string | null;
+  vaultEnabled?: boolean;
   onUpdated: (path: string, nextVaultName?: string | null) => void;
   onSecretsUpdated?: () => void | Promise<void>;
+  onWorkspaceTeamsUpdated?: (workspace: {
+    inboxLinearTeamId?: string | null;
+    dailyLinearTeamId?: string | null;
+    workoutsLinearTeamId?: string | null;
+    lettersLinearTeamId?: string | null;
+    knowledgeBaseLinearTeamId?: string | null;
+    addressbookLinearTeamId?: string | null;
+  }) => void;
+  onServerAccessSaved?: () => void | Promise<void>;
+  onAccountDeleted?: () => void | Promise<void>;
 }) {
   const [manualPath, setManualPath] = useState(notesPath ?? defaultNotesPath);
   const [manualVaultName, setManualVaultName] = useState(vaultName ?? "");
@@ -63,6 +86,27 @@ export function SettingsPanel({
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [issueLinkMode, setIssueLinkMode] = useState<LinearIssueLinkMode>("external");
   const [groceryLinearProjectId, setGroceryLinearProjectId] = useState<string>("");
+  const [inboxLinearTeamId, setInboxLinearTeamId] = useState(
+    initialInboxLinearTeamId?.trim() ?? "",
+  );
+  const [dailyLinearTeamId, setDailyLinearTeamId] = useState(
+    initialDailyLinearTeamId?.trim() ?? "",
+  );
+  const [workoutsLinearTeamId, setWorkoutsLinearTeamId] = useState(
+    initialWorkoutsLinearTeamId?.trim() ?? "",
+  );
+  const [lettersLinearTeamId, setLettersLinearTeamId] = useState(
+    initialLettersLinearTeamId?.trim() ?? "",
+  );
+  const [knowledgeBaseLinearTeamId, setKnowledgeBaseLinearTeamId] = useState(
+    initialKnowledgeBaseLinearTeamId?.trim() ?? "",
+  );
+  const [addressbookLinearTeamId, setAddressbookLinearTeamId] = useState(
+    initialAddressbookLinearTeamId?.trim() ?? "",
+  );
+  const workspaceLoadGenerationRef = useRef(0);
+  const workspaceLoadCountRef = useRef(0);
+  const [workspaceTeamsLoading, setWorkspaceTeamsLoading] = useState(false);
   const [userProfilePath, setUserProfilePath] = useState<string | null>(
     initialUserProfilePath ?? null,
   );
@@ -76,23 +120,24 @@ export function SettingsPanel({
   const [profileDraft, setProfileDraft] = useState("");
   const [profileLoading, setProfileLoading] = useState(false);
   const [linearView, setLinearView] = useState<LinearSettingsView>("general");
+  const [cursorView, setCursorView] = useState<CursorSettingsView>("general");
+  const { isAdministrator, loading: administratorLoading } = useAdministratorAccess();
 
-  const activeTabMeta = SETTINGS_TABS.find((tab) => tab.id === activeTab) ?? SETTINGS_TABS[0];
+  const visibleSettingsTabs = getVisibleSettingsTabs({ isAdministrator });
+  const resolvedActiveTab =
+    visibleSettingsTabs.some((tab) => tab.id === activeTab)
+      ? activeTab
+      : visibleSettingsTabs[0]?.id ?? "general";
+  const activeTabMeta =
+    visibleSettingsTabs.find((tab) => tab.id === resolvedActiveTab) ?? visibleSettingsTabs[0];
+  const { status: integrationsStatus, refresh: refreshIntegrationsStatus } =
+    useIntegrationsStatus(true);
   const showSaveFooter =
     profileEditor !== null ||
     activeTab === "general" ||
-    activeTab === "obsidian" ||
+    (activeTab === "cursor" && cursorView === "general") ||
+    (vaultEnabled && activeTab === "obsidian") ||
     (activeTab === "linear" && linearView === "general");
-  const { status: integrationsStatus, refresh: refreshIntegrationsStatus } =
-    useIntegrationsStatus(true);
-  const connectionContext = useMemo(
-    () => ({
-      integrationsStatus,
-      savedNotesPath: notesPath,
-    }),
-    [integrationsStatus, notesPath],
-  );
-  const showConnectionBadge = !profileEditor && isSettingsTabConnected(activeTab, connectionContext);
 
   const profileEditorMeta =
     profileEditor === "agent"
@@ -121,6 +166,15 @@ export function SettingsPanel({
   }, [activeTab]);
 
   useEffect(() => {
+    if (administratorLoading || isAdministrator) return;
+    if (isAdministratorNavTab(activeTab)) {
+      setSaveMessage(null);
+      setError(null);
+      setProfileEditor(null);
+    }
+  }, [activeTab, administratorLoading, isAdministrator]);
+
+  useEffect(() => {
     if (!profileEditor) {
       setProfileDraft("");
       setProfileLoading(false);
@@ -143,6 +197,82 @@ export function SettingsPanel({
       });
   }, [profileEditor]);
 
+  const applyWorkspaceTeams = useCallback(
+    (workspace: {
+      inboxLinearTeamId?: string | null;
+      dailyLinearTeamId?: string | null;
+      workoutsLinearTeamId?: string | null;
+      lettersLinearTeamId?: string | null;
+      knowledgeBaseLinearTeamId?: string | null;
+      addressbookLinearTeamId?: string | null;
+    }) => {
+      if (workspace.inboxLinearTeamId !== undefined) {
+        setInboxLinearTeamId(workspace.inboxLinearTeamId?.trim() ?? "");
+      }
+      if (workspace.dailyLinearTeamId !== undefined) {
+        setDailyLinearTeamId(workspace.dailyLinearTeamId?.trim() ?? "");
+      }
+      if (workspace.workoutsLinearTeamId !== undefined) {
+        setWorkoutsLinearTeamId(workspace.workoutsLinearTeamId?.trim() ?? "");
+      }
+      if (workspace.lettersLinearTeamId !== undefined) {
+        setLettersLinearTeamId(workspace.lettersLinearTeamId?.trim() ?? "");
+      }
+      if (workspace.knowledgeBaseLinearTeamId !== undefined) {
+        setKnowledgeBaseLinearTeamId(workspace.knowledgeBaseLinearTeamId?.trim() ?? "");
+      }
+      if (workspace.addressbookLinearTeamId !== undefined) {
+        setAddressbookLinearTeamId(workspace.addressbookLinearTeamId?.trim() ?? "");
+      }
+      onWorkspaceTeamsUpdated?.({
+        inboxLinearTeamId: workspace.inboxLinearTeamId,
+        dailyLinearTeamId: workspace.dailyLinearTeamId,
+        workoutsLinearTeamId: workspace.workoutsLinearTeamId,
+        lettersLinearTeamId: workspace.lettersLinearTeamId,
+        knowledgeBaseLinearTeamId: workspace.knowledgeBaseLinearTeamId,
+      });
+    },
+    [onWorkspaceTeamsUpdated],
+  );
+
+  const loadAccountWorkspace = useCallback(async () => {
+    workspaceLoadCountRef.current += 1;
+    setWorkspaceTeamsLoading(true);
+    const generation = workspaceLoadGenerationRef.current + 1;
+    workspaceLoadGenerationRef.current = generation;
+    try {
+      const account = await getAccountWorkspace().catch(() => null);
+      if (!account || workspaceLoadGenerationRef.current !== generation) {
+        return;
+      }
+      applyWorkspaceTeams(account.workspace);
+    } finally {
+      workspaceLoadCountRef.current = Math.max(0, workspaceLoadCountRef.current - 1);
+      if (workspaceLoadCountRef.current === 0) {
+        setWorkspaceTeamsLoading(false);
+      }
+    }
+  }, [applyWorkspaceTeams]);
+
+  useEffect(() => {
+    applyWorkspaceTeams({
+      inboxLinearTeamId: initialInboxLinearTeamId,
+      dailyLinearTeamId: initialDailyLinearTeamId,
+      workoutsLinearTeamId: initialWorkoutsLinearTeamId,
+      lettersLinearTeamId: initialLettersLinearTeamId,
+      knowledgeBaseLinearTeamId: initialKnowledgeBaseLinearTeamId,
+      addressbookLinearTeamId: initialAddressbookLinearTeamId,
+    });
+  }, [
+    applyWorkspaceTeams,
+    initialAddressbookLinearTeamId,
+    initialDailyLinearTeamId,
+    initialWorkoutsLinearTeamId,
+    initialInboxLinearTeamId,
+    initialKnowledgeBaseLinearTeamId,
+    initialLettersLinearTeamId,
+  ]);
+
   useEffect(() => {
     void (async () => {
       const settings = peekCachedSettings() ?? (await getSettings().catch(() => null));
@@ -159,6 +289,7 @@ export function SettingsPanel({
         setGroceryLinearProjectId(settings.groceryLinearProjectId);
       }
       setProjectsPath(settings?.projectsPath ?? "");
+      await loadAccountWorkspace();
       const paths = await resolveProfilePaths({
         userProfilePath: initialUserProfilePath ?? settings?.userProfilePath,
         agentProfilePath: initialAgentProfilePath ?? settings?.agentProfilePath,
@@ -166,7 +297,12 @@ export function SettingsPanel({
       setUserProfilePath(paths.userProfilePath);
       setAgentProfilePath(paths.agentProfilePath);
     })();
-  }, [initialAgentProfilePath, initialUserProfilePath]);
+  }, [initialAgentProfilePath, initialUserProfilePath, loadAccountWorkspace]);
+
+  useEffect(() => {
+    if (activeTab !== "linear" || linearView !== "general") return;
+    void loadAccountWorkspace();
+  }, [activeTab, linearView, loadAccountWorkspace]);
 
   async function saveProfile() {
     if (!profileEditor) return;
@@ -194,6 +330,19 @@ export function SettingsPanel({
     setError(null);
     setSaveMessage(null);
     try {
+      if (activeTab === "linear" && linearView === "general") {
+        const workspaceResult = await updateAccountWorkspace({
+          inboxLinearTeamId: inboxLinearTeamId.trim() || null,
+          dailyLinearTeamId: dailyLinearTeamId.trim() || null,
+          workoutsLinearTeamId: workoutsLinearTeamId.trim() || null,
+          lettersLinearTeamId: lettersLinearTeamId.trim() || null,
+          knowledgeBaseLinearTeamId: knowledgeBaseLinearTeamId.trim() || null,
+          addressbookLinearTeamId: addressbookLinearTeamId.trim() || null,
+        });
+        applyWorkspaceTeams(workspaceResult.workspace);
+        await onSecretsUpdated?.();
+      }
+
       const result = await updateSettings({
         notesPath: manualPath,
         vaultName: manualVaultName.trim() || null,
@@ -244,12 +393,26 @@ export function SettingsPanel({
                 </div>
                 <p className="settings-content-description">{profileEditorMeta.description}</p>
               </>
-            ) : activeTab === "linear" ? (
+            ) : resolvedActiveTab === "cursor" ? (
               <>
                 <div className="settings-content-title-row settings-content-title-row--with-actions">
                   <div className="settings-content-title-group">
                     <h2 className="settings-content-title">{activeTabMeta.label}</h2>
-                    {showConnectionBadge && <SettingsConnectionBadge />}
+                  </div>
+                  <SettingsSectionToggle
+                    value={cursorView}
+                    options={CURSOR_VIEW_OPTIONS}
+                    onChange={setCursorView}
+                    ariaLabel="Cursor settings section"
+                  />
+                </div>
+                <p className="settings-content-description">{activeTabMeta.description}</p>
+              </>
+            ) : resolvedActiveTab === "linear" ? (
+              <>
+                <div className="settings-content-title-row settings-content-title-row--with-actions">
+                  <div className="settings-content-title-group">
+                    <h2 className="settings-content-title">{activeTabMeta.label}</h2>
                   </div>
                   <SettingsSectionToggle
                     value={linearView}
@@ -258,15 +421,12 @@ export function SettingsPanel({
                     ariaLabel="Linear settings section"
                   />
                 </div>
-                <p className="settings-content-description">
-                  {LINEAR_VIEW_DESCRIPTIONS[linearView]}
-                </p>
+                <p className="settings-content-description">{activeTabMeta.description}</p>
               </>
             ) : (
               <>
                 <div className="settings-content-title-row">
                   <h2 className="settings-content-title">{activeTabMeta.label}</h2>
-                  {showConnectionBadge && <SettingsConnectionBadge />}
                 </div>
                 <p className="settings-content-description">{activeTabMeta.description}</p>
               </>
@@ -294,19 +454,49 @@ export function SettingsPanel({
 
           {activeTab === "general" && !profileEditor && (
             <GeneralSettingsSection
-              composerMode={composerMode}
               saving={saving}
               projectsPath={projectsPath}
+              onProjectsPathChange={setProjectsPath}
+            />
+          )}
+
+          {isIntegrationNavTab(activeTab) && !profileEditor && (
+            <IntegrationSettingsSection
+              activeTab={activeTab}
+              cursorView={cursorView}
+              linearView={linearView}
+              issueLinkMode={issueLinkMode}
+              groceryLinearProjectId={groceryLinearProjectId}
+              inboxLinearTeamId={inboxLinearTeamId}
+              dailyLinearTeamId={dailyLinearTeamId}
+              workoutsLinearTeamId={workoutsLinearTeamId}
+              lettersLinearTeamId={lettersLinearTeamId}
+              knowledgeBaseLinearTeamId={knowledgeBaseLinearTeamId}
+              addressbookLinearTeamId={addressbookLinearTeamId}
+              workspaceTeamsLoading={workspaceTeamsLoading}
+              saving={saving}
+              integrationsStatus={integrationsStatus}
+              onIssueLinkModeChange={setIssueLinkMode}
+              onGroceryLinearProjectIdChange={setGroceryLinearProjectId}
+              onInboxLinearTeamIdChange={setInboxLinearTeamId}
+              onDailyLinearTeamIdChange={setDailyLinearTeamId}
+              onWorkoutsLinearTeamIdChange={setWorkoutsLinearTeamId}
+              onLettersLinearTeamIdChange={setLettersLinearTeamId}
+              onKnowledgeBaseLinearTeamIdChange={setKnowledgeBaseLinearTeamId}
+              onAddressbookLinearTeamIdChange={setAddressbookLinearTeamId}
+              onSecretsUpdated={handleSecretsUpdated}
+              onServerAccessSaved={onServerAccessSaved}
+              onAccountDeleted={onAccountDeleted}
+              composerMode={composerMode}
+              onComposerModeChange={setComposerMode}
               userProfilePath={userProfilePath}
               agentProfilePath={agentProfilePath}
-              onComposerModeChange={setComposerMode}
-              onProjectsPathChange={setProjectsPath}
               onEditAgentProfile={() => setProfileEditor("agent")}
               onEditUserProfile={() => setProfileEditor("user")}
             />
           )}
 
-          {activeTab === "obsidian" && (
+          {vaultEnabled && activeTab === "obsidian" && (
             <ObsidianSettingsSection
               notesPath={notesPath}
               defaultNotesPath={defaultNotesPath}
@@ -317,31 +507,9 @@ export function SettingsPanel({
             />
           )}
 
-          {activeTab === "cursor" && (
-            <CursorIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
+          {isAdministratorNavTab(activeTab) && !profileEditor && isAdministrator && (
+            <AdministratorSettingsSection activeTab={activeTab} />
           )}
-
-          {activeTab === "linear" && (
-            <LinearIntegrationSection
-              activeView={linearView}
-              issueLinkMode={issueLinkMode}
-              groceryLinearProjectId={groceryLinearProjectId}
-              saving={saving}
-              onIssueLinkModeChange={setIssueLinkMode}
-              onGroceryLinearProjectIdChange={setGroceryLinearProjectId}
-              onSecretsUpdated={handleSecretsUpdated}
-            />
-          )}
-
-          {activeTab === "gemini" && (
-            <GeminiIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
-          )}
-
-          {activeTab === "google-calendar" && (
-            <GoogleCalendarIntegrationSection onSecretsUpdated={handleSecretsUpdated} />
-          )}
-
-          {activeTab === "google-gmail" && <GoogleGmailIntegrationSection />}
         </div>
       </div>
 

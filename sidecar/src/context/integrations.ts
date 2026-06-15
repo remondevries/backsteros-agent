@@ -1,20 +1,20 @@
 import {
-  getLinearApiKey,
   isGoogleCalendarAuthenticated,
   isGoogleCalendarConfigured,
   isWhoopAuthenticated,
   isWhoopConfigured,
 } from "../config.ts";
+import { getLinearAuthToken } from "../linear/auth-token.ts";
 import type { ToolSelection } from "../tool-routing.ts";
 
 export function integrationReadinessHints(tools: ToolSelection): string[] {
   const hints: string[] = [];
 
-  if (tools.linear && !getLinearApiKey()) {
+  if (tools.linear && !getLinearAuthToken()) {
     hints.push(
       `[Linear setup]
-Linear MCP is attached but LINEAR_API_KEY is not set in ~/.backsteros-agent/.env.
-If Linear requests fail, add your API key or authenticate Linear MCP in Cursor.`,
+Linear MCP is attached but Linear OAuth is not connected.
+Connect Linear OAuth in Settings before using Linear tools.`,
     );
   }
 

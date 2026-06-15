@@ -6,11 +6,14 @@ import type { CommandPaletteItem } from "./types";
 
 export function useCommandPaletteActions({
   onVaultNavItemChange,
+  onVaultNavItemChangeQuiet,
   onOpenSettings,
   onSettingsTabChange,
   onClose,
 }: {
   onVaultNavItemChange: (item: SidebarNavItemId | null) => void;
+  /** Switches sidebar nav without clearing Linear project/issue/document focus. */
+  onVaultNavItemChangeQuiet?: (item: SidebarNavItemId) => void;
   onOpenSettings: () => void;
   onSettingsTabChange: (tab: SettingsTabId) => void;
   onClose: () => void;
@@ -19,6 +22,7 @@ export function useCommandPaletteActions({
     clearActiveLinearDocument,
     clearActiveLinearIssue,
     clearActiveVaultDocument,
+    openLinearProjectDocument,
     resetProjectsOverview,
     setActiveLinearIssue,
     setActiveVaultDocument,
@@ -67,6 +71,7 @@ export function useCommandPaletteActions({
             title: item.issue.title,
             status: item.issue.status,
             stateType: item.issue.stateType,
+            projectName: item.issue.projectName?.trim() || undefined,
           });
           return;
         }
@@ -82,6 +87,42 @@ export function useCommandPaletteActions({
           });
           return;
         }
+        case "linear-team": {
+          clearActiveVaultDocument();
+          clearActiveLinearIssue();
+          clearActiveLinearDocument();
+          resetProjectsOverview();
+          onVaultNavItemChange("organizations");
+          setLinearSelection({
+            kind: "team",
+            id: item.teamId,
+            name: item.teamName,
+          });
+          return;
+        }
+        case "linear-customer": {
+          clearActiveVaultDocument();
+          clearActiveLinearIssue();
+          clearActiveLinearDocument();
+          resetProjectsOverview();
+          onVaultNavItemChange("organizations");
+          return;
+        }
+        case "linear-document": {
+          const switchNav = onVaultNavItemChangeQuiet ?? onVaultNavItemChange;
+          switchNav("projects");
+          openLinearProjectDocument(
+            {
+              id: item.documentId,
+              title: item.title,
+              projectId: item.projectId,
+            },
+            item.projectId && item.projectName
+              ? { kind: "project", id: item.projectId, name: item.projectName }
+              : null,
+          );
+          return;
+        }
         default:
           return;
       }
@@ -94,6 +135,8 @@ export function useCommandPaletteActions({
       onOpenSettings,
       onSettingsTabChange,
       onVaultNavItemChange,
+      onVaultNavItemChangeQuiet,
+      openLinearProjectDocument,
       resetProjectsOverview,
       setActiveLinearIssue,
       setActiveVaultDocument,

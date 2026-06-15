@@ -37,13 +37,19 @@ describe("Linear OAuth credentials path", () => {
   let dataDir: string;
   let previousDataDir: string | undefined;
   let previousCredentialsPath: string | undefined;
+  let previousClientId: string | undefined;
+  let previousClientSecret: string | undefined;
 
   beforeEach(() => {
     previousDataDir = process.env.BACKSTER_DATA_DIR;
     previousCredentialsPath = process.env.LINEAR_OAUTH_CREDENTIALS;
+    previousClientId = process.env.LINEAR_OAUTH_CLIENT_ID;
+    previousClientSecret = process.env.LINEAR_OAUTH_CLIENT_SECRET;
     dataDir = mkdtempSync(join(tmpdir(), "backster-linear-oauth-"));
     process.env.BACKSTER_DATA_DIR = dataDir;
     delete process.env.LINEAR_OAUTH_CREDENTIALS;
+    delete process.env.LINEAR_OAUTH_CLIENT_ID;
+    delete process.env.LINEAR_OAUTH_CLIENT_SECRET;
   });
 
   afterEach(() => {
@@ -51,6 +57,10 @@ describe("Linear OAuth credentials path", () => {
     else process.env.BACKSTER_DATA_DIR = previousDataDir;
     if (previousCredentialsPath === undefined) delete process.env.LINEAR_OAUTH_CREDENTIALS;
     else process.env.LINEAR_OAUTH_CREDENTIALS = previousCredentialsPath;
+    if (previousClientId === undefined) delete process.env.LINEAR_OAUTH_CLIENT_ID;
+    else process.env.LINEAR_OAUTH_CLIENT_ID = previousClientId;
+    if (previousClientSecret === undefined) delete process.env.LINEAR_OAUTH_CLIENT_SECRET;
+    else process.env.LINEAR_OAUTH_CLIENT_SECRET = previousClientSecret;
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -68,6 +78,13 @@ describe("Linear OAuth credentials path", () => {
     process.env.LINEAR_OAUTH_CREDENTIALS = customPath;
 
     expect(getLinearOAuthCredentialsPath()).toBe(customPath);
+    expect(isLinearOAuthConfigured()).toBe(true);
+  });
+
+  test("reads credentials from env when client ID and secret are set", () => {
+    process.env.LINEAR_OAUTH_CLIENT_ID = "env-client-id";
+    process.env.LINEAR_OAUTH_CLIENT_SECRET = "env-client-secret";
+
     expect(isLinearOAuthConfigured()).toBe(true);
   });
 });

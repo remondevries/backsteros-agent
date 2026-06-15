@@ -2,6 +2,7 @@ import { existsSync, statSync, unlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { LETTERS_FOLDER } from "./letter-filing.ts";
 import { assertWritableVaultPath } from "./vault-paths.ts";
+import { isDailyVaultNotePath } from "./vault/vault-whoop-stats.ts";
 
 function resolveWorkspacePath(notesPath: string, targetPath: string): string {
   const abs = join(notesPath, targetPath);
@@ -93,6 +94,10 @@ export function deleteWorkspaceFile(
 ): string[] {
   const target = normalizeLetterRelativePath(targetRelPath);
   assertWritableVaultPath(target);
+
+  if (isDailyVaultNotePath(target)) {
+    throw new Error("Daily notes cannot be deleted");
+  }
 
   if (isLetterWrapperRelativePath(target)) {
     return deleteLetterWrapperWithPdf(notesPath, target);

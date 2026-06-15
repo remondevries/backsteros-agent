@@ -11,7 +11,7 @@ import {
   buildWorkflowStateByCanonical,
   toStatusMoveTargetGroup,
 } from "../../lib/linearIssueStatusMove";
-import { groupLinearIssuesByStatus } from "../../linear/groupLinearIssuesByStatus";
+import { groupLinearIssuesByWorkflow } from "../../linear/groupLinearIssuesByStatus";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { StatusGroupedList } from "../workspace-list/StatusGroupedList";
 import { useCollapsibleGroups } from "../workspace-list/useCollapsibleGroups";
@@ -67,6 +67,7 @@ export function ProjectIssuesPanel({
         title: issue.title,
         status: issue.status,
         stateType: issue.stateType,
+        projectName: issue.projectName?.trim() || undefined,
       });
     },
     [draggingIssueId, setActiveLinearIssue],
@@ -78,8 +79,8 @@ export function ProjectIssuesPanel({
   );
 
   const groups = useMemo(() => {
-    return groupLinearIssuesByStatus(effectiveIssues).map((group) => ({
-      key: group.status,
+    return groupLinearIssuesByWorkflow(effectiveIssues, workflowStates).map((group) => ({
+      key: group.stateId ?? group.status,
       title: group.status,
       count: group.issues.length,
       items: group.issues,
@@ -88,19 +89,23 @@ export function ProjectIssuesPanel({
         <LinearStatusIcon
           status={group.status}
           stateType={group.stateType}
+          stateId={group.stateId ?? group.issues[0]?.stateId}
+          statusColor={group.statusColor}
+          workflowStates={workflowStates}
           title={group.status}
         />
       ),
       dropTarget: toStatusMoveTargetGroup({
         status: group.status,
         displayStatus: group.status,
+        stateId: group.stateId,
         stateType: group.stateType,
         statusColor: group.statusColor,
         issues: group.issues,
         workflowStateByCanonical,
       }),
     }));
-  }, [effectiveIssues, workflowStateByCanonical]);
+  }, [effectiveIssues, workflowStateByCanonical, workflowStates]);
 
   const listNavItems = useMemo(
     () =>
@@ -142,7 +147,17 @@ export function ProjectIssuesPanel({
     );
   }
 
-  if (issues.length === 0) {
+  if (issues.length === 0 && workflowStates.length === 0) {
+    return (
+      <div className="workspace-status-list-scroll">
+        <div className="workspace-status-list-empty">
+          <p>No issues in this project.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (groups.length === 0) {
     return (
       <div className="workspace-status-list-scroll">
         <div className="workspace-status-list-empty">
@@ -174,6 +189,7 @@ export function ProjectIssuesPanel({
             key={issue.id}
             issue={issue}
             grouped
+            workflowStates={workflowStates}
             dragging={draggingIssueId === issue.id}
             onPointerDragStart={handlePointerDragStart}
             onClick={() => {

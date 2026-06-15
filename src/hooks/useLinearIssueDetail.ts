@@ -5,9 +5,23 @@ import {
   type LinearIssueDetail,
   type LinearIssueDetailUpdates,
 } from "../lib/api";
-import { notifyLinearIssueListUpdateFromDetail } from "../lib/linearIssueListPatch";
+import { notifyLinearIssueListUpdateFromDetail, linearIssueDetailToListPatch } from "../lib/linearIssueListPatch";
+import { notifyLinearIssueListChange } from "../lib/linearIssueListEvents";
+import {
+  clearLinearIssueDetailSeed,
+  peekLinearIssueDetailSeedMeta,
+} from "../lib/linearIssueDetailSeed";
+import {
+  applyPendingDraftUpdatesToDetailLocal,
+  isDraftIssueId,
+  queueInboxDraftIssueUpdates,
+} from "../lib/inboxDraftIssue";
 
-export function useLinearIssueDetail(issueId: string, enabled = true) {
+export function useLinearIssueDetail(
+  issueId: string,
+  enabled = true,
+  options?: { inboxMode?: boolean },
+) {
   const [issue, setIssue] = useState<LinearIssueDetail | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,8 +37,23 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const inboxMode = options?.inboxMode ?? false;
+    const seedMeta = peekLinearIssueDetailSeedMeta(issueId);
+    const seed = seedMeta?.detail ?? null;
+    if (seed) {
+      setIssue(seed);
+      setLoading(false);
+      setError(null);
+    } else {
+      setLoading(true);
+      setError(null);
+    }
+
+    if ((inboxMode || isDraftIssueId(issueId)) && seedMeta?.freshCreate) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     void fetchLinearIssueDetail(issueId).then((result) => {
       if (cancelled) return;
@@ -34,6 +63,7 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
       } else {
         setIssue(result.issue);
         setError(null);
+        clearLinearIssueDetailSeed(issueId);
       }
       setLoading(false);
     });
@@ -41,7 +71,7 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, issueId]);
+  }, [enabled, issueId, options?.inboxMode]);
 
   const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!enabled || !issueId) return;
@@ -70,6 +100,23 @@ export function useLinearIssueDetail(issueId: string, enabled = true) {
   const updateIssue = useCallback(
     async (updates: LinearIssueDetailUpdates): Promise<string | null> => {
       if (!enabled || !issueId) return "Issue updates are disabled.";
+      if (isDraftIssueId(issueId)) {
+        queueInboxDraftIssueUpdates(issueId, updates);
+        let nextIssue: LinearIssueDetail | null = null;
+        setIssue((current) => {
+          if (!current) return current;
+          nextIssue = applyPendingDraftUpdatesToDetailLocal(current, updates);
+          return nextIssue;
+        });
+        if (nextIssue) {
+          notifyLinearIssueListChange({
+            type: "update",
+            issueId,
+            patch: linearIssueDetailToListPatch(nextIssue),
+          });
+        }
+        return null;
+      }
       setUpdating(true);
       setError(null);
       try {

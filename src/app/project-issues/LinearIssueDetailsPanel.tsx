@@ -1,4 +1,4 @@
-import type { LinearIssueDetail } from "../../lib/api";
+import { convertInboxIssueToProjectTask, type LinearIssueDetail } from "../../lib/api";
 import {
   formatLinearEstimateLabel,
 } from "../../chat/linearIssue";
@@ -6,7 +6,9 @@ import { getPriorityLabel } from "../../chat/linearPriority";
 import { LinearPriorityIcon } from "../../chat/LinearPriorityIcon";
 import { LinearProjectIcon } from "../../chat/LinearProjectIcon";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { notifyLinearIssueListChange } from "../../lib/linearIssueListEvents";
+import { pushNotification } from "../../lib/notifications";
 import { registerLinearIssuePropertyShortcuts } from "../../lib/linearIssuePropertyShortcuts";
 import {
   buildLinearAssigneeDropdownOptions,
@@ -21,12 +23,27 @@ import {
 import { abbreviateGithubLabelName, githubLabelHoverTitle } from "../../lib/linearLabelDisplay";
 import { searchableDropdownShortcut } from "../ui/searchableDropdownShortcuts";
 import { SearchableDropdown, type SearchableDropdownOption } from "../ui/SearchableDropdown";
+import { SidebarContactsIcon } from "../SidebarNavIcons";
+import type { LinearSidebarTeamConfig } from "../sidebarNavConfig";
+import {
+  InboxIssueProjectPropertyDropdown,
+  type InboxIssueProjectSelection,
+  type InboxProjectMoveConfig,
+} from "./InboxIssueProjectPropertyDropdown";
 import {
   LinearIssueDetailsPropertyDropdown,
   LinearIssueDueDatePropertyDropdown,
   LinearIssueEstimateIcon,
   LinearIssueNoEstimateIcon,
 } from "./LinearIssueDetailsPropertyDropdown";
+
+export type LinearIssueDueDatePropertyLabels = {
+  emptyLabel?: string;
+  changeLabel?: string;
+  clearOptionLabel?: string;
+};
+
+export type { InboxProjectMoveConfig };
 
 const LINEAR_STATUS_DROPDOWN_ORDER = [
   "backlog",
@@ -55,13 +72,17 @@ function LinearIssueDetailsSection({
   title,
   children,
   headerAction,
+  className,
 }: {
   title: string;
   children: ReactNode;
   headerAction?: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="linear-issue-details-section">
+    <section
+      className={["linear-issue-details-section", className].filter(Boolean).join(" ")}
+    >
       <header className="linear-issue-details-section-header">
         <span className="linear-issue-details-section-heading">
           <span className="linear-issue-details-section-chevron" aria-hidden="true">
@@ -143,28 +164,70 @@ function LabelDot({ color }: { color: string }) {
   );
 }
 
+function UnassignedAssigneeIcon() {
+  return <SidebarContactsIcon />;
+}
+
 export function LinearIssueDetailsPanel({
   issue,
+  availableLabelsOverride,
+  dueDatePropertyLabels,
+  hideEstimateProperty = false,
+  showOrganizationProjectDropdowns = false,
+  organizationProjectDisabled = false,
+  inboxProjectMove,
+  workspaceTeamConfig = {},
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
   onEstimateChange,
   onDueDateChange,
   onLabelAdd,
+  onOrganizationProjectChange,
 }: {
   issue: LinearIssueDetail;
+  availableLabelsOverride?: { id: string; name: string; color: string }[];
+  dueDatePropertyLabels?: LinearIssueDueDatePropertyLabels;
+  hideEstimateProperty?: boolean;
+  showOrganizationProjectDropdowns?: boolean;
+  organizationProjectDisabled?: boolean;
+  inboxProjectMove?: InboxProjectMoveConfig;
+  workspaceTeamConfig?: LinearSidebarTeamConfig;
   onStatusChange?: (stateId: string) => void;
   onPriorityChange?: (priority: string) => void;
   onAssigneeChange?: (assigneeId: string) => void;
   onEstimateChange?: (estimate: string) => void;
   onDueDateChange?: (dueDate: string | null) => void;
   onLabelAdd?: (labelId: string) => void;
+  onOrganizationProjectChange?: (selection: InboxIssueProjectSelection) => void;
 }) {
   const openStatusRef = useRef<(() => void) | null>(null);
   const openPriorityRef = useRef<(() => void) | null>(null);
   const openAssigneeRef = useRef<(() => void) | null>(null);
   const openEstimateRef = useRef<(() => void) | null>(null);
   const openLabelsRef = useRef<(() => void) | null>(null);
+  const openOrganizationRef = useRef<(() => void) | null>(null);
+  const openProjectRef = useRef<(() => void) | null>(null);
+  const [inboxTeamId, setInboxTeamId] = useState("");
+  const [inboxProjectId, setInboxProjectId] = useState("");
+  const [convertingInboxIssue, setConvertingInboxIssue] = useState(false);
+  const [inboxConvertError, setInboxConvertError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inboxProjectMove) return;
+    setInboxTeamId("");
+    setInboxProjectId("");
+    setInboxConvertError(null);
+    setConvertingInboxIssue(false);
+  }, [inboxProjectMove, issue.id]);
+
+  const showInboxConvertButton = Boolean(
+    inboxProjectMove && (inboxTeamId.trim() || inboxProjectId.trim()),
+  );
+  const canExecuteInboxConvert = Boolean(inboxProjectId.trim());
+
+  const showOrganizationProjectControls =
+    Boolean(inboxProjectMove) || showOrganizationProjectDropdowns;
 
   useEffect(() => {
     return registerLinearIssuePropertyShortcuts({
@@ -183,18 +246,34 @@ export function LinearIssueDetailsPanel({
         openAssigneeRef.current();
         return true;
       },
-      openEstimate: () => {
-        if (!openEstimateRef.current) return false;
-        openEstimateRef.current();
-        return true;
-      },
+      openEstimate: hideEstimateProperty
+        ? undefined
+        : () => {
+            if (!openEstimateRef.current) return false;
+            openEstimateRef.current();
+            return true;
+          },
       openLabels: () => {
         if (!openLabelsRef.current) return false;
         openLabelsRef.current();
         return true;
       },
+      openOrganization: showOrganizationProjectControls
+        ? () => {
+            if (!openOrganizationRef.current) return false;
+            openOrganizationRef.current();
+            return true;
+          }
+        : undefined,
+      openProject: showOrganizationProjectControls
+        ? () => {
+            if (!openProjectRef.current) return false;
+            openProjectRef.current();
+            return true;
+          }
+        : undefined,
     });
-  }, []);
+  }, [hideEstimateProperty, showOrganizationProjectControls]);
 
   const priorityLabel = issue.priorityLabel || getPriorityLabel(issue.priority);
   const estimateLabel =
@@ -218,7 +297,14 @@ export function LinearIssueDetailsPanel({
         value: state.id,
         label: state.name,
         icon: (
-          <LinearStatusIcon status={state.name} stateType={state.type} title={state.name} />
+          <LinearStatusIcon
+            status={state.name}
+            stateType={state.type}
+            stateId={state.id}
+            statusColor={state.color}
+            workflowStates={issue.workflowStates}
+            title={state.name}
+          />
         ),
         shortcut: searchableDropdownShortcut(index),
         searchTerms: state.type,
@@ -237,6 +323,9 @@ export function LinearIssueDetailsPanel({
           <LinearStatusIcon
             status={issue.status}
             stateType={issue.stateType}
+            stateId={issue.stateId}
+            statusColor={issue.statusColor}
+            workflowStates={issue.workflowStates}
             title={issue.status}
           />
         ),
@@ -277,7 +366,7 @@ export function LinearIssueDetailsPanel({
       if (option.value === LINEAR_UNASSIGNED_ASSIGNEE_VALUE) {
         return {
           ...option,
-          icon: <span className="linear-issue-details-empty-icon" />,
+          icon: <UnassignedAssigneeIcon />,
         };
       }
 
@@ -299,7 +388,8 @@ export function LinearIssueDetailsPanel({
         .map((label) => label.id)
         .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
     );
-    return issue.availableLabels
+    const sourceLabels = availableLabelsOverride ?? issue.availableLabels;
+    return sourceLabels
       .filter((label) => !selectedLabelIds.has(label.id))
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((label) => ({
@@ -308,7 +398,7 @@ export function LinearIssueDetailsPanel({
         icon: <LabelDot color={label.color} />,
         searchTerms: `${label.name} ${label.color}`,
       }));
-  }, [issue.availableLabels, issue.labels]);
+  }, [availableLabelsOverride, issue.availableLabels, issue.labels]);
 
   const selectedStateId = issue.stateId ?? statusOptions[0]?.value ?? null;
   const selectedPriority = linearPriorityDropdownValue(issue.priority);
@@ -322,7 +412,7 @@ export function LinearIssueDetailsPanel({
       avatarUrl={issue.assigneeAvatarUrl}
     />
   ) : (
-    <span className="linear-issue-details-empty-icon" />
+    <UnassignedAssigneeIcon />
   );
 
   const estimateFallbackIcon = isLinearNoEstimateValue(selectedEstimate) ? (
@@ -370,7 +460,11 @@ export function LinearIssueDetailsPanel({
 
   return (
     <div className="linear-issue-details-panel">
-      <LinearIssueDetailsSection title="Properties">
+      <div className="linear-issue-details-panel__size-key">
+        <LinearIssueDetailsSection
+          title="Properties"
+          className="linear-issue-details-section--properties"
+        >
         <LinearIssueDetailsPropertyDropdown
           value={selectedStateId}
           options={statusOptions}
@@ -385,6 +479,9 @@ export function LinearIssueDetailsPanel({
             <LinearStatusIcon
               status={issue.status}
               stateType={issue.stateType}
+              stateId={issue.stateId}
+              statusColor={issue.statusColor}
+              workflowStates={issue.workflowStates}
               title={issue.status}
             />
           }
@@ -431,12 +528,12 @@ export function LinearIssueDetailsPanel({
           />
         ) : (
           <LinearIssueDetailsRow
-            icon={<span className="linear-issue-details-empty-icon" />}
+            icon={<UnassignedAssigneeIcon />}
             label="Unassigned"
             muted
           />
         )}
-        {estimateOptions.length > 0 ? (
+        {!hideEstimateProperty && estimateOptions.length > 0 ? (
           <LinearIssueDetailsPropertyDropdown
             value={selectedEstimate}
             options={estimateOptions}
@@ -450,7 +547,7 @@ export function LinearIssueDetailsPanel({
             fallbackIcon={estimateFallbackIcon}
             fallbackLabel={estimateLabel ?? "No estimate"}
           />
-        ) : estimateLabel ? (
+        ) : !hideEstimateProperty && estimateLabel ? (
           <LinearIssueDetailsRow
             icon={estimateFallbackIcon}
             label={estimateLabel}
@@ -459,10 +556,134 @@ export function LinearIssueDetailsPanel({
         <LinearIssueDueDatePropertyDropdown
           dueDate={issue.dueDate}
           onChange={onDueDateChange}
+          emptyLabel={dueDatePropertyLabels?.emptyLabel}
+          changeLabel={dueDatePropertyLabels?.changeLabel}
+          clearOptionLabel={dueDatePropertyLabels?.clearOptionLabel}
         />
-      </LinearIssueDetailsSection>
+        {inboxProjectMove ? (
+          <InboxIssueProjectPropertyDropdown
+            issueId={inboxProjectMove.issueId}
+            teamId={inboxTeamId}
+            projectId={inboxProjectId}
+            disabled={convertingInboxIssue}
+            workspaceTeamConfig={workspaceTeamConfig}
+            registerOpenOrganization={(open) => {
+              openOrganizationRef.current = open;
+            }}
+            registerOpenProject={(open) => {
+              openProjectRef.current = open;
+            }}
+            onSelectionChange={({ teamId, projectId }) => {
+              setInboxTeamId(teamId);
+              setInboxProjectId(projectId);
+              setInboxConvertError(null);
+            }}
+          />
+        ) : showOrganizationProjectDropdowns ? (
+          <InboxIssueProjectPropertyDropdown
+            issueId={issue.id}
+            teamId={issue.teamId?.trim() ?? ""}
+            projectId={issue.projectId?.trim() ?? ""}
+            disabled={organizationProjectDisabled}
+            workspaceTeamConfig={workspaceTeamConfig}
+            registerOpenOrganization={(open) => {
+              openOrganizationRef.current = open;
+            }}
+            registerOpenProject={(open) => {
+              openProjectRef.current = open;
+            }}
+            onSelectionChange={onOrganizationProjectChange ?? (() => {})}
+          />
+        ) : null}
+        {showInboxConvertButton ? (
+          <div className="linear-issue-details-convert">
+            <button
+              type="button"
+              className="linear-issue-details-convert-button"
+              disabled={convertingInboxIssue || !canExecuteInboxConvert}
+              title={canExecuteInboxConvert ? undefined : "Select a project to convert this issue."}
+              onClick={() => {
+                if (convertingInboxIssue || !inboxProjectId.trim()) {
+                  if (!inboxProjectId.trim()) {
+                    setInboxConvertError("Select a project before converting.");
+                  }
+                  return;
+                }
 
-      <LinearIssueDetailsSection title="Labels" headerAction={labelsHeaderAction}>
+                const { issueId, getTitle, getDescription, onMoved, onViewConvertedIssue } =
+                  inboxProjectMove;
+                setConvertingInboxIssue(true);
+                setInboxConvertError(null);
+
+                void (async () => {
+                  try {
+                    const result = await convertInboxIssueToProjectTask(issueId, {
+                      projectId: inboxProjectId.trim(),
+                      title: getTitle().trim() || undefined,
+                      description: getDescription(),
+                    });
+                    if (result.error || !result.newIssue) {
+                      setInboxConvertError(result.error ?? "Failed to convert issue.");
+                      return;
+                    }
+
+                    notifyLinearIssueListChange({ type: "remove", issueId });
+                    onMoved();
+                    pushNotification({
+                      kind: "success",
+                      title: "Issue converted successfully",
+                      message: `${result.newIssue.identifier} is now a project task in ${result.newIssue.projectName}.`,
+                      issueId: result.newIssue.id,
+                      url: result.newIssue.url,
+                      durationMs: 10_000,
+                      action: {
+                        label: "View issue here",
+                        onClick: () => onViewConvertedIssue(result.newIssue),
+                      },
+                    });
+                  } catch (err) {
+                    setInboxConvertError(
+                      err instanceof Error ? err.message : "Failed to convert issue.",
+                    );
+                  } finally {
+                    setConvertingInboxIssue(false);
+                  }
+                })();
+              }}
+            >
+              {convertingInboxIssue ? "Converting…" : "Convert issue"}
+            </button>
+            {!canExecuteInboxConvert && inboxTeamId.trim() ? (
+              <p className="linear-issue-details-empty">Select a project to convert this issue.</p>
+            ) : null}
+            {inboxConvertError ? (
+              <p className="linear-issue-details-empty" role="alert">
+                {inboxConvertError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        </LinearIssueDetailsSection>
+
+        {issue.projectName && !showOrganizationProjectControls ? (
+          <LinearIssueDetailsSection
+            title="Project"
+            className="linear-issue-details-section--project"
+          >
+            <LinearIssueDetailsRow
+              icon={<LinearProjectIcon title={issue.projectName} />}
+              label={abbreviateGithubLabelName(issue.projectName)}
+              title={githubLabelHoverTitle(issue.projectName)}
+            />
+          </LinearIssueDetailsSection>
+        ) : null}
+      </div>
+
+      <LinearIssueDetailsSection
+        title="Labels"
+        className="linear-issue-details-section--labels"
+        headerAction={labelsHeaderAction}
+      >
         {issue.labels.length > 0 ? (
           <ul className="linear-issue-details-label-list">
             {issue.labels.map((label) => (
@@ -481,16 +702,6 @@ export function LinearIssueDetailsPanel({
           <p className="linear-issue-details-empty">No labels</p>
         )}
       </LinearIssueDetailsSection>
-
-      {issue.projectName ? (
-        <LinearIssueDetailsSection title="Project">
-          <LinearIssueDetailsRow
-            icon={<LinearProjectIcon title={issue.projectName} />}
-            label={abbreviateGithubLabelName(issue.projectName)}
-            title={githubLabelHoverTitle(issue.projectName)}
-          />
-        </LinearIssueDetailsSection>
-      ) : null}
     </div>
   );
 }

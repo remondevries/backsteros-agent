@@ -1,6 +1,5 @@
 import { ensureMonoFontsLoaded } from "../../../lib/fonts";
 import { useTerminalPreferences } from "../preferences";
-import { invoke } from "@tauri-apps/api/core";
 import type { SearchAddon } from "@xterm/addon-search";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { DormantRing } from "./dormantRing";
@@ -322,6 +321,7 @@ async function leafHasForegroundJob(leafId: number): Promise<boolean> {
   const s = sessions.get(leafId);
   if (!s?.pty || s.shellExited) return false;
   try {
+    const { invoke } = await import("@tauri-apps/api/core");
     return await invoke<boolean>("pty_has_foreground_job", { id: s.pty.id });
   } catch (e) {
     console.error("[backsteros] pty_has_foreground_job failed for leaf", leafId, e);

@@ -26,6 +26,8 @@ export function LinearIssueDetailsPropertyDropdown({
   fallbackIcon,
   fallbackLabel,
   registerOpenMenu,
+  disabled = false,
+  onQuerySubmit,
 }: {
   value: string | null;
   options: SearchableDropdownOption[];
@@ -36,6 +38,8 @@ export function LinearIssueDetailsPropertyDropdown({
   fallbackIcon: ReactNode;
   fallbackLabel: string;
   registerOpenMenu?: (open: (() => void) | null) => void;
+  disabled?: boolean;
+  onQuerySubmit?: (query: string) => boolean;
 }) {
   if (options.length === 0) {
     return (
@@ -53,10 +57,12 @@ export function LinearIssueDetailsPropertyDropdown({
       value={value}
       options={options}
       onChange={onChange}
+      disabled={disabled}
       searchPlaceholder={searchPlaceholder}
       searchShortcutLabel={searchShortcutLabel}
       ariaLabel={ariaLabel}
       registerOpenMenu={registerOpenMenu}
+      onQuerySubmit={onQuerySubmit}
       className="linear-issue-details-property-dropdown"
       panelWidth={280}
       panelAlign="end"
@@ -130,19 +136,28 @@ export function LinearIssueDueDatePropertyDropdown({
   dueDate,
   onChange,
   registerOpenMenu,
+  emptyLabel = "No due date",
+  changeLabel = "Change due date",
+  clearOptionLabel = "No due date",
+  searchShortcutLabel = "D",
 }: {
   dueDate: string | null;
   onChange?: (dueDate: string | null) => void;
   registerOpenMenu?: (open: (() => void) | null) => void;
+  emptyLabel?: string;
+  changeLabel?: string;
+  clearOptionLabel?: string;
+  searchShortcutLabel?: string;
 }) {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const options = useMemo(
-    (): SearchableDropdownOption[] => buildLinearDueDateDropdownOptions(dueDate),
-    [dueDate],
+    (): SearchableDropdownOption[] =>
+      buildLinearDueDateDropdownOptions(dueDate, undefined, clearOptionLabel),
+    [dueDate, clearOptionLabel],
   );
   const selectedValue = linearDueDateDropdownValue(dueDate);
   const dueDateLabel = formatLinearIssueDueDate(dueDate);
-  const fallbackLabel = dueDateLabel ?? "No due date";
+  const fallbackLabel = dueDateLabel ?? emptyLabel;
   const hasDueDate = Boolean(dueDateLabel);
   const dueDateYmd = (dueDate ?? "").trim().slice(0, 10);
 
@@ -185,8 +200,8 @@ export function LinearIssueDueDatePropertyDropdown({
         onChange={handleChange}
         disabled={!onChange}
         searchPlaceholder="tomorrow, next Friday…"
-        searchShortcutLabel="D"
-        ariaLabel="Change due date"
+        searchShortcutLabel={searchShortcutLabel}
+        ariaLabel={changeLabel}
         registerOpenMenu={registerOpenMenu}
         onQuerySubmit={onChange ? handleQuerySubmit : undefined}
         queryPreviewLabel={onChange ? handleQueryPreview : undefined}
@@ -207,7 +222,7 @@ export function LinearIssueDueDatePropertyDropdown({
             disabled={disabled}
             aria-haspopup="listbox"
             aria-expanded={open}
-            aria-label="Change due date"
+            aria-label={changeLabel}
             onClick={onToggle}
           >
             <span className="linear-issue-details-row-icon" aria-hidden="true">

@@ -4,6 +4,7 @@ import {
   fetchLinearProjectsPage,
   type LinearProjectSummary,
 } from "../lib/api";
+import { PickerSearchField } from "./PickerSearchField";
 
 const SEARCH_DEBOUNCE_MS = 280;
 const PAGE_SIZE = 25;
@@ -27,11 +28,15 @@ export function LinearProjectPicker({
   onChange,
   disabled,
   id,
+  allowClear = true,
+  clearAriaLabel = "Clear selection",
 }: {
   value: string;
   onChange: (projectId: string) => void;
   disabled?: boolean;
   id?: string;
+  allowClear?: boolean;
+  clearAriaLabel?: string;
 }) {
   const fallbackId = useId();
   const fieldId = id ?? fallbackId;
@@ -144,6 +149,7 @@ export function LinearProjectPicker({
     function handlePointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
+        setSearch("");
       }
     }
 
@@ -214,12 +220,12 @@ export function LinearProjectPicker({
         <span className="linear-project-picker-trigger-caret" aria-hidden="true" />
       </button>
 
-      {value && !disabled && (
+      {allowClear && value && !disabled && (
         <button
           type="button"
           className="linear-project-picker-clear"
           onClick={handleClear}
-          aria-label="Clear grocery project"
+          aria-label={clearAriaLabel}
         >
           Clear
         </button>
@@ -227,18 +233,13 @@ export function LinearProjectPicker({
 
       {open && (
         <div className="linear-project-picker-panel" role="presentation">
-          <div className="linear-project-picker-search-wrap">
-            <input
-              type="search"
-              className="linear-project-picker-search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search projects…"
-              autoFocus
-              spellCheck={false}
-              aria-label="Search Linear projects"
-            />
-          </div>
+          <PickerSearchField
+            value={search}
+            placeholder="Search projects…"
+            ariaLabel="Search Linear projects"
+            onChange={setSearch}
+            autoFocus
+          />
 
           <div
             ref={listRef}

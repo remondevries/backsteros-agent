@@ -4,6 +4,7 @@ import {
   isSidebarNoteCreationShortcutBlocked,
   triggerSidebarNoteCreation,
 } from "../lib/sidebarNoteCreation";
+import { isLeaderSequencePending } from "./leaderSequenceGate";
 
 export function SidebarNoteCreationShortcuts({ enabled }: { enabled: boolean }) {
   useEffect(() => {
@@ -14,6 +15,7 @@ export function SidebarNoteCreationShortcuts({ enabled }: { enabled: boolean }) 
       if (key !== "c") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (isSidebarNoteDeletionConfirmOpen()) return;
+      if (isLeaderSequencePending()) return;
       if (isSidebarNoteCreationShortcutBlocked(event.target)) return;
       if (!triggerSidebarNoteCreation()) return;
 

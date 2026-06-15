@@ -9,7 +9,7 @@ export async function linearGraphqlRequest<T>(
 ): Promise<T> {
   const apiKey = options?.apiKey?.trim() || getLinearAuthToken();
   if (!apiKey) {
-    throw new Error("Linear is not connected. Add an API key or connect OAuth in Settings.");
+    throw new Error("Linear is not connected. Connect OAuth in Settings.");
   }
 
   const response = await fetch(LINEAR_GRAPHQL_URL, {

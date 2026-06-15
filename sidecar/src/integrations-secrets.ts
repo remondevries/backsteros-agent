@@ -6,15 +6,21 @@ import {
   getDefaultLinearOAuthCredentialsPath,
   getGeminiApiKey,
   getGoogleOAuthCredentialsPath,
-  getLinearApiKey,
   getLinearOAuthCredentialsPath,
+  getLinearOAuthCredentialsFromEnv,
+  getLinearOAuthClientCredentials,
   getLinearOAuthTokenPath,
   isGoogleCalendarAuthenticated,
   isGoogleCalendarConfigured,
   isLinearOAuthAuthenticated,
   isLinearOAuthConfigured,
+  isLinearOAuthCredentialsFromEnv,
+  isWhoopAuthenticated,
+  isWhoopConfigured,
+  getTotemEnvPath,
 } from "./config.ts";
 import { getEnvFilePath, mergeEnvFile, reloadEnvFromDisk } from "./env-file.ts";
+import { stopLinearOAuthAuth } from "./linearOAuth.ts";
 
 export interface SecretFieldStatus {
   configured: boolean;
@@ -30,17 +36,24 @@ export interface GoogleCalendarCredentialsStatus {
 
 export interface LinearOAuthStatus {
   credentialsConfigured: boolean;
+  credentialsFromEnv: boolean;
   authenticated: boolean;
   clientId: SecretFieldStatus;
   clientSecret: SecretFieldStatus;
 }
 
+export interface WhoopIntegrationStatus {
+  configured: boolean;
+  authenticated: boolean;
+  envPath: string;
+}
+
 export interface IntegrationsStatus {
   cursorApiKey: SecretFieldStatus;
-  linearApiKey: SecretFieldStatus;
   geminiApiKey: SecretFieldStatus;
   googleCalendar: GoogleCalendarCredentialsStatus;
   linear: LinearOAuthStatus;
+  whoop: WhoopIntegrationStatus;
 }
 
 export function secretPreview(value: string | undefined): string | undefined {
@@ -87,6 +100,20 @@ function readLinearOAuthCredentialFields(): Pick<LinearOAuthStatus, "clientId" |
     clientSecret: { configured: false },
   };
 
+  const fromEnv = getLinearOAuthCredentialsFromEnv();
+  if (fromEnv) {
+    return {
+      clientId: {
+        configured: true,
+        preview: secretPreview(fromEnv.client_id),
+      },
+      clientSecret: {
+        configured: true,
+        preview: secretPreview(fromEnv.client_secret),
+      },
+    };
+  }
+
   const credentialsPath = getLinearOAuthCredentialsPath();
   if (!credentialsPath || !existsSync(credentialsPath)) {
     return empty;
@@ -111,7 +138,6 @@ function readLinearOAuthCredentialFields(): Pick<LinearOAuthStatus, "clientId" |
 
 export function getIntegrationsStatus(): IntegrationsStatus {
   const cursor = getCursorApiKey()?.trim();
-  const linear = getLinearApiKey();
   const gemini = getGeminiApiKey();
   const googleCalendarCredentials = readGoogleCalendarCredentialFields();
   const linearOAuthCredentials = readLinearOAuthCredentialFields();
@@ -120,10 +146,6 @@ export function getIntegrationsStatus(): IntegrationsStatus {
     cursorApiKey: {
       configured: Boolean(cursor),
       preview: secretPreview(cursor),
-    },
-    linearApiKey: {
-      configured: Boolean(linear),
-      preview: secretPreview(linear),
     },
     geminiApiKey: {
       configured: Boolean(gemini),
@@ -136,24 +158,26 @@ export function getIntegrationsStatus(): IntegrationsStatus {
     },
     linear: {
       credentialsConfigured: isLinearOAuthConfigured(),
+      credentialsFromEnv: isLinearOAuthCredentialsFromEnv(),
       authenticated: isLinearOAuthAuthenticated(),
       ...linearOAuthCredentials,
+    },
+    whoop: {
+      configured: isWhoopConfigured(),
+      authenticated: isWhoopAuthenticated(),
+      envPath: getTotemEnvPath(),
     },
   };
 }
 
 export function updateIntegrationSecrets(body: {
   cursorApiKey?: string | null;
-  linearApiKey?: string | null;
   geminiApiKey?: string | null;
 }): IntegrationsStatus {
   const updates: Record<string, string | null> = {};
 
   if (body.cursorApiKey !== undefined) {
     updates.CURSOR_API_KEY = body.cursorApiKey?.trim() || null;
-  }
-  if (body.linearApiKey !== undefined) {
-    updates.LINEAR_API_KEY = body.linearApiKey?.trim() || null;
   }
   if (body.geminiApiKey !== undefined) {
     updates.GEMINI_API_KEY = body.geminiApiKey?.trim() || null;
@@ -346,6 +370,18 @@ export function clearLinearOAuthCredentials(): IntegrationsStatus {
   });
   reloadEnvFromDisk();
   delete process.env.LINEAR_OAUTH_CREDENTIALS;
+
+  return getIntegrationsStatus();
+}
+
+/** Remove saved OAuth tokens only; keeps OAuth app credentials for sign-in again. */
+export async function disconnectLinearOAuth(): Promise<IntegrationsStatus> {
+  await stopLinearOAuthAuth();
+
+  const tokenPath = getLinearOAuthTokenPath();
+  if (existsSync(tokenPath)) {
+    unlinkSync(tokenPath);
+  }
 
   return getIntegrationsStatus();
 }

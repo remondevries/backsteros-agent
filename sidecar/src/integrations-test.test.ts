@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   runAllIntegrationTests,
   testCursorIntegration,
@@ -9,22 +12,33 @@ import {
 } from "./integrations-test.ts";
 
 describe("integrations-test", () => {
+  let dataDir: string;
   let previousEnv: Record<string, string | undefined>;
 
   beforeEach(() => {
     previousEnv = {
+      BACKSTER_DATA_DIR: process.env.BACKSTER_DATA_DIR,
       CURSOR_API_KEY: process.env.CURSOR_API_KEY,
-      LINEAR_API_KEY: process.env.LINEAR_API_KEY,
       GEMINI_API_KEY: process.env.GEMINI_API_KEY,
       GOOGLE_OAUTH_CREDENTIALS: process.env.GOOGLE_OAUTH_CREDENTIALS,
+      LINEAR_API_KEY: process.env.LINEAR_API_KEY,
+      LINEAR_OAUTH_CLIENT_ID: process.env.LINEAR_OAUTH_CLIENT_ID,
+      LINEAR_OAUTH_CLIENT_SECRET: process.env.LINEAR_OAUTH_CLIENT_SECRET,
+      LINEAR_OAUTH_CREDENTIALS: process.env.LINEAR_OAUTH_CREDENTIALS,
     };
+    dataDir = mkdtempSync(join(tmpdir(), "backster-integrations-test-"));
+    process.env.BACKSTER_DATA_DIR = dataDir;
     delete process.env.CURSOR_API_KEY;
-    delete process.env.LINEAR_API_KEY;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_OAUTH_CREDENTIALS;
+    delete process.env.LINEAR_API_KEY;
+    delete process.env.LINEAR_OAUTH_CLIENT_ID;
+    delete process.env.LINEAR_OAUTH_CLIENT_SECRET;
+    delete process.env.LINEAR_OAUTH_CREDENTIALS;
   });
 
   afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true });
     for (const [key, value] of Object.entries(previousEnv)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -43,16 +57,10 @@ describe("integrations-test", () => {
     expect(result.message).not.toContain("not configured");
   });
 
-  test("testLinearIntegration uses draft key override", async () => {
-    const result = await testLinearIntegration("draft-linear-key");
-    expect(result.ok).toBe(false);
-    expect(result.message).not.toContain("not configured");
-  });
-
-  test("testLinearIntegration reports not configured without key", async () => {
+  test("testLinearIntegration reports not connected without OAuth", async () => {
     const result = await testLinearIntegration();
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("not configured");
+    expect(result.message).toContain("not connected");
   });
 
   test("testGeminiIntegration reports not configured without key", async () => {

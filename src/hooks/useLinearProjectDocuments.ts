@@ -89,5 +89,21 @@ export function useLinearProjectDocuments({
 
   const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);
 
-  return { documents, loading, refreshing, error, refresh: refreshInBackground };
+  const prependDocument = useCallback((document: ProjectDocumentEntity) => {
+    setDocuments((current) => {
+      if (current.some((item) => item.linearDocumentId === document.linearDocumentId)) {
+        return current;
+      }
+      return [document, ...current];
+    });
+  }, []);
+
+  return {
+    documents,
+    loading,
+    refreshing,
+    error,
+    refresh: refreshInBackground,
+    prependDocument,
+  };
 }

@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { LetterNoteIcon } from "../chat/VaultNoteIcon";
+import { ProjectIcon } from "../ui/icons/ProjectIcon";
 
 function NavIconShell({
   className,
@@ -23,7 +25,25 @@ function NavIconShell({
   );
 }
 
-export function SidebarChevronIcon({ className, expanded }: { className?: string; expanded?: boolean }) {
+export function SidebarChevronIcon({
+  className,
+  expanded,
+  pointing,
+}: {
+  className?: string;
+  expanded?: boolean;
+  /** Override rotation for non-accordion uses (e.g. settings back). */
+  pointing?: "down" | "right" | "left";
+}) {
+  const transform =
+    pointing === "left"
+      ? "rotate(90deg)"
+      : pointing === "right"
+        ? "rotate(-90deg)"
+        : expanded
+          ? "rotate(0deg)"
+          : "rotate(-90deg)";
+
   return (
     <svg
       className={className}
@@ -32,7 +52,7 @@ export function SidebarChevronIcon({ className, expanded }: { className?: string
       viewBox="0 0 24 24"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
-      style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+      style={{ transform }}
     >
       <polyline
         points="6 9 12 15 18 9"
@@ -109,10 +129,29 @@ export function SidebarMeetingsIcon({ className }: { className?: string }) {
 }
 
 export function SidebarProjectsIcon({ className }: { className?: string }) {
+  return <ProjectIcon className={className} size={16} />;
+}
+
+/** Linear team glyph — used in setup connect gate term labels. */
+export function LinearTeamIcon({ className }: { className?: string }) {
   return (
     <NavIconShell className={className}>
       <path
-        d="M8.878 0.236L14.128 3.281C14.668 3.595 15 4.171 15 4.795V10.893C15 11.2 14.919 11.501 14.767 11.767C14.613 12.033 14.393 12.253 14.128 12.407L8.878 15.452C8.611 15.607 8.308 15.688 8 15.688C7.692 15.688 7.389 15.607 7.122 15.452L1.872 12.407C1.607 12.253 1.387 12.033 1.234 11.767C1.081 11.501 1 11.2 1 10.893V4.795C1 4.171 1.332 3.594 1.872 3.281L7.122 0.236C7.389 0.081 7.692 0 8 0C8.308 0 8.611 0.081 8.878 0.236ZM7.875 1.534L3.245 4.219L8 6.977L12.755 4.219L8.125 1.534C8.087 1.512 8.044 1.5 8 1.5C7.956 1.5 7.913 1.512 7.875 1.534ZM2.5 5.521V10.893C2.5 10.983 2.547 11.064 2.625 11.109L7.25 13.792V8.276L2.5 5.521ZM8.75 13.792L13.375 11.109C13.413 11.087 13.444 11.056 13.466 11.018C13.488 10.98 13.5 10.937 13.5 10.893V5.521L8.75 8.276V13.792Z"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12.5 13.5V15H3.5V13.5H12.5ZM13.5 12.5V3.5C13.5 2.94771 13.0523 2.5 12.5 2.5H3.5C2.94771 2.5 2.5 2.94772 2.5 3.5V12.5C2.5 13.0523 2.94772 13.5 3.5 13.5V15L3.24414 14.9873C2.06772 14.8677 1.13227 13.9323 1.0127 12.7559L1 12.5V3.5C1 2.20566 1.98361 1.14082 3.24414 1.0127L3.5 1H12.5L12.7559 1.0127C14.0164 1.14082 15 2.20566 15 3.5V12.5L14.9873 12.7559C14.8677 13.9323 13.9323 14.8677 12.7559 14.9873L12.5 15V13.5C13.0523 13.5 13.5 13.0523 13.5 12.5Z"
+        fill="currentColor"
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M10 6C10 7.10457 9.10457 8 8 8C6.89543 8 6 7.10457 6 6C6 4.89543 6.89543 4 8 4C9.10457 4 10 4.89543 10 6Z"
+        fill="currentColor"
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M11.405 12H4.59566C4.18761 12 3.88127 11.6641 4.0449 11.307C4.40693 10.5169 5.38905 9.33333 8.02449 9.33333C10.673 9.33333 11.6222 10.5286 11.9603 11.3187C12.1123 11.6738 11.8066 12 11.405 12Z"
         fill="currentColor"
       />
     </NavIconShell>
@@ -152,34 +191,7 @@ export function SidebarKnowledgeBaseIcon({ className }: { className?: string }) 
 }
 
 export function SidebarLettersIcon({ className }: { className?: string }) {
-  return (
-    <NavIconShell className={className}>
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M13.433 7.269C13.791 6.91 14.373 6.91 14.731 7.269C15.09 7.627 15.09 8.209 14.731 8.567L9.237 14.062C8.681 14.618 7.94 14.952 7.155 15C7.068 15.005 6.995 14.932 7 14.845C7.048 14.06 7.382 13.319 7.939 12.763L13.433 7.269Z"
-        fill="currentColor"
-      />
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M10.754 1C12.546 1 14 2.454 14 4.246C14 4.66 13.664 4.996 13.25 4.996C12.836 4.996 12.5 4.66 12.5 4.246C12.5 3.282 11.718 2.5 10.754 2.5H4.25C3.284 2.5 2.5 3.284 2.5 4.25V11.739C2.5 12.133 2.799 12.457 3.183 12.496L4.338 12.504C4.716 12.543 5.011 12.862 5.011 13.25C5.011 13.638 4.716 13.957 4.338 13.996L3.261 14L3.029 13.988C1.889 13.872 1 12.91 1 11.739V4.25C1 2.455 2.455 1 4.25 1H10.754Z"
-        fill="currentColor"
-      />
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M6.75 8C7.164 8 7.5 8.336 7.5 8.75C7.5 9.164 7.164 9.5 6.75 9.5H5.25C4.836 9.5 4.5 9.164 4.5 8.75C4.5 8.336 4.836 8 5.25 8H6.75Z"
-        fill="currentColor"
-      />
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M9.75 5C10.164 5 10.5 5.336 10.5 5.75C10.5 6.164 10.164 6.5 9.75 6.5H5.25C4.836 6.5 4.5 6.164 4.5 5.75C4.5 5.336 4.836 5 5.25 5H9.75Z"
-        fill="currentColor"
-      />
-    </NavIconShell>
-  );
+  return <LetterNoteIcon className={className} />;
 }
 
 export function SidebarOrganizationsIcon({ className }: { className?: string }) {

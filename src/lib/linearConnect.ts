@@ -8,7 +8,7 @@ export async function connectLinearOAuthAndWait(options?: {
   const pollAttempts = options?.pollAttempts ?? 120;
   const pollIntervalMs = options?.pollIntervalMs ?? 2000;
 
-  const { authUrl } = await connectLinearOAuth();
+  const { authUrl } = await connectLinearOAuth({ appReturnUrl: window.location.origin });
   await openExternalUrl(authUrl);
 
   for (let attempt = 0; attempt < pollAttempts; attempt += 1) {

@@ -19,6 +19,7 @@ export interface LinearIssueEntity {
   assigneeName?: string;
   assigneeAvatarUrl?: string;
   assigneeId?: string;
+  projectId?: string;
   projectName?: string;
   dueDate?: string;
   estimate?: number | null;
@@ -328,9 +329,51 @@ export type ExecutionMode = "live" | "test";
 
 export type LinearIssueLinkMode = "external" | "internal";
 
+export type AccountWorkspace = {
+  inboxLinearTeamId: string | null;
+  dailyLinearTeamId: string | null;
+  workoutsLinearTeamId: string | null;
+  lettersLinearTeamId: string | null;
+  knowledgeBaseLinearTeamId: string | null;
+  addressbookLinearTeamId: string | null;
+  setupCompletedAt: string | null;
+};
+
+export type AccountWorkspaceResponse = {
+  linearUserId: string;
+  viewer: {
+    id: string;
+    name: string;
+    email: string | null;
+  };
+  workspace: AccountWorkspace;
+  accountFilePath: string | null;
+  accountFileExists: boolean;
+  isAdministrator: boolean;
+};
+
+export type StoredUserAccountSummary = {
+  linearUserId: string;
+  filePath: string;
+  workspace: AccountWorkspace;
+  updatedAt: string | null;
+};
+
+export type AdminUserAccountsResponse = {
+  accounts: StoredUserAccountSummary[];
+};
+
+export type DeleteAccountResponse = AccountWorkspaceResponse & {
+  accountFileDeleted: boolean;
+  credentialsRemoved: boolean;
+};
+
 export interface AppSettings {
   notesPath: string | null;
   vaultName?: string | null;
+  vaultEnabled?: boolean;
+  productMode?: "linear" | "full";
+  workspacePath?: string;
   agentId: string | null;
   defaultNotesPath: string;
   projectsPath?: string | null;

@@ -1,10 +1,10 @@
 export const LINEAR_TEAM_VIEWS = [
   { id: "overview", label: "Overview" },
   { id: "projects", label: "Projects" },
-  { id: "documents", label: "Documents" },
   { id: "meetings", label: "Meetings" },
   { id: "letters", label: "Letters" },
-  { id: "activities", label: "Activities" },
+  { id: "documents", label: "Documents" },
+  { id: "issues", label: "Issues" },
 ] as const;
 
 export const LINEAR_PROJECT_VIEWS = [

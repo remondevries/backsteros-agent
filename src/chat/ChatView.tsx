@@ -138,7 +138,10 @@ import {
   sendMessage,
   updateSettings,
 } from "../lib/api";
+import { applyAgentContentSideEffects } from "../lib/linearContentListSync";
 import { subscribeToRunWithAuth } from "../lib/sse";
+import { notifyVaultContentChanged } from "../lib/vaultContentEvents";
+import { isTauriRuntime } from "../platform/runtime";
 
 function isShortcutBlockedTarget(target: EventTarget | null): boolean {
   return (
@@ -612,6 +615,7 @@ export const ChatView = forwardRef<
             presentation: "backster",
           }),
         ]);
+        notifyVaultContentChanged();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Delete failed";
         setError(message);
@@ -667,6 +671,22 @@ export const ChatView = forwardRef<
   handleDeleteFileReturnRef.current = handleDeleteFileReturn;
   const resolveActiveDeleteConfirmRunIdRef = useRef(resolveActiveDeleteConfirmRunId);
   resolveActiveDeleteConfirmRunIdRef.current = resolveActiveDeleteConfirmRunId;
+  const agentRunSideEffectsAppliedRef = useRef(new Set<string>());
+  const focusContextRef = useRef(focusContext);
+  focusContextRef.current = focusContext;
+
+  useEffect(() => {
+    for (const message of messages) {
+      if (!message.runId) continue;
+      if (agentRunSideEffectsAppliedRef.current.has(message.runId)) continue;
+
+      const run = runs[message.runId];
+      if (run?.status !== "finished" || !run.text.trim()) continue;
+
+      agentRunSideEffectsAppliedRef.current.add(message.runId);
+      applyAgentContentSideEffects(run.text, focusContextRef.current);
+    }
+  }, [messages, runs]);
 
   useEffect(() => {
     if (!voiceModeEnabled || !isActive) return;
@@ -767,20 +787,22 @@ export const ChatView = forwardRef<
     window.addEventListener("focus", onWindowFocus);
 
     let unlistenTauriFocus: (() => void) | undefined;
-    void import("@tauri-apps/api/window")
-      .then(({ getCurrentWindow }) =>
-        getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-          if (focused && isActive && !voiceModeFocusGuardRef.current) {
-            focusComposer();
-          }
-        }),
-      )
-      .then((unlisten) => {
-        unlistenTauriFocus = unlisten;
-      })
-      .catch(() => {
-        // Browser dev mode has no Tauri window APIs.
-      });
+    if (isTauriRuntime()) {
+      void import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) =>
+          getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+            if (focused && isActive && !voiceModeFocusGuardRef.current) {
+              focusComposer();
+            }
+          }),
+        )
+        .then((unlisten) => {
+          unlistenTauriFocus = unlisten;
+        })
+        .catch(() => {
+          // Tauri window APIs unavailable.
+        });
+    }
 
     return () => {
       window.removeEventListener("focus", onWindowFocus);
@@ -1035,6 +1057,7 @@ export const ChatView = forwardRef<
       automation.clearEnqueuedFollowUps();
       letterConfirmActivatedRef.current.clear();
       letterConfirmFinishedRef.current.clear();
+      agentRunSideEffectsAppliedRef.current.clear();
       void clearLetterPending(sessionId).catch(() => undefined);
       liveRunIdRef.current = null;
       titleUpdatedRef.current = false;

@@ -115,9 +115,15 @@ export function ProjectNoteIcon({ className }: { className?: string }) {
   );
 }
 
-function LetterNoteIcon({ className }: { className?: string }) {
+export function LetterNoteIcon({
+  className,
+  size = 16,
+}: {
+  className?: string;
+  size?: number;
+}) {
   return (
-    <SvgShell className={className}>
+    <SvgShell className={className} size={size}>
       <path
         fillRule="evenodd"
         clipRule="evenodd"

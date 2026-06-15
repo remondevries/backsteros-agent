@@ -184,7 +184,7 @@ export async function updateVaultDocument(
   const linearDocumentId = readLinearDocumentIdFromVault(notesPath, savedPath);
   if (linearDocumentId) {
     await updateLinearApiDocument(linearDocumentId, {
-      title: nextTitle,
+      ...(isDailyVaultNotePath(savedPath) ? {} : { title: nextTitle }),
       content: nextBody,
     });
   }

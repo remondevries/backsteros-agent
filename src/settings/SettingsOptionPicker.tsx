@@ -1,10 +1,25 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { PickerSearchField } from "./PickerSearchField";
+import { SettingsPickerOptionRow } from "./SettingsPickerBadge";
 
 export type SettingsOption<T extends string = string> = {
   value: T;
   label: string;
   description?: string;
 };
+
+function filterSettingsOptions<T extends string>(
+  options: SettingsOption<T>[],
+  query: string,
+): SettingsOption<T>[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return options;
+
+  return options.filter((option) => {
+    const haystack = `${option.label} ${option.description ?? ""}`.trim().toLowerCase();
+    return haystack.includes(normalized);
+  });
+}
 
 export function SettingsOptionPicker<T extends string>({
   value,
@@ -13,6 +28,8 @@ export function SettingsOptionPicker<T extends string>({
   disabled,
   id,
   placeholder = "Select…",
+  searchPlaceholder = "Search…",
+  searchable = true,
 }: {
   value: T;
   onChange: (value: T) => void;
@@ -20,20 +37,31 @@ export function SettingsOptionPicker<T extends string>({
   disabled?: boolean;
   id?: string;
   placeholder?: string;
+  searchPlaceholder?: string;
+  searchable?: boolean;
 }) {
   const fallbackId = useId();
   const fieldId = id ?? fallbackId;
+  const searchFieldId = `${fieldId}-search`;
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const selected = options.find((option) => option.value === value) ?? null;
+  const filteredOptions = filterSettingsOptions(options, search);
+  const showSearch = searchable && options.length > 0;
+
+  function closePanel() {
+    setOpen(false);
+    setSearch("");
+  }
 
   useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closePanel();
       }
     }
 
@@ -43,7 +71,7 @@ export function SettingsOptionPicker<T extends string>({
 
   function handleSelect(nextValue: T) {
     onChange(nextValue);
-    setOpen(false);
+    closePanel();
   }
 
   return (
@@ -77,40 +105,56 @@ export function SettingsOptionPicker<T extends string>({
 
       {open && (
         <div className="linear-project-picker-panel" role="presentation">
-          <div className="linear-project-picker-list settings-option-picker-list" role="listbox" aria-labelledby={fieldId}>
-            {options.map((option) => {
-              const isSelected = option.value === value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  className={[
-                    "linear-project-picker-option",
-                    "settings-option-picker-option",
-                    isSelected ? "linear-project-picker-option--selected" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => handleSelect(option.value)}
-                >
-                  <span className="settings-option-picker-option-copy">
-                    <span className="linear-project-picker-option-name">{option.label}</span>
-                    {option.description && (
-                      <span className="settings-option-picker-option-description">
-                        {option.description}
+          {showSearch ? (
+            <PickerSearchField
+              id={searchFieldId}
+              value={search}
+              placeholder={searchPlaceholder}
+              ariaLabel={searchPlaceholder}
+              onChange={setSearch}
+              autoFocus
+            />
+          ) : null}
+          <div
+            className="linear-project-picker-list settings-option-picker-list"
+            role="listbox"
+            aria-labelledby={fieldId}
+          >
+            {filteredOptions.length === 0 ? (
+              <p className="linear-project-picker-status">
+                {search.trim() ? "No matches found." : "No options available."}
+              </p>
+            ) : (
+              filteredOptions.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={[
+                      "linear-project-picker-option",
+                      "settings-option-picker-option",
+                      isSelected ? "linear-project-picker-option--selected" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => handleSelect(option.value)}
+                  >
+                    <SettingsPickerOptionRow
+                      label={option.label}
+                      badge={option.description}
+                    />
+                    {isSelected && (
+                      <span className="linear-project-picker-option-check" aria-hidden="true">
+                        ✓
                       </span>
                     )}
-                  </span>
-                  {isSelected && (
-                    <span className="linear-project-picker-option-check" aria-hidden="true">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
       )}

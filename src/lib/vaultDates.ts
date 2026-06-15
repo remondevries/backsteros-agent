@@ -49,3 +49,16 @@ export function dailyDateFromPath(path: string): string | null {
   const match = DAILY_NOTE_PATH_PATTERN.exec(normalized);
   return match?.[1] ?? null;
 }
+
+const DAILY_JOURNAL_TITLE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Daily journal documents use a YYYY-MM-DD title (Linear team docs or vault daily notes). */
+export function parseDailyJournalDate(title: string | null | undefined): string | null {
+  if (!title) return null;
+  const trimmed = title.trim();
+  return DAILY_JOURNAL_TITLE_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+export function isDailyJournalDocumentTitle(title: string | null | undefined): boolean {
+  return parseDailyJournalDate(title) != null;
+}

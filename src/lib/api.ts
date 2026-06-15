@@ -1,7 +1,10 @@
 import type {
+  AccountWorkspaceResponse,
   AppSettings,
   AttachmentWireInput,
   ChatMessage,
+  DeleteAccountResponse,
+  AdminUserAccountsResponse,
   ExecutionMode,
   LinearIssueEntity,
   LinearIssueLinkMode,
@@ -43,7 +46,7 @@ export {
 } from "./requestCache";
 
 let connection: SidecarConnection = {
-  baseUrl: import.meta.env.DEV ? "/api" : "http://127.0.0.1:3847",
+  baseUrl: import.meta.env.DEV ? "/api" : "",
   token: import.meta.env.VITE_SIDECAR_TOKEN ?? "dev-token-change-me",
 };
 
@@ -72,6 +75,22 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
 const HEALTH_REQUEST_TIMEOUT_MS = 8_000;
 const SETTINGS_REQUEST_TIMEOUT_MS = 15_000;
 
+function sidecarConnectionHint(baseUrl: string, message: string): string {
+  if (message.includes("npm run")) {
+    return "";
+  }
+  if (baseUrl === "/api") {
+    return "Start the full dev stack: `npm run dev` (or `npm run dev:web`).";
+  }
+  if (/127\.0\.0\.1:3847|localhost:3847/.test(baseUrl)) {
+    return "Restart the app or run `npm run tauri:dev`.";
+  }
+  if (!baseUrl) {
+    return "The server at this URL is not responding; check the deployment process.";
+  }
+  return "Start the agent server with `npm run dev` (browser) or `npm run tauri:dev` (desktop), then retry.";
+}
+
 export function formatSidecarReachabilityError(error: unknown): string {
   const message =
     error instanceof Error && error.name === "AbortError"
@@ -80,11 +99,25 @@ export function formatSidecarReachabilityError(error: unknown): string {
         ? error.message
         : "failed";
 
-  if (message.includes("Cannot reach agent server")) {
-    return `${message} Start the agent server with \`npm run dev:all\` (browser) or \`npm run tauri:dev\` (desktop), then retry.`;
+  if (message.includes("Agent server is starting") || message.includes("Retry shortly")) {
+    return "Agent server is starting. Waiting for the sidecar on port 3847…";
   }
 
-  return `Cannot reach agent server at ${connection.baseUrl}: ${message}. Start the agent server with \`npm run dev:all\` (browser) or \`npm run tauri:dev\` (desktop), then retry.`;
+  const baseUrl = connection.baseUrl;
+  const hint = sidecarConnectionHint(baseUrl, message);
+
+  if (message.includes("Cannot reach agent server")) {
+    const colonIndex = message.indexOf(":");
+    const detail = colonIndex >= 0 ? message.slice(colonIndex + 1).trim() : message;
+    return hint ? `${detail}. ${hint}` : detail;
+  }
+
+  if (message.includes("Agent server did not")) {
+    return hint ? `${message}. ${hint}` : message;
+  }
+
+  const prefix = `Cannot reach agent server at ${baseUrl || "this origin"}: ${message}`;
+  return hint ? `${prefix}. ${hint}` : prefix;
 }
 
 async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
@@ -99,14 +132,19 @@ async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = DEF
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   let response: Response;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (connection.token) {
+    headers.Authorization = `Bearer ${connection.token}`;
+  }
+
   try {
     response = await fetchWithTimeout(`${connection.baseUrl}${path}`, {
       ...init,
-      headers: {
-        Authorization: `Bearer ${connection.token}`,
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
+      credentials: "include",
+      headers,
     }, timeoutMs);
   } catch (error) {
     const message =
@@ -151,9 +189,7 @@ export async function waitForSidecar(options?: {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
-  throw new Error(
-    "Agent server did not start. Run `npm run tauri:dev` or restart the app, and check that Bun is installed.",
-  );
+  throw new Error("Agent server did not become healthy");
 }
 
 export async function connectGoogleCalendar() {
@@ -164,7 +200,6 @@ export async function connectGoogleCalendar() {
 
 export type IntegrationsStatus = {
   cursorApiKey: { configured: boolean; preview?: string };
-  linearApiKey: { configured: boolean; preview?: string };
   geminiApiKey: { configured: boolean; preview?: string };
   googleCalendar: {
     credentialsConfigured: boolean;
@@ -174,9 +209,15 @@ export type IntegrationsStatus = {
   };
   linear: {
     credentialsConfigured: boolean;
+    credentialsFromEnv: boolean;
     authenticated: boolean;
     clientId: { configured: boolean; preview?: string };
     clientSecret: { configured: boolean; preview?: string };
+  };
+  whoop: {
+    configured: boolean;
+    authenticated: boolean;
+    envPath: string;
   };
 };
 
@@ -186,7 +227,6 @@ export async function getIntegrationsStatus() {
 
 export async function updateIntegrationSecrets(body: {
   cursorApiKey?: string | null;
-  linearApiKey?: string | null;
   geminiApiKey?: string | null;
 }) {
   return request<IntegrationsStatus>("/integrations/secrets", {
@@ -217,9 +257,16 @@ export async function saveLinearOAuthCredentials(body: {
   });
 }
 
-export async function connectLinearOAuth() {
+export async function disconnectLinearOAuth() {
+  return request<IntegrationsStatus>("/integrations/linear/disconnect", {
+    method: "POST",
+  });
+}
+
+export async function connectLinearOAuth(options?: { appReturnUrl?: string }) {
   return request<{ authUrl: string; localUrl: string }>("/integrations/linear/connect", {
     method: "POST",
+    body: JSON.stringify(options ?? {}),
   });
 }
 
@@ -246,7 +293,6 @@ export type IntegrationTestResult = {
 
 export type IntegrationTestCredentials = {
   cursorApiKey?: string;
-  linearApiKey?: string;
   geminiApiKey?: string;
   googleOAuthClientId?: string;
   googleOAuthClientSecret?: string;
@@ -465,22 +511,55 @@ type HealthResponse = {
   ok: boolean;
   hasApiKey: boolean;
   hasGeminiApiKey: boolean;
-  hasLinearApiKey: boolean;
   hasLinearOAuthCredentials: boolean;
   hasLinearOAuthAuth: boolean;
   hasGoogleCalendarCredentials: boolean;
   hasGoogleCalendarAuth: boolean;
   hasWhoopConfigured: boolean;
   hasWhoopAuth: boolean;
+  vaultEnabled?: boolean;
+  productMode?: "linear" | "full";
+  staticUiAvailable?: boolean;
   sidecarRuntimeId?: string | null;
   sidecarVersion?: string | null;
   sidecarBuildId?: string | null;
 };
 
+export async function loginWithAccessToken(accessToken: string): Promise<void> {
+  const response = await fetchWithTimeout(`${connection.baseUrl}/auth/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: accessToken }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  setSidecarConnection({
+    baseUrl: connection.baseUrl,
+    token: "",
+  });
+}
+
+export async function logoutSession(): Promise<void> {
+  await fetchWithTimeout(`${connection.baseUrl}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  }).catch(() => undefined);
+  setSidecarConnection({
+    baseUrl: connection.baseUrl,
+    token: import.meta.env.VITE_SIDECAR_TOKEN ?? "",
+  });
+}
+
 async function fetchHealth(timeoutMs = HEALTH_REQUEST_TIMEOUT_MS): Promise<HealthResponse> {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${connection.baseUrl}/healthz`, undefined, timeoutMs);
+    response = await fetchWithTimeout(`${connection.baseUrl}/healthz`, {
+      credentials: "include",
+    }, timeoutMs);
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AbortError"
@@ -785,10 +864,135 @@ export type LinearTeamSummary = {
   name: string;
 };
 
-export async function fetchLinearTeams(options?: { force?: boolean }) {
+export type LinearCustomerSummary = {
+  id: string;
+  name: string;
+  slugId?: string;
+  url?: string;
+  domains: string[];
+};
+
+export async function fetchLinearTeamsPage(options: {
+  after?: string | null;
+  first?: number;
+} = {}) {
+  const params = new URLSearchParams();
+  if (options.after) params.set("after", options.after);
+  if (options.first != null) params.set("first", String(options.first));
+
+  const query = params.toString();
+  return request<{
+    teams: LinearTeamSummary[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    error?: string;
+  }>(`/linear/teams${query ? `?${query}` : ""}`);
+}
+
+function mergeLinearTeamPages(
+  current: LinearTeamSummary[],
+  incoming: LinearTeamSummary[],
+): LinearTeamSummary[] {
+  const seen = new Set(current.map((team) => team.id));
+  const next = [...current];
+  for (const team of incoming) {
+    if (seen.has(team.id)) continue;
+    seen.add(team.id);
+    next.push(team);
+  }
+  return next;
+}
+
+/** Paginates through all Linear teams with client cache + inflight dedup. */
+export async function fetchAllLinearTeams(options?: { force?: boolean }) {
   return cachedRequest(
     REQUEST_CACHE_KEYS.linearTeams,
-    () => request<{ teams: LinearTeamSummary[]; error?: string }>("/linear/teams"),
+    async () => {
+      let after: string | null = null;
+      let loaded: LinearTeamSummary[] = [];
+
+      for (;;) {
+        const page = await fetchLinearTeamsPage({
+          after: after ?? undefined,
+          first: 50,
+        });
+        if (page.error) {
+          return { teams: loaded, error: page.error };
+        }
+        loaded = mergeLinearTeamPages(loaded, page.teams);
+        if (!page.pageInfo.hasNextPage || !page.pageInfo.endCursor) break;
+        after = page.pageInfo.endCursor;
+      }
+
+      loaded.sort((left, right) => left.name.localeCompare(right.name));
+      return { teams: loaded };
+    },
+    { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
+  );
+}
+
+export async function fetchLinearTeams(options?: { force?: boolean }) {
+  return fetchAllLinearTeams(options);
+}
+
+export async function fetchLinearCustomersPage(options: {
+  query?: string;
+  after?: string | null;
+  first?: number;
+} = {}) {
+  const params = new URLSearchParams();
+  if (options.query?.trim()) params.set("q", options.query.trim());
+  if (options.after) params.set("after", options.after);
+  if (options.first != null) params.set("first", String(options.first));
+
+  const query = params.toString();
+  return request<{
+    customers: LinearCustomerSummary[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    error?: string;
+  }>(`/linear/customers${query ? `?${query}` : ""}`);
+}
+
+function mergeLinearCustomerPages(
+  current: LinearCustomerSummary[],
+  incoming: LinearCustomerSummary[],
+): LinearCustomerSummary[] {
+  const seen = new Set(current.map((customer) => customer.id));
+  const next = [...current];
+  for (const customer of incoming) {
+    if (seen.has(customer.id)) continue;
+    seen.add(customer.id);
+    next.push(customer);
+  }
+  return next;
+}
+
+/** Paginates through all Linear customers with client cache + inflight dedup. */
+export async function fetchAllLinearCustomers(options?: { force?: boolean; query?: string }) {
+  return cachedRequest(
+    options?.query?.trim()
+      ? `${REQUEST_CACHE_KEYS.linearCustomersAll}:${options.query.trim().toLocaleLowerCase()}`
+      : REQUEST_CACHE_KEYS.linearCustomersAll,
+    async () => {
+      let after: string | null = null;
+      let loaded: LinearCustomerSummary[] = [];
+
+      for (;;) {
+        const page = await fetchLinearCustomersPage({
+          query: options?.query,
+          after: after ?? undefined,
+          first: 50,
+        });
+        if (page.error) {
+          return { customers: loaded, error: page.error };
+        }
+        loaded = mergeLinearCustomerPages(loaded, page.customers);
+        if (!page.pageInfo.hasNextPage || !page.pageInfo.endCursor) break;
+        after = page.pageInfo.endCursor;
+      }
+
+      loaded.sort((left, right) => left.name.localeCompare(right.name));
+      return { customers: loaded };
+    },
     { ttlMs: DASHBOARD_CACHE_TTL_MS, force: options?.force },
   );
 }
@@ -848,6 +1052,22 @@ export async function fetchAllLinearProjects(options?: { force?: boolean }) {
   );
 }
 
+export type LinearProjectStatusSummary = {
+  id: string;
+  name: string;
+  type: string;
+  position?: number;
+  color?: string;
+};
+
+export async function fetchLinearProjectStatuses(options?: { force?: boolean }) {
+  return cachedRequest(
+    REQUEST_CACHE_KEYS.linearProjectStatuses,
+    () => request<{ statuses: LinearProjectStatusSummary[]; error?: string }>("/linear/project-statuses"),
+    { ttlMs: LINEAR_PROJECT_CACHE_TTL_MS, force: options?.force },
+  );
+}
+
 export async function searchLinearIssues(term: string, options: { limit?: number } = {}) {
   const params = new URLSearchParams();
   params.set("q", term.trim());
@@ -855,6 +1075,23 @@ export async function searchLinearIssues(term: string, options: { limit?: number
   const query = params.toString();
   return request<{ issues: LinearIssueEntity[]; error?: string }>(
     `/linear/issues/search?${query}`,
+  );
+}
+
+export type LinearSearchDocumentEntity = {
+  id: string;
+  title: string;
+  projectId?: string;
+  projectName?: string;
+};
+
+export async function searchLinearDocuments(term: string, options: { limit?: number } = {}) {
+  const params = new URLSearchParams();
+  params.set("q", term.trim());
+  if (options.limit != null) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return request<{ documents: LinearSearchDocumentEntity[]; error?: string }>(
+    `/linear/documents/search?${query}`,
   );
 }
 
@@ -875,6 +1112,19 @@ export async function fetchVaultSearchIndex(options?: { force?: boolean }) {
 export async function fetchLinearProjectById(projectId: string) {
   return request<{ project: LinearProjectSummary }>(
     `/linear/projects/${encodeURIComponent(projectId)}`,
+  );
+}
+
+export type LinearProjectContextSummary = {
+  projectId: string;
+  projectName: string;
+  teamId: string;
+  teamName: string | null;
+};
+
+export async function fetchLinearProjectContext(projectId: string) {
+  return request<{ context: LinearProjectContextSummary | null; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/context`,
   );
 }
 
@@ -923,7 +1173,7 @@ export async function fetchLinearProjectIssues(projectId: string, options?: { fo
     () =>
       request<{
         issues: LinearIssueEntity[];
-        workflowStates: { id: string; name: string; type: string; color?: string }[];
+        workflowStates: { id: string; name: string; type: string; color?: string; position?: number }[];
         error?: string;
       }>(`/linear/projects/${encodeURIComponent(projectId)}/issues`),
     { ttlMs: LINEAR_ISSUES_CACHE_TTL_MS, force: options?.force },
@@ -985,11 +1235,13 @@ export type LinearIssueDetail = {
   dueDate: string | null;
   estimate: number | null;
   branchName: string | null;
+  teamId: string | null;
+  teamName: string | null;
   projectId: string | null;
   projectName: string | null;
   labels: { id: string; name: string; color: string }[];
   availableLabels: { id: string; name: string; color: string }[];
-  workflowStates: { id: string; name: string; type: string }[];
+  workflowStates: { id: string; name: string; type: string; color?: string; position?: number }[];
   teamMembers: {
     id: string;
     name: string;
@@ -1009,6 +1261,26 @@ export async function fetchLinearIssueDetail(issueId: string) {
   );
 }
 
+export type LinearIssueSubIssue = {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+};
+
+export type LinearIssueLinkedCustomer = {
+  id: string;
+  name: string;
+};
+
+export async function fetchLinearIssueSubIssues(issueId: string) {
+  return request<{
+    subIssues: LinearIssueSubIssue[];
+    linkedCustomers: LinearIssueLinkedCustomer[];
+    error?: string;
+  }>(`/linear/issues/${encodeURIComponent(issueId)}/sub-issues`);
+}
+
 export type LinearIssueDetailUpdates = {
   stateId?: string;
   priority?: number;
@@ -1018,6 +1290,8 @@ export type LinearIssueDetailUpdates = {
   title?: string;
   assigneeId?: string | null;
   dueDate?: string | null;
+  teamId?: string;
+  projectId?: string | null;
 };
 
 export async function updateLinearIssueDetail(issueId: string, updates: LinearIssueDetailUpdates) {
@@ -1026,6 +1300,39 @@ export async function updateLinearIssueDetail(issueId: string, updates: LinearIs
     {
       method: "PATCH",
       body: JSON.stringify(updates),
+    },
+  );
+}
+
+export type ConvertInboxIssueToProjectTaskResult = {
+  sourceIssue: {
+    id: string;
+    identifier: string;
+    url: string;
+  };
+  newIssue: {
+    id: string;
+    identifier: string;
+    url: string;
+    projectId: string;
+    projectName: string;
+  };
+  error?: string;
+};
+
+export async function convertInboxIssueToProjectTask(
+  issueId: string,
+  options: {
+    projectId: string;
+    title?: string;
+    description?: string | null;
+  },
+) {
+  return request<ConvertInboxIssueToProjectTaskResult>(
+    `/linear/issues/${encodeURIComponent(issueId)}/convert-to-project-task`,
+    {
+      method: "POST",
+      body: JSON.stringify(options),
     },
   );
 }
@@ -1109,6 +1416,15 @@ export async function deleteLinearIssueCommentThread(issueId: string, threadId: 
   );
 }
 
+export async function deleteLinearIssue(issueId: string) {
+  return request<{ success: boolean; error?: string }>(
+    `/linear/issues/${encodeURIComponent(issueId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export async function fetchLinearProjectDocuments(projectId: string) {
   return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/documents`,
@@ -1121,10 +1437,264 @@ export async function fetchLinearTeamDocuments(teamId: string) {
   );
 }
 
+export async function fetchLinearMeetingDocuments() {
+  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+    "/linear/documents/meetings",
+  );
+}
+
+export async function fetchLinearProjectMeetingDocuments(projectId: string) {
+  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/documents/meetings`,
+  );
+}
+
+export async function fetchLinearWorkspaceDocuments() {
+  return request<{ documents: ProjectDocumentEntity[]; error?: string }>(
+    "/linear/documents/workspace",
+  );
+}
+
+export async function createLinearTeamDocument(teamId: string, options?: { title?: string }) {
+  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/documents`,
+    {
+      method: "POST",
+      body: JSON.stringify(options ?? {}),
+    },
+  );
+}
+
+export async function createLinearTeamMeetingDocument(teamId: string) {
+  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/documents`,
+    {
+      method: "POST",
+      body: JSON.stringify({ meeting: true }),
+    },
+  );
+}
+
+export type WorkoutMilestoneEntity = {
+  id: string;
+  name: string;
+  targetDate: string | null;
+  projectId: string;
+};
+
+export async function fetchLinearWorkoutMilestones(teamId: string) {
+  return request<{ milestones: WorkoutMilestoneEntity[]; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/workout-milestones`,
+  );
+}
+
+export async function createLinearWorkoutMilestone(teamId: string, date: string) {
+  return request<{ milestone: WorkoutMilestoneEntity | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/workout-milestones`,
+    {
+      method: "POST",
+      body: JSON.stringify({ date }),
+    },
+  );
+}
+
+export type WorkoutRepEntity = {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  reps: number | null;
+  labels: { id: string; name: string; color: string }[];
+};
+
+export type WorkoutGroupSetEntity = {
+  id: string;
+  identifier: string;
+  title: string;
+  dueDate: string | null;
+  status: string;
+  stateId: string | null;
+  stateType?: string;
+  statusColor?: string;
+  exercise: string | null;
+  reps: WorkoutRepEntity[];
+  createdAt: string | null;
+};
+
+export type WorkoutSessionEntity = {
+  date: string;
+  projectId: string;
+  milestoneId: string;
+  groupSets: WorkoutGroupSetEntity[];
+};
+
+export async function fetchLinearWorkoutSession(teamId: string, date: string) {
+  return request<{ session: WorkoutSessionEntity | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/workout-sessions/${encodeURIComponent(date)}`,
+  );
+}
+
+export async function createLinearWorkoutGroupSet(teamId: string, date: string, exercise: string) {
+  return request<{ groupSet: WorkoutGroupSetEntity | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/workout-sessions/${encodeURIComponent(date)}/group-sets`,
+    {
+      method: "POST",
+      body: JSON.stringify({ exercise }),
+    },
+  );
+}
+
+export async function appendLinearWorkoutRep(
+  teamId: string,
+  date: string,
+  input: {
+    exercise?: string;
+    groupSetId?: string | null;
+    blankWeight?: boolean;
+  },
+) {
+  return request<{
+    groupSet: WorkoutGroupSetEntity | null;
+    rep: WorkoutRepEntity | null;
+    error?: string;
+  }>(`/linear/teams/${encodeURIComponent(teamId)}/workout-sessions/${encodeURIComponent(date)}/reps`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchLinearTeamIssues(
+  teamId: string,
+  options?: { excludeSubIssues?: boolean },
+) {
+  const query = options?.excludeSubIssues ? "?rootOnly=1" : "";
+  return request<{
+    issues: LinearIssueEntity[];
+    workflowStates: { id: string; name: string; type: string; color?: string; position?: number }[];
+    error?: string;
+  }>(`/linear/teams/${encodeURIComponent(teamId)}/issues${query}`);
+}
+
+export async function createLinearTeamIssue(teamId: string, options?: { title?: string }) {
+  return request<{ issue: LinearIssueEntity | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/issues`,
+    {
+      method: "POST",
+      body: JSON.stringify(options ?? {}),
+    },
+  );
+}
+
+export async function uploadLinearTeamLetter(
+  teamId: string,
+  file: File,
+  options?: { displayTitle?: string; issueUpdates?: LinearIssueDetailUpdates },
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (options?.displayTitle?.trim() || options?.issueUpdates) {
+    formData.append(
+      "metadata",
+      JSON.stringify({
+        displayTitle: options.displayTitle?.trim() || undefined,
+        issueUpdates: options.issueUpdates,
+      }),
+    );
+  }
+
+  const headers: Record<string, string> = {};
+  if (connection.token) {
+    headers.Authorization = `Bearer ${connection.token}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${connection.baseUrl}/linear/teams/${encodeURIComponent(teamId)}/letters/upload`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: formData,
+      },
+      120_000,
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "timed out"
+        : error instanceof Error
+          ? error.message
+          : "failed";
+    throw new Error(`Cannot reach agent server at ${connection.baseUrl}: ${message}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  const text = await response.text();
+  if (!text) {
+    throw new Error("Empty response from agent server");
+  }
+
+  try {
+    return JSON.parse(text) as {
+      issue: LinearIssueEntity | null;
+      document: ProjectDocumentEntity | null;
+      assetUrl?: string;
+      content?: string;
+      error?: string;
+    };
+  } catch {
+    throw new Error("Invalid response from agent server");
+  }
+}
+
+export type LinearTeamProjectSummary = {
+  id: string;
+  name: string;
+};
+
+export async function fetchLinearTeamProjects(teamId: string) {
+  return request<{ projects: LinearTeamProjectSummary[]; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/projects`,
+  );
+}
+
+export async function fetchLinearTeamLabels(teamId: string, options?: { group?: string }) {
+  const group = options?.group?.trim();
+  const query = group ? `?group=${encodeURIComponent(group)}` : "";
+  return request<{
+    labels: { id: string; name: string; color: string }[];
+    error?: string;
+  }>(`/linear/teams/${encodeURIComponent(teamId)}/labels${query}`);
+}
+
+export async function createLinearTeamProject(teamId: string, name?: string) {
+  return request<{ project: LinearTeamProjectSummary | null; error?: string }>(
+    `/linear/teams/${encodeURIComponent(teamId)}/projects`,
+    {
+      method: "POST",
+      body: JSON.stringify(name?.trim() ? { name: name.trim() } : {}),
+    },
+  );
+}
+
 export async function createLinearProjectDocument(projectId: string) {
   return request<{ document: ProjectDocumentEntity | null; error?: string }>(
     `/linear/projects/${encodeURIComponent(projectId)}/documents`,
     { method: "POST" },
+  );
+}
+
+export async function createLinearProjectMeetingDocument(projectId: string) {
+  return request<{ document: ProjectDocumentEntity | null; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/documents`,
+    {
+      method: "POST",
+      body: JSON.stringify({ meeting: true }),
+    },
   );
 }
 
@@ -1134,8 +1704,13 @@ export type LinearDocumentContent = {
   content: string;
   createdAt: string;
   updatedAt: string;
+  url?: string;
+  teamId?: string;
+  teamName?: string;
   projectId?: string;
   projectName?: string;
+  linkedIssueId?: string;
+  linkedIssueIdentifier?: string;
 };
 
 export async function fetchLinearDocument(documentId: string) {
@@ -1146,7 +1721,14 @@ export async function fetchLinearDocument(documentId: string) {
 
 export async function updateLinearDocument(
   documentId: string,
-  updates: { title?: string; content?: string; body?: string },
+  updates: {
+    title?: string;
+    content?: string;
+    body?: string;
+    projectId?: string | null;
+    teamId?: string;
+    issueId?: string | null;
+  },
 ) {
   return request<{ document: LinearDocumentContent | null; error?: string }>(
     `/linear/documents/${encodeURIComponent(documentId)}`,
@@ -1172,6 +1754,43 @@ export type CursorModelSummary = {
 
 export async function fetchCursorModels() {
   return request<{ models: CursorModelSummary[] }>("/integrations/cursor/models");
+}
+
+export async function getAccountWorkspace() {
+  return request<AccountWorkspaceResponse>("/accounts/workspace");
+}
+
+export async function updateAccountWorkspace(updates: {
+  inboxLinearTeamId?: string | null;
+  dailyLinearTeamId?: string | null;
+  workoutsLinearTeamId?: string | null;
+  lettersLinearTeamId?: string | null;
+  knowledgeBaseLinearTeamId?: string | null;
+  addressbookLinearTeamId?: string | null;
+  setupCompletedAt?: string | null;
+  markSetupComplete?: boolean;
+}) {
+  return request<AccountWorkspaceResponse>("/accounts/workspace", {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteAccount() {
+  return request<DeleteAccountResponse>("/accounts/workspace", {
+    method: "DELETE",
+  });
+}
+
+export async function listAdminUserAccounts() {
+  return request<AdminUserAccountsResponse>("/accounts/admin/users");
+}
+
+export async function deleteAdminUserAccount(linearUserId: string) {
+  return request<{ linearUserId: string; deleted: boolean }>(
+    `/accounts/admin/users/${encodeURIComponent(linearUserId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function updateSettings(updates: {
@@ -1344,6 +1963,41 @@ export function eventsUrl(sessionId: string, runId: string) {
   return `${connection.baseUrl}/sessions/${encodeURIComponent(sessionId)}/events?runId=${encodeURIComponent(runId)}`;
 }
 
-export function getAuthHeader() {
-  return `Bearer ${connection.token}`;
+export function getAuthHeader(): string {
+  return connection.token ? `Bearer ${connection.token}` : "";
+}
+
+export async function fetchDocumentPdfBlob(sourceUrl: string): Promise<Blob> {
+  const path = `/pdf/proxy?url=${encodeURIComponent(sourceUrl)}`;
+  const headers: Record<string, string> = {};
+  if (connection.token) {
+    headers.Authorization = `Bearer ${connection.token}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${connection.baseUrl}${path}`,
+      {
+        credentials: "include",
+        headers,
+      },
+      60_000,
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "timed out"
+        : error instanceof Error
+          ? error.message
+          : "failed";
+    throw new Error(`Cannot reach agent server at ${connection.baseUrl}: ${message}`);
+  }
+
+  if (!response.ok) {
+    const errorMessage = await readErrorMessage(response);
+    throw new Error(errorMessage);
+  }
+
+  return response.blob();
 }

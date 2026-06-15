@@ -1,6 +1,6 @@
-import { SETTINGS_TABS } from "../settings/settingsTabs";
+import { getVisibleSettingsTabs } from "../settings/settingsTabs";
 import { SETTINGS_LEADER_SHORTCUT } from "../shortcuts/navigationShortcutBindings";
-import { SIDEBAR_PRIMARY_ITEMS, SIDEBAR_SECTIONS } from "../app/sidebarNavConfig";
+import { getSidebarPrimaryItems, getSidebarSections, type LinearSidebarTeamConfig } from "../app/sidebarNavConfig";
 import { navigationShortcutHint } from "../shortcuts/navigationShortcutBindings";
 import type { CommandPaletteItem } from "./types";
 
@@ -8,17 +8,24 @@ function matchesQuery(value: string, query: string): boolean {
   return value.toLocaleLowerCase().includes(query);
 }
 
-export function buildNavigationCommandItems(query: string): CommandPaletteItem[] {
+export function buildNavigationCommandItems(
+  query: string,
+  options?: { isAdministrator?: boolean; linearSidebarTeamConfig?: LinearSidebarTeamConfig },
+): CommandPaletteItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    return [];
+  }
+
   const items: CommandPaletteItem[] = [];
 
   const navDefinitions = [
-    ...SIDEBAR_PRIMARY_ITEMS,
-    ...SIDEBAR_SECTIONS.flatMap((section) => section.items),
+    ...getSidebarPrimaryItems(options?.linearSidebarTeamConfig),
+    ...getSidebarSections(options?.linearSidebarTeamConfig).flatMap((section) => section.items),
   ];
 
   for (const navItem of navDefinitions) {
-    if (normalizedQuery && !matchesQuery(navItem.label, normalizedQuery)) {
+    if (!matchesQuery(navItem.label, normalizedQuery)) {
       continue;
     }
     items.push({
@@ -26,13 +33,13 @@ export function buildNavigationCommandItems(query: string): CommandPaletteItem[]
       id: `nav-${navItem.id}`,
       section: "Navigate",
       label: navItem.label,
-      subtitle: navigationShortcutHint(navItem.id) ?? "Open area",
+      subtitle:
+        navigationShortcutHint(navItem.id, options?.linearSidebarTeamConfig) ?? "Open area",
       navItemId: navItem.id,
     });
   }
 
-  for (const settingsTab of SETTINGS_TABS) {
-    if (!normalizedQuery) continue;
+  for (const settingsTab of getVisibleSettingsTabs({ isAdministrator: options?.isAdministrator })) {
     const haystack = `${settingsTab.label} ${settingsTab.description}`;
     if (!matchesQuery(haystack, normalizedQuery)) {
       continue;
@@ -47,7 +54,7 @@ export function buildNavigationCommandItems(query: string): CommandPaletteItem[]
     });
   }
 
-  if (!normalizedQuery || matchesQuery("settings", normalizedQuery)) {
+  if (matchesQuery("settings", normalizedQuery)) {
     items.unshift({
       kind: "settings",
       id: "settings-root",

@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { getLinearOAuthTokenPath } from "./config.ts";
 import {
   clearGoogleCalendarCredentials,
+  disconnectLinearOAuth,
   getIntegrationsStatus,
   importGoogleCalendarCredentials,
   parseOAuthCredentialsJson,
   saveGoogleCalendarOAuthCredentials,
+  saveLinearOAuthCredentials,
   secretPreview,
   updateIntegrationSecrets,
 } from "./integrations-secrets.ts";
@@ -21,7 +24,6 @@ describe("integrations-secrets", () => {
     dataDir = mkdtempSync(join(tmpdir(), "backster-integrations-"));
     process.env.BACKSTER_DATA_DIR = dataDir;
     delete process.env.CURSOR_API_KEY;
-    delete process.env.LINEAR_API_KEY;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_OAUTH_CREDENTIALS;
   });
@@ -44,14 +46,11 @@ describe("integrations-secrets", () => {
   test("updateIntegrationSecrets writes keys and reloads env", () => {
     const status = updateIntegrationSecrets({
       cursorApiKey: "cursor_saved_key",
-      linearApiKey: "lin_saved_key",
     });
 
     expect(status.cursorApiKey.configured).toBe(true);
     expect(status.cursorApiKey.preview).toBe("..._key");
-    expect(status.linearApiKey.configured).toBe(true);
     expect(process.env.CURSOR_API_KEY).toBe("cursor_saved_key");
-    expect(process.env.LINEAR_API_KEY).toBe("lin_saved_key");
   });
 
   test("updateIntegrationSecrets clears keys with empty string", () => {
@@ -133,5 +132,24 @@ describe("integrations-secrets", () => {
     expect(() => parseOAuthCredentialsJson({ foo: "bar" })).toThrow(
       "Invalid Google OAuth credentials file format",
     );
+  });
+
+  test("disconnectLinearOAuth removes tokens but keeps OAuth credentials", async () => {
+    saveLinearOAuthCredentials({
+      clientId: "linear-client-id",
+      clientSecret: "linear-client-secret",
+    });
+
+    const tokenPath = getLinearOAuthTokenPath();
+    writeFileSync(tokenPath, `${JSON.stringify({ access_token: "linear-token" })}\n`, {
+      mode: 0o600,
+    });
+
+    expect(getIntegrationsStatus().linear.authenticated).toBe(true);
+
+    const status = await disconnectLinearOAuth();
+    expect(status.linear.authenticated).toBe(false);
+    expect(status.linear.credentialsConfigured).toBe(true);
+    expect(existsSync(tokenPath)).toBe(false);
   });
 });

@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLinearProjects } from "../hooks/useLinearProjects";
 import { useLinearTeams } from "../hooks/useLinearTeams";
-import { groupLinearProjectsByStatus } from "../lib/linearProjectGroups";
+import { useWorkspaceSetupTeamProjectIds } from "../hooks/useWorkspaceSetupTeamProjectIds";
+import { groupLinearProjectsByWorkflow } from "../lib/linearProjectGroups";
+import { excludeWorkspaceSetupTeamProjects, excludeWorkspaceSetupLinearTeams, workspaceSetupLinearTeamIdSet } from "../lib/workspaceSetupTeamIds";
 import {
   contentListGroupHeaderId,
   contentListItemDataAttributes,
@@ -12,6 +14,7 @@ import {
   useContentListNavigationRegistration,
 } from "../lib/contentListNavigationReact";
 import { useContentPanelNavigation, useContentPanelSidebarBreadcrumbs } from "./contentPanelNavigation";
+import type { LinearSidebarTeamConfig } from "./sidebarNavConfig";
 import {
   LinearWorkspaceViewToggle,
   type LinearWorkspaceView,
@@ -23,13 +26,24 @@ function matchesSearch(value: string, query: string) {
 
 const LINEAR_PROJECT_GROUP_HEADER_PREFIX = "linear-project-group";
 
-export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
+export function LinearWorkspacePanel({
+  enabled,
+  workspaceTeamConfig = {},
+}: {
+  enabled: boolean;
+  workspaceTeamConfig?: LinearSidebarTeamConfig;
+}) {
   const { linearSelection, setLinearSelection } = useContentPanelNavigation();
   const [view, setView] = useState<LinearWorkspaceView>("teams");
   const [search, setSearch] = useState("");
   const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(() => new Set());
   const teamsQuery = useLinearTeams(enabled && view === "teams");
   const projectsQuery = useLinearProjects(enabled && view === "projects");
+  const {
+    excludedProjectIds,
+    loading: workspaceExclusionsLoading,
+    error: workspaceExclusionsError,
+  } = useWorkspaceSetupTeamProjectIds(workspaceTeamConfig, enabled && view === "projects");
   const normalizedSearch = search.trim().toLowerCase();
   const keyboardFocusedId = useContentListKeyboardFocusedId();
   const keyboardNavActive = useContentListKeyboardNavActive();
@@ -47,27 +61,42 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
     enabled,
   );
 
+  const excludedTeamIds = useMemo(
+    () => workspaceSetupLinearTeamIdSet(workspaceTeamConfig),
+    [workspaceTeamConfig],
+  );
+
+  const browseTeams = useMemo(
+    () => excludeWorkspaceSetupLinearTeams(teamsQuery.teams, excludedTeamIds),
+    [excludedTeamIds, teamsQuery.teams],
+  );
+
   const filteredTeams = useMemo(() => {
-    if (!normalizedSearch) return teamsQuery.teams;
-    return teamsQuery.teams.filter(
+    if (!normalizedSearch) return browseTeams;
+    return browseTeams.filter(
       (team) =>
         matchesSearch(team.name, normalizedSearch) || matchesSearch(team.key, normalizedSearch),
     );
-  }, [normalizedSearch, teamsQuery.teams]);
+  }, [browseTeams, normalizedSearch]);
+
+  const browseProjects = useMemo(
+    () => excludeWorkspaceSetupTeamProjects(projectsQuery.projects, excludedProjectIds),
+    [excludedProjectIds, projectsQuery.projects],
+  );
 
   const filteredProjects = useMemo(() => {
-    if (!normalizedSearch) return projectsQuery.projects;
-    return projectsQuery.projects.filter(
+    if (!normalizedSearch) return browseProjects;
+    return browseProjects.filter(
       (project) =>
         matchesSearch(project.name, normalizedSearch) ||
         (project.status?.name ? matchesSearch(project.status.name, normalizedSearch) : false) ||
         (project.slugId ? matchesSearch(project.slugId, normalizedSearch) : false),
     );
-  }, [normalizedSearch, projectsQuery.projects]);
+  }, [browseProjects, normalizedSearch]);
 
   const groupedProjects = useMemo(
-    () => groupLinearProjectsByStatus(filteredProjects),
-    [filteredProjects],
+    () => groupLinearProjectsByWorkflow(filteredProjects, projectsQuery.projectStatuses),
+    [filteredProjects, projectsQuery.projectStatuses],
   );
 
   const toggleProjectGroup = useCallback((groupKey: string) => {
@@ -213,15 +242,15 @@ export function LinearWorkspacePanel({ enabled }: { enabled: boolean }) {
           </>
         ) : (
           <>
-            {projectsQuery.loading ? (
+            {projectsQuery.loading || workspaceExclusionsLoading ? (
               <p className="vault-folder-explorer-status">Loading projects…</p>
             ) : null}
-            {projectsQuery.error ? (
+            {projectsQuery.error || workspaceExclusionsError ? (
               <p className="vault-folder-explorer-status vault-folder-explorer-status-error">
-                {projectsQuery.error}
+                {projectsQuery.error ?? workspaceExclusionsError}
               </p>
             ) : null}
-            {!projectsQuery.loading && !projectsQuery.error ? (
+            {!projectsQuery.loading && !workspaceExclusionsLoading && !projectsQuery.error && !workspaceExclusionsError ? (
               groupedProjects.length > 0 ? (
                 <div className="linear-project-groups" aria-label="Linear projects">
                   {groupedProjects.map((group) => {

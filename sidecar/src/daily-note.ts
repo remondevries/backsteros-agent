@@ -53,6 +53,14 @@ export function getDailyNoteRelativePath(dateIso: string): string {
   return `${DAILY_NOTE_FOLDER}/${dateIso}.md`;
 }
 
+const DAILY_JOURNAL_TITLE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Linear daily journal documents use a YYYY-MM-DD title. */
+export function isDailyJournalDocumentTitle(title: string | null | undefined): boolean {
+  if (!title) return false;
+  return DAILY_JOURNAL_TITLE_PATTERN.test(title.trim());
+}
+
 export interface TodayDailyNoteInfo {
   timezone: string;
   date: string;

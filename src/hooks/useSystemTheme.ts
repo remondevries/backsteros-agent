@@ -1,8 +1,11 @@
 import { useEffect } from "react";
 import { splashBackgroundForTheme } from "../lib/splashBackground";
+import { isTauriRuntime } from "../platform/runtime";
 
 export function useSystemTheme() {
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     let unlisten: (() => void) | undefined;
 
     void import("@tauri-apps/api/window")

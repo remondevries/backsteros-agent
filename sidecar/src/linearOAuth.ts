@@ -1,14 +1,22 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
-  getLinearOAuthCredentialsPath,
+  appendAppReturnQuery,
+  getCursorApiKey,
+  getLinearOAuthClientCredentials,
   getLinearOAuthTokenPath,
   isLinearOAuthAuthenticated,
   isLinearOAuthConfigured,
+  resolveAppReturnUrl,
 } from "./config.ts";
+import { buildOAuthCallbackPageHtml } from "./oauthCallbackPage.ts";
+import {
+  CONNECT_GATE_PROGRESS_INCOMPLETE,
+  connectGateProgressAfterLinearOAuth,
+} from "./connectGateProgressConfig.ts";
 
 interface OAuthCredentials {
   client_id: string;
@@ -20,6 +28,7 @@ interface PendingAuthFlow {
   state: string;
   redirectUri: string;
   port: number;
+  appReturnUrl: string;
 }
 
 const LINEAR_OAUTH_PORT = 3510;
@@ -51,21 +60,7 @@ function createCodeChallenge(codeVerifier: string): string {
 }
 
 async function loadOAuthCredentials(): Promise<OAuthCredentials> {
-  const credentialsPath = getLinearOAuthCredentialsPath();
-  if (!credentialsPath) {
-    throw new Error("Linear OAuth credentials path is missing");
-  }
-
-  const keys = JSON.parse(await readFile(credentialsPath, "utf8")) as Record<string, unknown>;
-
-  if (keys.client_id && keys.client_secret) {
-    return {
-      client_id: String(keys.client_id),
-      client_secret: String(keys.client_secret),
-    };
-  }
-
-  throw new Error("Invalid Linear OAuth credentials file format");
+  return getLinearOAuthClientCredentials();
 }
 
 async function saveTokens(tokens: Record<string, unknown>) {
@@ -117,6 +112,7 @@ async function findAvailablePort(): Promise<number> {
     `No available port found for Linear OAuth (${PORT_RANGE.start}-${PORT_RANGE.end})`,
   );
 }
+
 
 function sendHtml(res: import("node:http").ServerResponse, status: number, body: string) {
   res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
@@ -174,7 +170,9 @@ async function exchangeAuthorizationCode(input: {
   return payload;
 }
 
-export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUrl: string }> {
+export async function startLinearOAuthAuth(options?: {
+  appReturnUrl?: string;
+}): Promise<{ authUrl: string; localUrl: string }> {
   if (!isLinearOAuthConfigured()) {
     throw new Error("Linear OAuth credentials are not configured");
   }
@@ -187,8 +185,9 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
   const codeVerifier = createCodeVerifier();
   const codeChallenge = createCodeChallenge(codeVerifier);
   const state = randomBytes(32).toString("hex");
+  const appReturnUrl = resolveAppReturnUrl(options?.appReturnUrl);
 
-  pendingAuth = { codeVerifier, state, redirectUri, port };
+  pendingAuth = { codeVerifier, state, redirectUri, port, appReturnUrl };
 
   const authUrl = new URL(LINEAR_AUTHORIZE_URL);
   authUrl.searchParams.set("response_type", "code");
@@ -204,7 +203,16 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
       const requestUrl = new URL(req.url ?? "/", `http://localhost:${port}`);
 
       if (requestUrl.pathname !== LINEAR_OAUTH_CALLBACK_PATH) {
-        sendHtml(res, 404, "<html><body><p>Not found</p></body></html>");
+        sendHtml(
+          res,
+          404,
+          buildOAuthCallbackPageHtml({
+            title: "Not found",
+            message: "This page does not exist.",
+            variant: "error",
+            connectProgress: CONNECT_GATE_PROGRESS_INCOMPLETE,
+          }),
+        );
         return;
       }
 
@@ -213,7 +221,16 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
       const flow = pendingAuth;
 
       if (!code) {
-        sendHtml(res, 400, "<html><body><p>Authorization code missing.</p></body></html>");
+        sendHtml(
+          res,
+          400,
+          buildOAuthCallbackPageHtml({
+            title: "Sign-in incomplete",
+            message: "Authorization code missing. Return to BacksterOS and try again.",
+            variant: "error",
+            connectProgress: CONNECT_GATE_PROGRESS_INCOMPLETE,
+          }),
+        );
         return;
       }
 
@@ -221,7 +238,13 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
         sendHtml(
           res,
           403,
-          "<html><body><p>This sign-in link expired. Return to BacksterOS Agent and click Connect Linear again.</p></body></html>",
+          buildOAuthCallbackPageHtml({
+            title: "Sign-in expired",
+            message:
+              "This sign-in link expired. Return to BacksterOS and click Connect with Linear again.",
+            variant: "error",
+            connectProgress: CONNECT_GATE_PROGRESS_INCOMPLETE,
+          }),
         );
         return;
       }
@@ -235,10 +258,28 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
 
       await saveTokens(tokens);
 
+      const hasCursorApiKey = Boolean(getCursorApiKey()?.trim());
+      const appReturnBase = resolveAppReturnUrl(flow.appReturnUrl);
+      const successDashboardUrl = hasCursorApiKey
+        ? appendAppReturnQuery(appReturnBase, { connect: "setup" })
+        : appendAppReturnQuery(appReturnBase, { connect: "cursor" });
+
       sendHtml(
         res,
         200,
-        "<html><body><h1>Linear connected</h1><p>You can close this tab and return to BacksterOS Agent.</p></body></html>",
+        buildOAuthCallbackPageHtml({
+          title: "Connected successfully",
+          message: hasCursorApiKey
+            ? "Thank you for connecting. You're all set to use BacksterOS."
+            : "You're connected to Linear. Continue below to set up Cursor Agent.",
+          variant: "success",
+          appReturnUrl: flow.appReturnUrl,
+          successDashboardUrl,
+          successDashboardLabel: hasCursorApiKey
+            ? "Go to setup"
+            : "Next step",
+          connectProgress: connectGateProgressAfterLinearOAuth(hasCursorApiKey),
+        }),
       );
 
       await stopLinearOAuthAuth();
@@ -247,7 +288,12 @@ export async function startLinearOAuthAuth(): Promise<{ authUrl: string; localUr
       sendHtml(
         res,
         500,
-        `<html><body><h1>Authentication failed</h1><p>${message}</p></body></html>`,
+        buildOAuthCallbackPageHtml({
+          title: "Authentication failed",
+          message,
+          variant: "error",
+          connectProgress: LINEAR_CONNECT_PROGRESS_INCOMPLETE,
+        }),
       );
       await stopLinearOAuthAuth();
     }

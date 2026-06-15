@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { isTauriRuntime } from "../../../platform/runtime";
 
 type AgentSignal = {
   id: number;
@@ -222,10 +222,12 @@ export function ensureAgentActivityListener(
   exited: (ptyId: number) => void,
 ): void {
   onExited = exited;
-  if (bound || typeof window === "undefined") return;
+  if (bound || typeof window === "undefined" || !isTauriRuntime()) return;
   bound = true;
-  void listen<AgentSignal>("backsteros:agent-signal", (e) => {
-    ingestSignal(e.payload);
+  void import("@tauri-apps/api/event").then(({ listen }) => {
+    void listen<AgentSignal>("backsteros:agent-signal", (e) => {
+      ingestSignal(e.payload);
+    });
   });
 }
 

@@ -1,6 +1,7 @@
 import type { ContentPanelBreadcrumbSegment } from "./contentPanelNavigation";
 import { useContentPanelChrome } from "./contentPanelChromeContext";
 import { ContentPanelBreadcrumb } from "./ContentPanelBreadcrumb";
+import { DocumentBreadcrumbMenu } from "./DocumentBreadcrumbMenu";
 import { WatcherPollProgressRing } from "./project-issues/WatcherPollProgressRing";
 import { LinearIssueViewModeToggle } from "./project-issues/LinearIssueViewModeToggle";
 
@@ -9,12 +10,23 @@ export function ContentPanelBreadcrumbBar({
 }: {
   segments: ContentPanelBreadcrumbSegment[];
 }) {
-  const { issuesWatcherAction, issueViewModeAction } = useContentPanelChrome();
+  const {
+    issuesWatcherAction,
+    issueViewModeAction,
+    documentDeleteAction,
+    projectsBrowseSearchAction,
+  } = useContentPanelChrome();
+
+  const showActions =
+    issuesWatcherAction ||
+    issueViewModeAction ||
+    documentDeleteAction ||
+    projectsBrowseSearchAction;
 
   return (
     <header className="content-panel-breadcrumb-bar">
       <ContentPanelBreadcrumb segments={segments} />
-      {issuesWatcherAction || issueViewModeAction ? (
+      {showActions ? (
         <div className="content-panel-breadcrumb-actions">
           {issueViewModeAction ? (
             <LinearIssueViewModeToggle
@@ -50,6 +62,27 @@ export function ContentPanelBreadcrumbBar({
                 autoAssignActive={issuesWatcherAction.autoAssignActive}
               />
             </button>
+          ) : null}
+          {documentDeleteAction ? (
+            <DocumentBreadcrumbMenu action={documentDeleteAction} />
+          ) : null}
+          {projectsBrowseSearchAction ? (
+            <label className="content-panel-breadcrumb-search-field">
+              <span className="sidebar-explorer-search-label">
+                {projectsBrowseSearchAction.ariaLabel}
+              </span>
+              <input
+                type="search"
+                className="content-panel-breadcrumb-search-input"
+                value={projectsBrowseSearchAction.value}
+                onChange={(event) => projectsBrowseSearchAction.onChange(event.target.value)}
+                placeholder={projectsBrowseSearchAction.placeholder}
+                aria-label={projectsBrowseSearchAction.ariaLabel}
+                disabled={projectsBrowseSearchAction.disabled}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
           ) : null}
         </div>
       ) : null}

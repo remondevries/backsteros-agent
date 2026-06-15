@@ -11,11 +11,13 @@ type RightPanelSession = {
 
 export function RightSidePanel({
   chatEnabled,
+  chatBlockedMessage = null,
   session,
   sessionLoading,
   onSaveSessionState,
 }: {
   chatEnabled: boolean;
+  chatBlockedMessage?: string | null;
   session: RightPanelSession | null;
   sessionLoading: boolean;
   onSaveSessionState: (
@@ -24,10 +26,13 @@ export function RightSidePanel({
     runs: Record<string, RunViewModel>,
   ) => void;
 }) {
-  const { status: integrationsStatus } = useIntegrationsStatus(chatEnabled);
+  const integrationsActive = chatEnabled && !chatBlockedMessage;
+  const { status: integrationsStatus } = useIntegrationsStatus(integrationsActive);
   let body: ReactNode;
 
-  if (!chatEnabled) {
+  if (chatBlockedMessage) {
+    body = <p className="right-side-panel-empty">{chatBlockedMessage}</p>;
+  } else if (!chatEnabled) {
     body = (
       <p className="right-side-panel-empty">
         Configure your vault in Settings to use the assistant panel.

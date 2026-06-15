@@ -17,7 +17,10 @@ describe("linearProjectViewShortcutBindings", () => {
   test("maps digit keys to team views", () => {
     expect(getLinearWorkspaceViewForShortcutDigit("team", "1")).toBe("overview");
     expect(getLinearWorkspaceViewForShortcutDigit("team", "2")).toBe("projects");
-    expect(getLinearWorkspaceViewForShortcutDigit("team", "6")).toBe("activities");
+    expect(getLinearWorkspaceViewForShortcutDigit("team", "3")).toBe("meetings");
+    expect(getLinearWorkspaceViewForShortcutDigit("team", "4")).toBe("letters");
+    expect(getLinearWorkspaceViewForShortcutDigit("team", "5")).toBe("documents");
+    expect(getLinearWorkspaceViewForShortcutDigit("team", "6")).toBe("issues");
   });
 
   test("ignores unsupported digits", () => {

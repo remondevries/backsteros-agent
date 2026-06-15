@@ -23,7 +23,8 @@ export type LinearIssueListPatch = Partial<
 
 export type LinearIssueListChange =
   | { type: "update"; issueId: string; patch: LinearIssueListPatch }
-  | { type: "remove"; issueId: string };
+  | { type: "remove"; issueId: string }
+  | { type: "refresh" };
 
 type LinearIssueListChangeListener = (change: LinearIssueListChange) => void;
 

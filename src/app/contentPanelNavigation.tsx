@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { onLinearIssueDetailRefreshRequested } from "../lib/linearIssueDetailRefreshEvents";
+import { isInboxDraftIssueId } from "../lib/inboxDraftIssue";
+import { isLetterComposeDraftDocumentId } from "../lib/letterComposeDraft";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { isLinearWorkspaceViewIdForKind, type LinearWorkspaceViewId } from "./linearProjectViews";
 import { ContentPanelChromeProvider, useContentPanelChrome } from "./contentPanelChromeContext";
@@ -73,15 +75,17 @@ function parsePersistedLinearIssue(value: unknown): ActiveLinearIssue | undefine
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Partial<ActiveLinearIssue>;
   const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
-  const identifier = typeof candidate.identifier === "string" ? candidate.identifier.trim() : "";
+  const identifier =
+    typeof candidate.identifier === "string" ? candidate.identifier.trim() : undefined;
   const title = typeof candidate.title === "string" ? candidate.title.trim() : "";
-  if (!id || !identifier || !title) return undefined;
+  if (!id || !title) return undefined;
   return {
     id,
-    identifier,
+    identifier: identifier || undefined,
     title,
     status: typeof candidate.status === "string" ? candidate.status : undefined,
     stateType: typeof candidate.stateType === "string" ? candidate.stateType : undefined,
+    projectName: typeof candidate.projectName === "string" ? candidate.projectName.trim() : undefined,
     sourceVaultDocumentPath:
       typeof candidate.sourceVaultDocumentPath === "string"
         ? candidate.sourceVaultDocumentPath
@@ -89,6 +93,14 @@ function parsePersistedLinearIssue(value: unknown): ActiveLinearIssue | undefine
     sourceVaultDocumentTitle:
       typeof candidate.sourceVaultDocumentTitle === "string"
         ? candidate.sourceVaultDocumentTitle
+        : undefined,
+    sourceLinearDocumentId:
+      typeof candidate.sourceLinearDocumentId === "string"
+        ? candidate.sourceLinearDocumentId
+        : undefined,
+    sourceLinearDocumentTitle:
+      typeof candidate.sourceLinearDocumentTitle === "string"
+        ? candidate.sourceLinearDocumentTitle
         : undefined,
   };
 }
@@ -172,12 +184,15 @@ export type ActiveVaultFolder = {
 
 export type ActiveLinearIssue = {
   id: string;
-  identifier: string;
+  identifier?: string;
   title: string;
   status?: string;
   stateType?: string;
+  projectName?: string;
   sourceVaultDocumentPath?: string;
   sourceVaultDocumentTitle?: string;
+  sourceLinearDocumentId?: string;
+  sourceLinearDocumentTitle?: string;
 };
 
 export type ActiveLinearDocument = {
@@ -211,6 +226,28 @@ export type IssueViewModeBreadcrumbAction = {
   terminalAgentWorking: boolean;
   terminalAgentWaiting: boolean;
 };
+
+export type DocumentDeleteBreadcrumbAction = {
+  deleting: boolean;
+  onDelete: () => void;
+};
+
+export type ProjectsBrowseSearchBreadcrumbAction = {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  disabled?: boolean;
+};
+
+export type ProjectDocumentsTabCreateAction = {
+  disabled: boolean;
+  label: string;
+  onCreate: () => void;
+};
+
+/** @deprecated Use ProjectDocumentsTabCreateAction */
+export type LinearWorkspaceTabCreateAction = ProjectDocumentsTabCreateAction;
 
 export type ContentPanelTabSnapshot = {
   sidebarSegments: ContentPanelBreadcrumbSegment[];
@@ -253,6 +290,10 @@ type ContentPanelNavigationContextValue = {
   linearIssueRefreshNonce: number;
   requestLinearIssueRefresh: () => void;
   resetProjectsOverview: () => void;
+  openLinearProjectDocument: (
+    document: ActiveLinearDocument,
+    selection: LinearWorkspaceSelection | null,
+  ) => void;
   focusResetNonce: number;
 };
 
@@ -439,11 +480,41 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
     clearChrome();
   }, [clearChrome]);
 
+  const openLinearProjectDocument = useCallback(
+    (document: ActiveLinearDocument, selection: LinearWorkspaceSelection | null) => {
+      const currentKey = linearSelection
+        ? `${linearSelection.kind}:${linearSelection.id}`
+        : null;
+      const nextKey = selection ? `${selection.kind}:${selection.id}` : null;
+      if (currentKey !== nextKey) {
+        skipSelectionResetRef.current = true;
+      }
+
+      if (selection) {
+        setLinearSelectionState(selection);
+        setLinearWorkspaceViewState("documents");
+      } else {
+        setLinearSelectionState(null);
+      }
+
+      setActiveLinearIssueState(null);
+      setActiveVaultDocumentState(null);
+      setActiveLinearDocumentState(document);
+    },
+    [linearSelection],
+  );
+
   useEffect(() => {
     writePersistedContentPanelState({
       linearSelection: linearSelection ?? undefined,
-      activeLinearIssue: activeLinearIssue ?? undefined,
-      activeLinearDocument: activeLinearDocument ?? undefined,
+      activeLinearIssue:
+        activeLinearIssue && !isInboxDraftIssueId(activeLinearIssue.id)
+          ? activeLinearIssue
+          : undefined,
+      activeLinearDocument:
+        activeLinearDocument && !isLetterComposeDraftDocumentId(activeLinearDocument.id)
+          ? activeLinearDocument
+          : undefined,
       linearWorkspaceView: linearWorkspaceView ?? undefined,
       issuesPanelMode,
       watchersPanelMode,
@@ -487,6 +558,7 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       linearIssueRefreshNonce,
       requestLinearIssueRefresh,
       resetProjectsOverview,
+      openLinearProjectDocument,
       focusResetNonce,
     }),
     [
@@ -505,6 +577,7 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
       watchersPanelMode,
       requestLinearIssueRefresh,
       resetProjectsOverview,
+      openLinearProjectDocument,
       restoreContentPanelTabSnapshot,
       setActiveLinearDocument,
       setActiveLinearIssue,
@@ -569,8 +642,14 @@ export function useContentPanelSidebarBreadcrumbs(
   const segmentsKey = useMemo(() => breadcrumbSegmentsKey(segments), [segments]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setSidebarSegments([]);
+      return;
+    }
     setSidebarSegments(segments);
+    return () => {
+      setSidebarSegments([]);
+    };
   }, [enabled, segments, segmentsKey, setSidebarSegments]);
 }
 

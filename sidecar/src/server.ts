@@ -2,8 +2,23 @@ import "./process-guard.ts";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { cors } from "hono/cors";
-import { bearerAuth } from "hono/bearer-auth";
+import { getCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
+import {
+  clearSessionCookie,
+  createBearerOrCookieAuth,
+  isAuthorizedRequest,
+  SESSION_COOKIE,
+  setSessionCookie,
+} from "./auth.ts";
+import {
+  getAllowedOrigins,
+  getSidecarHost,
+  ensureWorkspaceDir,
+  isDevelopmentAuthMode,
+  isVaultEnabled,
+} from "./config.ts";
+import { resolveDistDir, tryServeStatic } from "./static-spa.ts";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -27,12 +42,21 @@ import {
 } from "./approvals.ts";
 import { startGoogleCalendarAuth } from "./calendarAuth.ts";
 import { startLinearOAuthAuth } from "./linearAuth.ts";
-import { getLinearAuthToken } from "./linear/auth-token.ts";
+import { getLinearAuthToken, linearAuthorizationHeader } from "./linear/auth-token.ts";
+import { fetchLinearViewer } from "./linear/viewer.ts";
+import { viewerHasAdministratorAccess } from "./admin-access.ts";
+import {
+  deleteUserAccount,
+  getUserAccountFilePath,
+  listStoredUserAccounts,
+  loadUserAccountWorkspace,
+  saveUserAccountWorkspace,
+  userAccountFileExists,
+} from "./accounts.ts";
 import {
   getAgentProfilePath,
   getCursorApiKey,
   getGeminiApiKey,
-  getLinearApiKey,
   getNotesDirOverride,
   getSidecarPort,
   getSidecarToken,
@@ -79,10 +103,13 @@ import {
   peekPendingDeleteFile,
   respondToPendingDeleteFile,
 } from "./delete-file.ts";
-import { fetchLinearProjectById, fetchLinearProjectsPage } from "./linear/projects.ts";
+import { fetchLinearProjectById, fetchLinearProjectStatuses, fetchLinearProjectsPage } from "./linear/projects.ts";
+import { fetchLinearProjectContext } from "./linear/project-context.ts";
 import { searchLinearIssues } from "./linear/search.ts";
+import { searchLinearDocuments } from "./linear/search-documents.ts";
 import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
-import { fetchLinearProjectIssues } from "./linear/project-issues.ts";
+import { fetchLinearProjectIssues, fetchLinearTeamIssues, createLinearTeamIssue } from "./linear/project-issues.ts";
+import { createLinearLetterFromUpload } from "./linear/create-letter-from-upload.ts";
 import { fetchLinearIssuesByDueDates } from "./linear/issues-by-due-date.ts";
 import {
   getLinearProjectWatcherConfig,
@@ -93,16 +120,28 @@ import {
 } from "./linear/watcher-orchestrator.ts";
 import {
   createProjectDocument,
+  createProjectMeetingDocument,
+  createTeamDocument,
+  createTeamMeetingDocument,
   deleteLinearDocument,
   fetchLinearDocument,
   fetchLinearProjectDocuments,
+  fetchLinearProjectMeetingDocuments,
   fetchLinearTeamDocuments,
+  fetchLinearMeetingDocuments,
+  fetchLinearWorkspaceDocuments,
   updateLinearDocument,
 } from "./vault/project-documents.ts";
 import { createVaultDocument, readVaultDocument, updateVaultDocument } from "./vault/vault-document.ts";
 import { isDailyVaultNotePath } from "./vault/vault-whoop-stats.ts";
 import { deleteWorkspaceFile } from "./letter-deletion.ts";
-import { fetchLinearIssueDetail, updateLinearIssueDetail } from "./linear/issue-detail.ts";
+import {
+  fetchLinearIssueDetail,
+  fetchLinearIssueContactContext,
+  updateLinearIssueDetail,
+} from "./linear/issue-detail.ts";
+import { deleteLinearIssue } from "./linear/issue-delete.ts";
+import { convertInboxIssueToProjectTask } from "./linear/inbox-issue-convert.ts";
 import {
   createLinearAgentThread,
   createLinearIssueComment,
@@ -113,7 +152,20 @@ import {
 } from "./linear/issue-comments.ts";
 import { fetchLinearAgentSession } from "./linear/agent-session.ts";
 import { buildFocusContextSection, type FocusContextInput } from "./context/focus.ts";
-import { fetchLinearTeams } from "./linear/teams.ts";
+import { fetchLinearCustomers, fetchLinearCustomersPage } from "./linear/customers.ts";
+import { fetchLinearTeams, fetchLinearTeamsPage } from "./linear/teams.ts";
+import { createLinearTeamProject, fetchLinearTeamProjects } from "./linear/team-projects.ts";
+import {
+  createWorkoutMilestoneForDate,
+  fetchWorkoutMilestones,
+} from "./linear/workout-milestones.ts";
+import {
+  appendWorkoutRep,
+  createWorkoutGroupSet,
+  fetchWorkoutSession,
+} from "./linear/workout-sessions.ts";
+import { syncWorkoutPersonalRecordForRepWeight } from "./linear/workout-personal-records.ts";
+import { fetchLinearTeamLabelGroupLabels, fetchLinearTeamLabels } from "./linear/team-labels.ts";
 import { listLlmExtractTasks, runLlmExtract } from "./llm-extract/index.ts";
 import { dispatchAutomationHandler } from "./automation/registry.ts";
 import type { AutomationHandlerContext } from "./automation/types.ts";
@@ -157,6 +209,7 @@ import {
   getIntegrationsStatus,
   importGoogleCalendarCredentials,
   saveGoogleCalendarOAuthCredentials,
+  disconnectLinearOAuth,
   saveLinearOAuthCredentials,
   updateIntegrationSecrets,
 } from "./integrations-secrets.ts";
@@ -231,6 +284,7 @@ import { persistLookupAttachments } from "./lookup-attachment-store.ts";
 import { buildGeminiUserParts } from "./lookup-attachments.ts";
 import { completeLookupRun, runLookupMessage } from "./lookup-handler.ts";
 import { normalizeLookupOutputFormat } from "./lookup-output-format.ts";
+import { fetchRemotePdf, isLinearPrivateFileUrl } from "./pdf-proxy.ts";
 import {
   normalizeLookupSearchMode,
   resolveLookupSearchModeForRequest,
@@ -250,6 +304,9 @@ import { loadTtsModule, loadSttModule } from "./speech-modules.ts";
 
 const token = getSidecarToken();
 const port = getSidecarPort();
+const hostname = getSidecarHost();
+const staticDistDir = resolveDistDir();
+const bearerOrCookieAuth = createBearerOrCookieAuth(token);
 const SIDECAR_RUNTIME_ID = `${Date.now()}-${process.pid}`;
 
 function readSidecarVersion(): string | null {
@@ -396,31 +453,69 @@ function broadcastAssistantMessage(runId: string, text: string): void {
 
 const app = new Hono();
 
+const allowedOrigins = getAllowedOrigins();
+
 app.use(
   "*",
   cors({
-    // Localhost-only sidecar: reflect the Tauri webview origin (tauri.localhost, etc.).
-    origin: (origin) => origin ?? "http://tauri.localhost",
+    origin: (origin) => {
+      if (!origin) return isDevelopmentAuthMode() ? "http://tauri.localhost" : null;
+      if (allowedOrigins.length === 0) return origin;
+      return allowedOrigins.includes(origin) ? origin : null;
+    },
     allowHeaders: ["Authorization", "Content-Type"],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true,
   }),
 );
 
-app.use("/flows/*", bearerAuth({ token }));
-app.use("/settings", bearerAuth({ token }));
-app.use("/sessions/*", bearerAuth({ token }));
-app.use("/lookup/*", bearerAuth({ token }));
-app.use("/runs/*", bearerAuth({ token }));
-app.use("/approvals/*", bearerAuth({ token }));
-app.use("/hooks/*", bearerAuth({ token }));
-app.use("/workspace/*", bearerAuth({ token }));
-app.use("/tts/*", bearerAuth({ token }));
-app.use("/stt/*", bearerAuth({ token }));
-app.use("/llm-extract/*", bearerAuth({ token }));
-app.use("/linear/*", bearerAuth({ token }));
-app.use("/integrations/*", bearerAuth({ token }));
-app.use("/profiles/*", bearerAuth({ token }));
-app.use("/vault/*", bearerAuth({ token }));
+app.post("/auth/login", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { token?: string };
+  const submitted = body.token?.trim();
+  if (!submitted || submitted !== token) {
+    return c.json({ error: "Invalid access token" }, 401);
+  }
+  setSessionCookie(c, token);
+  return c.json({ ok: true });
+});
+
+app.post("/auth/logout", (c) => {
+  clearSessionCookie(c);
+  return c.json({ ok: true });
+});
+
+app.get("/auth/status", (c) => {
+  const authorized = isAuthorizedRequest(
+    token,
+    c.req.header("Authorization"),
+    getCookie(c, SESSION_COOKIE),
+  );
+  return c.json({ authenticated: authorized });
+});
+
+app.use("/flows/*", bearerOrCookieAuth);
+app.use("/settings", bearerOrCookieAuth);
+app.use("/accounts/*", bearerOrCookieAuth);
+app.use("/sessions/*", bearerOrCookieAuth);
+app.use("/lookup/*", bearerOrCookieAuth);
+app.use("/runs/*", bearerOrCookieAuth);
+app.use("/approvals/*", bearerOrCookieAuth);
+app.use("/hooks/*", bearerOrCookieAuth);
+app.use("/workspace/*", bearerOrCookieAuth);
+app.use("/tts/*", bearerOrCookieAuth);
+app.use("/stt/*", bearerOrCookieAuth);
+app.use("/llm-extract/*", bearerOrCookieAuth);
+app.use("/linear/*", bearerOrCookieAuth);
+app.use("/integrations/*", bearerOrCookieAuth);
+app.use("/profiles/*", bearerOrCookieAuth);
+app.use("/pdf/*", bearerOrCookieAuth);
+app.use("/vault/*", async (c, next) => {
+  if (!isVaultEnabled()) {
+    return c.json({ error: "Vault features are disabled in linear product mode" }, 404);
+  }
+  await next();
+});
+app.use("/vault/*", bearerOrCookieAuth);
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
@@ -436,21 +531,57 @@ app.get("/healthz", (c) => {
     ok: true,
     hasApiKey: Boolean(getCursorApiKey()),
     hasGeminiApiKey: Boolean(getGeminiApiKey()),
-    hasLinearApiKey: Boolean(getLinearApiKey()),
     hasLinearOAuthCredentials: isLinearOAuthConfigured(),
     hasLinearOAuthAuth: isLinearOAuthAuthenticated(),
     hasGoogleCalendarCredentials: isGoogleCalendarConfigured(),
     hasGoogleCalendarAuth: isGoogleCalendarAuthenticated(),
     hasWhoopConfigured: isWhoopConfigured(),
     hasWhoopAuth: isWhoopAuthenticated(),
+    vaultEnabled: isVaultEnabled(),
+    productMode: isVaultEnabled() ? "full" : "linear",
     sidecarRuntimeId: SIDECAR_RUNTIME_ID,
     sidecarVersion: SIDECAR_VERSION,
     sidecarBuildId: SIDECAR_BUILD_ID,
+    staticUiAvailable: Boolean(staticDistDir),
   });
 });
 
 app.get("/llm-extract/tasks", (c) => {
   return c.json({ tasks: listLlmExtractTasks() });
+});
+
+app.get("/pdf/proxy", async (c) => {
+  const url = c.req.query("url")?.trim();
+  if (!url) {
+    return c.json({ error: "Missing url query parameter" }, 400);
+  }
+
+  try {
+    let authorizationHeader: string | undefined;
+    if (isLinearPrivateFileUrl(url)) {
+      const linearToken = getLinearAuthToken();
+      if (!linearToken) {
+        return c.json(
+          { error: "Linear is not connected. Connect OAuth in Settings to view uploaded PDFs." },
+          400,
+        );
+      }
+      authorizationHeader = linearAuthorizationHeader(linearToken);
+    }
+
+    const { data, contentType } = await fetchRemotePdf(url, { authorizationHeader });
+    return new Response(data, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch PDF";
+    const status =
+      message === "Invalid URL" || message === "PDF too large" ? 400 : 502;
+    return c.json({ error: message }, status);
+  }
 });
 
 app.post("/llm-extract", async (c) => {
@@ -486,7 +617,7 @@ app.get("/linear/issues/search", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         issues: [],
       },
       400,
@@ -510,11 +641,80 @@ app.get("/linear/issues/search", async (c) => {
   }
 });
 
+app.get("/linear/documents/meetings", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        documents: [],
+      },
+      400,
+    );
+  }
+
+  try {
+    const documents = await fetchLinearMeetingDocuments();
+    return c.json({ documents });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load meeting documents";
+    return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
+app.get("/linear/documents/workspace", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        documents: [],
+      },
+      400,
+    );
+  }
+
+  try {
+    const documents = await fetchLinearWorkspaceDocuments();
+    return c.json({ documents });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load workspace documents";
+    return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
+app.get("/linear/documents/search", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        documents: [],
+      },
+      400,
+    );
+  }
+
+  const term = c.req.query("q")?.trim() ?? "";
+  if (!term) {
+    return c.json({ documents: [] });
+  }
+
+  const limitRaw = Number(c.req.query("limit"));
+  const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+
+  try {
+    const documents = await searchLinearDocuments(term, { limit });
+    return c.json({ documents });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to search Linear documents";
+    return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
 app.get("/linear/projects", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         projects: [],
         pageInfo: { hasNextPage: false, endCursor: null },
       },
@@ -536,23 +736,116 @@ app.get("/linear/projects", async (c) => {
   }
 });
 
-app.get("/linear/teams", async (c) => {
+app.get("/linear/project-statuses", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
-        teams: [],
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        statuses: [],
       },
       400,
     );
   }
 
   try {
+    const statuses = await fetchLinearProjectStatuses();
+    return c.json({ statuses });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear project statuses";
+    return c.json({ error: message, statuses: [] }, 500);
+  }
+});
+
+app.get("/linear/teams", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        teams: [],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      400,
+    );
+  }
+
+  const after = c.req.query("after")?.trim() || null;
+  const firstRaw = c.req.query("first");
+  const first = firstRaw ? Number.parseInt(firstRaw, 10) : undefined;
+  const paginate = firstRaw != null || after != null;
+
+  try {
+    if (paginate) {
+      const page = await fetchLinearTeamsPage({ after, first });
+      return c.json(page);
+    }
+
     const teams = await fetchLinearTeams();
     return c.json({ teams });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load Linear teams";
-    return c.json({ error: message, teams: [] }, 500);
+    return c.json(
+      {
+        error: message,
+        teams: [],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      500,
+    );
+  }
+});
+
+app.get("/linear/customers", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        customers: [],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      400,
+    );
+  }
+
+  const query = c.req.query("q")?.trim() || undefined;
+  const after = c.req.query("after")?.trim() || null;
+  const firstRaw = c.req.query("first");
+  const first = firstRaw ? Number.parseInt(firstRaw, 10) : undefined;
+
+  try {
+    const page = await fetchLinearCustomersPage({ query, after, first });
+    return c.json(page);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear customers";
+    return c.json(
+      {
+        error: message,
+        customers: [],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+      500,
+    );
+  }
+});
+
+app.get("/linear/customers/all", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        customers: [],
+      },
+      400,
+    );
+  }
+
+  const query = c.req.query("q")?.trim() || undefined;
+
+  try {
+    const customers = await fetchLinearCustomers({ query });
+    return c.json({ customers });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear customers";
+    return c.json({ error: message, customers: [] }, 500);
   }
 });
 
@@ -560,7 +853,7 @@ app.get("/linear/projects/:projectId/overview", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         overview: null,
       },
       400,
@@ -588,7 +881,7 @@ app.get("/linear/projects/:projectId/issues", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         issues: [],
       },
       400,
@@ -752,7 +1045,7 @@ app.get("/linear/issues/:issueId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         issue: null,
       },
       400,
@@ -780,7 +1073,7 @@ app.patch("/linear/issues/:issueId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         issue: null,
       },
       400,
@@ -890,6 +1183,18 @@ app.patch("/linear/issues/:issueId", async (c) => {
     if (!issue) {
       return c.json({ error: "Issue not found", issue: null }, 404);
     }
+
+    if (typeof updates.title === "string") {
+      try {
+        await syncWorkoutPersonalRecordForRepWeight(issueId, updates.title);
+      } catch (syncError) {
+        console.warn(
+          "[workout-personal-records] Failed to sync personal record:",
+          syncError instanceof Error ? syncError.message : syncError,
+        );
+      }
+    }
+
     return c.json({ issue });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update issue";
@@ -897,11 +1202,85 @@ app.patch("/linear/issues/:issueId", async (c) => {
   }
 });
 
+app.post("/linear/issues/:issueId/convert-to-project-task", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+      },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required" }, 400);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    projectId?: unknown;
+    title?: unknown;
+    description?: unknown;
+  };
+
+  const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
+  if (!projectId) {
+    return c.json({ error: "projectId is required" }, 400);
+  }
+
+  const overrides: { title?: string; description?: string | null } = {};
+  if (typeof body.title === "string" && body.title.trim()) {
+    overrides.title = body.title.trim();
+  }
+  if ("description" in body) {
+    overrides.description =
+      body.description === null
+        ? null
+        : typeof body.description === "string"
+          ? body.description
+          : undefined;
+  }
+
+  try {
+    const result = await convertInboxIssueToProjectTask(issueId, projectId, overrides);
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to convert inbox issue";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.get("/linear/issues/:issueId/sub-issues", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        subIssues: [],
+        linkedCustomers: [],
+      },
+      400,
+    );
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required", subIssues: [], linkedCustomers: [] }, 400);
+  }
+
+  try {
+    const { subIssues, linkedCustomers } = await fetchLinearIssueContactContext(issueId);
+    return c.json({ subIssues, linkedCustomers });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load sub-issues";
+    return c.json({ error: message, subIssues: [], linkedCustomers: [] }, 500);
+  }
+});
+
 app.get("/linear/issues/:issueId/comment-threads", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         threads: [],
       },
       400,
@@ -926,7 +1305,7 @@ app.get("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         viewerId: null,
         comments: [],
       },
@@ -953,7 +1332,7 @@ app.get("/linear/agent-sessions/:sessionId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         session: null,
       },
       400,
@@ -980,7 +1359,7 @@ app.get("/linear/agent-sessions/:sessionId", async (c) => {
 app.post("/linear/issues/:issueId/comment-threads", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
-      { error: "Linear is not connected. Add an API key or connect OAuth in Settings." },
+      { error: "Linear is not connected. Connect OAuth in Settings." },
       400,
     );
   }
@@ -1017,7 +1396,7 @@ app.post("/linear/issues/:issueId/comment-threads", async (c) => {
 app.patch("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
-      { error: "Linear is not connected. Add an API key or connect OAuth in Settings." },
+      { error: "Linear is not connected. Connect OAuth in Settings." },
       400,
     );
   }
@@ -1046,7 +1425,7 @@ app.patch("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
 app.delete("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
-      { error: "Linear is not connected. Add an API key or connect OAuth in Settings." },
+      { error: "Linear is not connected. Connect OAuth in Settings." },
       400,
     );
   }
@@ -1066,11 +1445,30 @@ app.delete("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
   }
 });
 
+app.delete("/linear/issues/:issueId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json({ error: "Linear is not connected. Connect OAuth in Settings.", success: false }, 400);
+  }
+
+  const issueId = c.req.param("issueId")?.trim();
+  if (!issueId) {
+    return c.json({ error: "issueId is required", success: false }, 400);
+  }
+
+  try {
+    await deleteLinearIssue(issueId);
+    return c.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete issue";
+    return c.json({ error: message, success: false }, 500);
+  }
+});
+
 app.get("/linear/projects/:projectId/documents", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         documents: [],
       },
       400,
@@ -1091,11 +1489,37 @@ app.get("/linear/projects/:projectId/documents", async (c) => {
   }
 });
 
+app.get("/linear/projects/:projectId/documents/meetings", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        documents: [],
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", documents: [] }, 400);
+  }
+
+  try {
+    const documents = await fetchLinearProjectMeetingDocuments(projectId);
+    return c.json({ documents });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load project meeting documents";
+    return c.json({ error: message, documents: [] }, 500);
+  }
+});
+
 app.post("/linear/projects/:projectId/documents", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         document: null,
       },
       400,
@@ -1108,6 +1532,11 @@ app.post("/linear/projects/:projectId/documents", async (c) => {
   }
 
   try {
+    const body = (await c.req.json().catch(() => null)) as { meeting?: unknown } | null;
+    if (body?.meeting === true) {
+      const document = await createProjectMeetingDocument(projectId);
+      return c.json({ document });
+    }
     const document = await createProjectDocument(projectId);
     return c.json({ document });
   } catch (error) {
@@ -1120,7 +1549,7 @@ app.get("/linear/teams/:teamId/documents", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         documents: [],
       },
       400,
@@ -1141,11 +1570,409 @@ app.get("/linear/teams/:teamId/documents", async (c) => {
   }
 });
 
+app.post("/linear/teams/:teamId/documents", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        document: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", document: null }, 400);
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => null)) as {
+      title?: unknown;
+      meeting?: unknown;
+    } | null;
+    if (body?.meeting === true) {
+      const document = await createTeamMeetingDocument(teamId);
+      return c.json({ document });
+    }
+    const title = typeof body?.title === "string" ? body.title.trim() : undefined;
+    const document = await createTeamDocument(teamId, title ? { title } : undefined);
+    return c.json({ document });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create team document";
+    return c.json({ error: message, document: null }, 500);
+  }
+});
+
+app.get("/linear/teams/:teamId/workout-milestones", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        milestones: [],
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", milestones: [] }, 400);
+  }
+
+  try {
+    const milestones = await fetchWorkoutMilestones(teamId);
+    return c.json({ milestones });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load workout milestones";
+    return c.json({ error: message, milestones: [] }, 500);
+  }
+});
+
+app.post("/linear/teams/:teamId/workout-milestones", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        milestone: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", milestone: null }, 400);
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => null)) as { date?: unknown } | null;
+    const date = typeof body?.date === "string" ? body.date.trim() : "";
+    if (!date) {
+      return c.json({ error: "date is required", milestone: null }, 400);
+    }
+    const milestone = await createWorkoutMilestoneForDate(teamId, date);
+    return c.json({ milestone });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create workout milestone";
+    return c.json({ error: message, milestone: null }, 500);
+  }
+});
+
+app.get("/linear/teams/:teamId/workout-sessions/:date", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        session: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  const date = c.req.param("date")?.trim();
+  if (!teamId || !date) {
+    return c.json({ error: "teamId and date are required", session: null }, 400);
+  }
+
+  try {
+    const session = await fetchWorkoutSession(teamId, date);
+    return c.json({ session });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load workout session";
+    return c.json({ error: message, session: null }, 500);
+  }
+});
+
+app.post("/linear/teams/:teamId/workout-sessions/:date/group-sets", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        groupSet: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  const date = c.req.param("date")?.trim();
+  if (!teamId || !date) {
+    return c.json({ error: "teamId and date are required", groupSet: null }, 400);
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => null)) as { exercise?: unknown } | null;
+    const exercise = typeof body?.exercise === "string" ? body.exercise.trim() : "";
+    if (!exercise) {
+      return c.json({ error: "exercise is required", groupSet: null }, 400);
+    }
+    const groupSet = await createWorkoutGroupSet(teamId, date, exercise);
+    return c.json({ groupSet });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create workout group set";
+    return c.json({ error: message, groupSet: null }, 500);
+  }
+});
+
+app.post("/linear/teams/:teamId/workout-sessions/:date/reps", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        groupSet: null,
+        rep: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  const date = c.req.param("date")?.trim();
+  if (!teamId || !date) {
+    return c.json({ error: "teamId and date are required", groupSet: null, rep: null }, 400);
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => null)) as {
+      exercise?: unknown;
+      groupSetId?: unknown;
+      blankWeight?: unknown;
+    } | null;
+    const exercise = typeof body?.exercise === "string" ? body.exercise.trim() : "";
+    const groupSetId =
+      typeof body?.groupSetId === "string" && body.groupSetId.trim()
+        ? body.groupSetId.trim()
+        : undefined;
+    const blankWeight = body?.blankWeight === true;
+
+    if (!groupSetId && !exercise) {
+      return c.json({ error: "exercise is required", groupSet: null, rep: null }, 400);
+    }
+
+    const result = await appendWorkoutRep(teamId, date, {
+      exercise: exercise || undefined,
+      groupSetId,
+      blankWeight,
+    });
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to log workout rep";
+    return c.json({ error: message, groupSet: null, rep: null }, 500);
+  }
+});
+
+app.get("/linear/teams/:teamId/issues", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        issues: [],
+        workflowStates: [],
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", issues: [], workflowStates: [] }, 400);
+  }
+
+  try {
+    const rootOnly = c.req.query("rootOnly") === "1";
+    const result = await fetchLinearTeamIssues(teamId, { excludeSubIssues: rootOnly });
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load team issues";
+    return c.json({ error: message, issues: [], workflowStates: [] }, 500);
+  }
+});
+
+app.post("/linear/teams/:teamId/issues", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        issue: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", issue: null }, 400);
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => null)) as { title?: unknown } | null;
+    const title = typeof body?.title === "string" ? body.title.trim() : undefined;
+    const issue = await createLinearTeamIssue(teamId, title ? { title } : undefined);
+    return c.json({ issue });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create team issue";
+    return c.json({ error: message, issue: null }, 500);
+  }
+});
+
+app.post("/linear/teams/:teamId/letters/upload", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        issue: null,
+        document: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", issue: null, document: null }, 400);
+  }
+
+  try {
+    const body = await c.req.parseBody();
+    const fileEntry = body.file;
+    if (!(fileEntry instanceof File)) {
+      return c.json({ error: "file is required", issue: null, document: null }, 400);
+    }
+
+    const data = await fileEntry.arrayBuffer();
+    const metadataRaw = body.metadata;
+    let metadata: { displayTitle?: string; issueUpdates?: Record<string, unknown> } | null = null;
+    if (typeof metadataRaw === "string" && metadataRaw.trim()) {
+      try {
+        metadata = JSON.parse(metadataRaw) as { displayTitle?: string; issueUpdates?: Record<string, unknown> };
+      } catch {
+        return c.json({ error: "metadata must be valid JSON", issue: null, document: null }, 400);
+      }
+    }
+
+    const displayTitle =
+      typeof metadata?.displayTitle === "string" ? metadata.displayTitle.trim() : undefined;
+    const issueUpdates =
+      metadata?.issueUpdates && typeof metadata.issueUpdates === "object"
+        ? (metadata.issueUpdates as import("./issue-detail.ts").LinearIssueDetailUpdateInput)
+        : undefined;
+
+    const result = await createLinearLetterFromUpload(teamId, {
+      filename: fileEntry.name,
+      contentType: fileEntry.type || "application/octet-stream",
+      data,
+    }, {
+      displayTitle,
+      issueUpdates,
+    });
+
+    return c.json({
+      issue: result.issue,
+      document: result.document,
+      assetUrl: result.assetUrl,
+      content: result.content,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to upload letter";
+    return c.json({ error: message, issue: null, document: null }, 500);
+  }
+});
+
+app.get("/linear/teams/:teamId/projects", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        projects: [],
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", projects: [] }, 400);
+  }
+
+  try {
+    const projects = await fetchLinearTeamProjects(teamId);
+    return c.json({ projects });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load team projects";
+    return c.json({ error: message, projects: [] }, 500);
+  }
+});
+
+app.get("/linear/teams/:teamId/labels", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        labels: [],
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  const group = c.req.query("group")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", labels: [] }, 400);
+  }
+
+  try {
+    const labels = group
+      ? await fetchLinearTeamLabelGroupLabels(teamId, group)
+      : await fetchLinearTeamLabels(teamId);
+    return c.json({ labels });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load team labels";
+    return c.json({ error: message, labels: [] }, 500);
+  }
+});
+
+app.post("/linear/teams/:teamId/projects", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        project: null,
+      },
+      400,
+    );
+  }
+
+  const teamId = c.req.param("teamId")?.trim();
+  if (!teamId) {
+    return c.json({ error: "teamId is required", project: null }, 400);
+  }
+
+  let name: string | undefined;
+  try {
+    const body = await c.req.json();
+    if (typeof body?.name === "string") {
+      name = body.name;
+    }
+  } catch {
+    // Optional JSON body.
+  }
+
+  try {
+    const project = await createLinearTeamProject(teamId, name);
+    return c.json({ project });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create folder";
+    return c.json({ error: message, project: null }, 500);
+  }
+});
+
 app.get("/linear/documents/:documentId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         document: null,
       },
       400,
@@ -1173,7 +2000,7 @@ app.patch("/linear/documents/:documentId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         document: null,
       },
       400,
@@ -1185,18 +2012,46 @@ app.patch("/linear/documents/:documentId", async (c) => {
     return c.json({ error: "documentId is required", document: null }, 400);
   }
 
-  const body = (await c.req.json()) as { title?: string; content?: string; body?: string };
+  const body = (await c.req.json()) as {
+    title?: string;
+    content?: string;
+    body?: string;
+    projectId?: string | null;
+    teamId?: string;
+    issueId?: string | null;
+  };
   const title = body.title?.trim();
   const content = body.content ?? body.body;
+  const hasProjectId = body.projectId !== undefined;
+  const projectId =
+    body.projectId === null
+      ? null
+      : typeof body.projectId === "string"
+        ? body.projectId.trim() || null
+        : undefined;
+  const teamId = body.teamId?.trim();
+  const hasIssueId = body.issueId !== undefined;
+  const issueId =
+    body.issueId === null
+      ? null
+      : typeof body.issueId === "string"
+        ? body.issueId.trim() || null
+        : undefined;
 
-  if (title === undefined && content === undefined) {
-    return c.json({ error: "title or content is required", document: null }, 400);
+  if (title === undefined && content === undefined && !hasProjectId && !teamId && !hasIssueId) {
+    return c.json(
+      { error: "title, content, projectId, teamId, or issueId is required", document: null },
+      400,
+    );
   }
 
   try {
     const document = await updateLinearDocument(documentId, {
       ...(title !== undefined ? { title } : {}),
       ...(content !== undefined ? { content } : {}),
+      ...(hasProjectId ? { projectId: projectId ?? null } : {}),
+      ...(teamId ? { teamId } : {}),
+      ...(hasIssueId ? { issueId: issueId ?? null } : {}),
     });
     return c.json({ document });
   } catch (error) {
@@ -1209,7 +2064,7 @@ app.delete("/linear/documents/:documentId", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         ok: false,
       },
       400,
@@ -1234,7 +2089,7 @@ app.patch("/linear/projects/:projectId/overview/description", async (c) => {
   if (!getLinearAuthToken()) {
     return c.json(
       {
-        error: "Linear is not connected. Add an API key or connect OAuth in Settings.",
+        error: "Linear is not connected. Connect OAuth in Settings.",
         overview: null,
       },
       400,
@@ -1265,7 +2120,7 @@ app.patch("/linear/projects/:projectId/overview/description", async (c) => {
 
 app.get("/linear/projects/:projectId", async (c) => {
   if (!getLinearAuthToken()) {
-    return c.json({ error: "Linear is not connected. Add an API key or connect OAuth in Settings." }, 400);
+    return c.json({ error: "Linear is not connected. Connect OAuth in Settings." }, 400);
   }
 
   const projectId = c.req.param("projectId")?.trim();
@@ -1285,6 +2140,32 @@ app.get("/linear/projects/:projectId", async (c) => {
   }
 });
 
+app.get("/linear/projects/:projectId/context", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json({ error: "Linear is not connected. Connect OAuth in Settings." }, 400);
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required" }, 400);
+  }
+
+  try {
+    const context = await fetchLinearProjectContext(projectId);
+    return c.json({
+      context: {
+        projectId: context.projectId,
+        projectName: context.projectName,
+        teamId: context.teamId,
+        teamName: context.teamName ?? null,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Linear project context";
+    return c.json({ error: message, context: null }, 500);
+  }
+});
+
 app.post("/integrations/whoop/setup", async (c) => {
   const info = getWhoopSetupInfo();
   return c.json(info);
@@ -1297,7 +2178,6 @@ app.get("/integrations/status", (c) => {
 app.put("/integrations/secrets", async (c) => {
   const body = (await c.req.json()) as {
     cursorApiKey?: string | null;
-    linearApiKey?: string | null;
     geminiApiKey?: string | null;
   };
   return c.json(updateIntegrationSecrets(body));
@@ -1307,7 +2187,6 @@ app.post("/integrations/test", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     target?: IntegrationTestTarget | "all";
     cursorApiKey?: string;
-    linearApiKey?: string;
     geminiApiKey?: string;
     googleOAuthClientId?: string;
     googleOAuthClientSecret?: string;
@@ -1329,7 +2208,6 @@ app.post("/integrations/test", async (c) => {
 
   const credentials = {
     cursorApiKey: body.cursorApiKey,
-    linearApiKey: body.linearApiKey,
     geminiApiKey: body.geminiApiKey,
     googleOAuthClientId: body.googleOAuthClientId,
     googleOAuthClientSecret: body.googleOAuthClientSecret,
@@ -1400,10 +2278,23 @@ app.post("/integrations/linear/credentials", async (c) => {
 
 app.post("/integrations/linear/connect", async (c) => {
   try {
-    const result = await startLinearOAuthAuth();
+    const body = (await c.req.json().catch(() => null)) as { appReturnUrl?: string } | null;
+    const result = await startLinearOAuthAuth({
+      appReturnUrl: typeof body?.appReturnUrl === "string" ? body.appReturnUrl : undefined,
+    });
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to start Linear authentication";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.post("/integrations/linear/disconnect", async (c) => {
+  try {
+    const status = await disconnectLinearOAuth();
+    return c.json(status);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to disconnect Linear account";
     return c.json({ error: message }, 500);
   }
 });
@@ -1451,7 +2342,7 @@ app.get("/whoop/day", async (c) => {
 });
 
 app.get("/linear/today", async (c) => {
-  const configured = Boolean(getLinearApiKey());
+  const configured = Boolean(getLinearAuthToken());
   const dueDate = resolveMorningReviewDueDate();
 
   if (!configured) {
@@ -1743,6 +2634,9 @@ app.get("/settings", async (c) => {
   return c.json({
     notesPath: settings.notesPath,
     vaultName: settings.vaultName ?? null,
+    vaultEnabled: isVaultEnabled(),
+    productMode: isVaultEnabled() ? "full" : "linear",
+    workspacePath: ensureWorkspaceDir(),
     projectsPath: settings.projectsPath ?? null,
     agentId: settings.agentId,
     modelMode,
@@ -1759,6 +2653,135 @@ app.get("/settings", async (c) => {
     userProfilePath: getUserProfilePath(),
     agentProfilePath: getAgentProfilePath(),
   });
+});
+
+app.get("/accounts/workspace", async (c) => {
+  try {
+    const viewer = await fetchLinearViewer();
+    const workspace = loadUserAccountWorkspace(viewer.id);
+    const accountFilePath = getUserAccountFilePath(viewer.id);
+    const isAdministrator = await viewerHasAdministratorAccess();
+    return c.json({
+      linearUserId: viewer.id,
+      viewer,
+      workspace,
+      accountFilePath,
+      accountFileExists: userAccountFileExists(viewer.id),
+      isAdministrator,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load account workspace";
+    const status = message === "Linear is not connected" ? 401 : 500;
+    return c.json({ error: message }, status);
+  }
+});
+
+app.get("/accounts/admin/users", async (c) => {
+  try {
+    const isAdministrator = await viewerHasAdministratorAccess();
+    if (!isAdministrator) {
+      return c.json({ error: "Administrator access required" }, 403);
+    }
+    return c.json({ accounts: listStoredUserAccounts() });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to list user accounts";
+    const status = message === "Linear is not connected" ? 401 : 500;
+    return c.json({ error: message }, status);
+  }
+});
+
+app.delete("/accounts/admin/users/:linearUserId", async (c) => {
+  const linearUserId = c.req.param("linearUserId")?.trim();
+  if (!linearUserId) {
+    return c.json({ error: "linearUserId is required" }, 400);
+  }
+
+  try {
+    const isAdministrator = await viewerHasAdministratorAccess();
+    if (!isAdministrator) {
+      return c.json({ error: "Administrator access required" }, 403);
+    }
+    const deleted = deleteUserAccount(linearUserId);
+    return c.json({ linearUserId, deleted });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete user account";
+    const status = message === "Linear is not connected" ? 401 : 500;
+    return c.json({ error: message }, status);
+  }
+});
+
+app.delete("/accounts/workspace", async (c) => {
+  try {
+    const viewer = await fetchLinearViewer();
+    updateIntegrationSecrets({ cursorApiKey: "" });
+    saveLinearOAuthCredentials({ clear: true });
+    const accountFileDeleted = deleteUserAccount(viewer.id);
+    const accountFilePath = getUserAccountFilePath(viewer.id);
+    const isAdministrator = await viewerHasAdministratorAccess();
+    return c.json({
+      linearUserId: viewer.id,
+      viewer,
+      workspace: loadUserAccountWorkspace(viewer.id),
+      accountFilePath,
+      accountFileExists: userAccountFileExists(viewer.id),
+      isAdministrator,
+      accountFileDeleted,
+      credentialsRemoved: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete account";
+    const status = message === "Linear is not connected" ? 401 : 500;
+    return c.json({ error: message }, status);
+  }
+});
+
+app.put("/accounts/workspace", async (c) => {
+  const body = (await c.req.json()) as {
+    inboxLinearTeamId?: string | null;
+    dailyLinearTeamId?: string | null;
+    workoutsLinearTeamId?: string | null;
+    lettersLinearTeamId?: string | null;
+    knowledgeBaseLinearTeamId?: string | null;
+    addressbookLinearTeamId?: string | null;
+    setupCompletedAt?: string | null;
+    markSetupComplete?: boolean;
+  };
+
+  try {
+    const viewer = await fetchLinearViewer();
+    const record = saveUserAccountWorkspace(viewer.id, {
+      inboxLinearTeamId: body.inboxLinearTeamId,
+      dailyLinearTeamId: body.dailyLinearTeamId,
+      workoutsLinearTeamId: body.workoutsLinearTeamId,
+      lettersLinearTeamId: body.lettersLinearTeamId,
+      knowledgeBaseLinearTeamId: body.knowledgeBaseLinearTeamId,
+      addressbookLinearTeamId: body.addressbookLinearTeamId,
+      setupCompletedAt: body.setupCompletedAt,
+      markSetupComplete: body.markSetupComplete,
+    });
+    const accountFilePath = getUserAccountFilePath(viewer.id);
+    const isAdministrator = await viewerHasAdministratorAccess();
+    return c.json({
+      linearUserId: viewer.id,
+      viewer,
+      workspace: {
+        inboxLinearTeamId: record.inboxLinearTeamId,
+        dailyLinearTeamId: record.dailyLinearTeamId,
+        workoutsLinearTeamId: record.workoutsLinearTeamId,
+        lettersLinearTeamId: record.lettersLinearTeamId,
+        knowledgeBaseLinearTeamId: record.knowledgeBaseLinearTeamId,
+        addressbookLinearTeamId: record.addressbookLinearTeamId,
+        setupCompletedAt: record.setupCompletedAt,
+      },
+      accountFilePath,
+      accountFileExists: userAccountFileExists(viewer.id),
+      isAdministrator,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save account workspace";
+    const status = message === "Linear is not connected" ? 401 : 500;
+    return c.json({ error: message }, status);
+  }
 });
 
 app.put("/settings", async (c) => {
@@ -2332,7 +3355,13 @@ app.put("/profiles/:kind", async (c) => {
 
 function resolveNotesPath(): string {
   const settings = loadSettings();
-  return settings.notesPath ?? getNotesDirOverride() ?? join(homedir(), "notes");
+  if (settings.notesPath) {
+    return settings.notesPath;
+  }
+  if (!isVaultEnabled()) {
+    return ensureWorkspaceDir();
+  }
+  return getNotesDirOverride() ?? join(homedir(), "notes");
 }
 
 function sanitizeWorkspaceFolderPart(input: string): string {
@@ -3622,7 +4651,14 @@ linearWatcherOrchestrator.start();
 
 export default {
   port,
-  hostname: "127.0.0.1",
+  hostname,
   idleTimeout: 255,
-  fetch: app.fetch,
+  fetch: async (request: Request, server: Bun.Server) => {
+    const response = await app.fetch(request, server);
+    if (!staticDistDir || response.status !== 404) {
+      return response;
+    }
+    const staticResponse = tryServeStatic(request, staticDistDir);
+    return staticResponse ?? response;
+  },
 };

@@ -15,6 +15,8 @@ export interface ProjectDocumentEntity {
   projectId: string;
   projectName: string;
   title: string;
+  /** Linear `Document.icon` slug (e.g. `Calendar` for meeting notes). */
+  icon?: string | null;
   status: string;
   statusGroup: DocumentStatusGroup;
   organization: string;
@@ -22,6 +24,9 @@ export interface ProjectDocumentEntity {
   category: string;
   date: string | null;
   updatedAt: string;
+  /** Linear document → issue link when set via documentCreate/documentUpdate issueId. */
+  linkedIssueId?: string;
+  linkedIssueIdentifier?: string;
 }
 
 export interface DocumentStatusGroupBucket {

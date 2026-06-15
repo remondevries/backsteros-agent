@@ -1,4 +1,5 @@
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
+import { formatLinearIssueBreadcrumbLabel } from "../lib/inboxDraftIssue";
 import { SETTINGS_TABS, type SettingsTabId } from "../settings/settingsTabs";
 import {
   mergeContentPanelBreadcrumbs,
@@ -7,6 +8,7 @@ import {
   type ActiveVaultDocument,
   type ContentPanelBreadcrumbSegment,
 } from "./contentPanelNavigation";
+import { formatVaultWorkoutDocumentLabel } from "../lib/workouts/workoutsBreadcrumb";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
 import { linearWorkspaceSelectionId } from "./linearWorkspaceSelection";
 import {
@@ -98,9 +100,13 @@ export function buildContentPanelBreadcrumbSegments(options: {
   }
 
   if (activeVaultDocument) {
+    const vaultDocumentLabel =
+      activeVaultNavItem === "workouts"
+        ? formatVaultWorkoutDocumentLabel(activeVaultDocument.path, activeVaultDocument.title)
+        : activeVaultDocument.title;
     contentSegments.push({
       id: `vault-doc-${activeVaultDocument.path}`,
-      label: activeVaultDocument.title,
+      label: vaultDocumentLabel,
     });
   }
 
@@ -112,9 +118,21 @@ export function buildContentPanelBreadcrumbSegments(options: {
       });
     }
 
+    if (activeLinearIssue.sourceLinearDocumentId && activeLinearIssue.sourceLinearDocumentTitle) {
+      contentSegments.push({
+        id: `linear-doc-${activeLinearIssue.sourceLinearDocumentId}`,
+        label: activeLinearIssue.sourceLinearDocumentTitle,
+      });
+    }
+
     contentSegments.push({
       id: `linear-issue-${activeLinearIssue.id}`,
-      label: `${activeLinearIssue.identifier} ${activeLinearIssue.title}`,
+      label: formatLinearIssueBreadcrumbLabel(activeLinearIssue, {
+        hideIdentifier:
+          activeVaultNavItem === "inbox" ||
+          activeVaultNavItem === "contacts" ||
+          activeVaultNavItem === "workouts",
+      }),
     });
   }
 
