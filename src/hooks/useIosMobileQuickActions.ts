@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { type IosMobileQuickAction, useContentPanelChrome } from "../app/contentPanelChromeContext";
 import { isIosDevice } from "../platform/iosStandalone";
 
@@ -8,18 +8,13 @@ function actionsSnapshotKey(actions: IosMobileQuickAction[] | null): string {
 }
 
 export function useIosMobileQuickActions(actions: IosMobileQuickAction[] | null) {
-  const { setIosMobileQuickActions } = useContentPanelChrome();
+  const { iosMobileQuickActions, setIosMobileQuickActions } = useContentPanelChrome();
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
   const snapshotKey = actionsSnapshotKey(actions);
   const enabled = isIosDevice() && actions !== null && actions.length > 0;
 
-  useEffect(() => {
-    if (!enabled) {
-      setIosMobileQuickActions(null);
-      return;
-    }
-
+  const registerQuickActions = useCallback(() => {
     const current = actionsRef.current ?? [];
     setIosMobileQuickActions(
       current.map((action) => ({
@@ -32,7 +27,20 @@ export function useIosMobileQuickActions(actions: IosMobileQuickAction[] | null)
         },
       })),
     );
+  }, [setIosMobileQuickActions]);
 
+  useEffect(() => {
+    if (!enabled) {
+      setIosMobileQuickActions(null);
+      return;
+    }
+
+    registerQuickActions();
     return () => setIosMobileQuickActions(null);
-  }, [enabled, setIosMobileQuickActions, snapshotKey]);
+  }, [enabled, registerQuickActions, setIosMobileQuickActions, snapshotKey]);
+
+  useEffect(() => {
+    if (!enabled || iosMobileQuickActions !== null) return;
+    registerQuickActions();
+  }, [enabled, iosMobileQuickActions, registerQuickActions]);
 }

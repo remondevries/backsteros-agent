@@ -178,8 +178,6 @@ function AppMainShell({
         }
         clearActiveVaultDocument();
         resetProjectsOverview();
-        onVaultNavItemChange(null);
-        window.requestAnimationFrame(() => onVaultNavItemChange(item));
         setLeftNavigationOverlayOpen(false);
         if (narrowNavigation) closeLeftSidePanel();
         return;
