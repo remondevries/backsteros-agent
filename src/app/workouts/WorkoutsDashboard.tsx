@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WorkoutGroupSetEntity } from "../../lib/api";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useExplorerIosChrome } from "../../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../../hooks/useIosExplorerSearchChrome";
 import { useLinearTeamProjects } from "../../hooks/useLinearTeamProjects";
 import { useLinearWorkoutMilestones } from "../../hooks/useLinearWorkoutMilestones";
 import { useWorkoutDashboardSessions } from "../../hooks/useWorkoutDashboardSessions";
@@ -25,6 +27,27 @@ import { WorkoutRepSummaryRow } from "./WorkoutRepSummaryRow";
 import { WorkoutsYearPicker } from "./WorkoutsYearPicker";
 import { WorkoutRepsIcon } from "./WorkoutRepsIcon";
 import { useWorkoutsDashboardGraphCollapsed } from "./WorkoutsDashboardScrollContext";
+import type { WorkoutMilestoneEntity } from "../../lib/workouts/workoutMilestoneGroups";
+import type { WorkoutSessionEntity } from "../../lib/api";
+
+function workoutMilestoneMatchesSearch(
+  milestone: WorkoutMilestoneEntity,
+  query: string,
+  session: WorkoutSessionEntity | undefined,
+): boolean {
+  const dateKey = workoutMilestoneDateKey(milestone);
+  if (!dateKey) return false;
+  const label = formatWorkoutDayLabel(dateKey).toLowerCase();
+  if (label.includes(query)) return true;
+  if (dateKey.includes(query)) return true;
+  const milestoneName = milestone.name?.trim().toLowerCase() ?? "";
+  if (milestoneName.includes(query)) return true;
+  for (const groupSet of session?.groupSets ?? []) {
+    const exercise = (groupSet.exercise?.trim() || groupSet.title.trim()).toLowerCase();
+    if (exercise.includes(query)) return true;
+  }
+  return false;
+}
 
 function WorkoutDashboardGroupSetRow({
   groupSet,
@@ -108,6 +131,8 @@ export function WorkoutsDashboard({
 }) {
   const { setActiveVaultDocument } = useContentPanelNavigation();
   const { periodView } = useWorkoutsPeriodView();
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [creatingMilestone, setCreatingMilestone] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [expandedGroupSetIds, setExpandedGroupSetIds] = useState<Set<string>>(() => new Set());
@@ -178,6 +203,25 @@ export function WorkoutsDashboard({
     enabled: workoutsEnabled && sessionDateKeys.length > 0,
   });
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredGroupedSessions = useMemo(() => {
+    if (!normalizedSearch) return groupedSessions;
+    return groupedSessions
+      .map((group) => ({
+        ...group,
+        milestones: group.milestones.filter((milestone) => {
+          const dateKey = workoutMilestoneDateKey(milestone);
+          if (!dateKey) return false;
+          return workoutMilestoneMatchesSearch(
+            milestone,
+            normalizedSearch,
+            sessionsByDate[dateKey],
+          );
+        }),
+      }))
+      .filter((group) => group.milestones.length > 0);
+  }, [groupedSessions, normalizedSearch, sessionsByDate]);
+
   useContentPanelBarState({
     error: error ?? sessionsError ?? teamProjectsError,
     loading: workoutsEnabled && loading && milestones.length === 0,
@@ -192,6 +236,11 @@ export function WorkoutsDashboard({
   const sessionCount = useMemo(
     () => groupedSessions.reduce((count, group) => count + group.milestones.length, 0),
     [groupedSessions],
+  );
+
+  const filteredSessionCount = useMemo(
+    () => filteredGroupedSessions.reduce((count, group) => count + group.milestones.length, 0),
+    [filteredGroupedSessions],
   );
 
   const openSession = useCallback(
@@ -256,6 +305,27 @@ export function WorkoutsDashboard({
     }
   }, [canCreateTodayMilestone, createMilestoneForDate, openSession, todayDateKey]);
 
+  useExplorerIosChrome(
+    workoutsEnabled
+      ? [
+          {
+            id: "workouts-create-session",
+            label: "New session",
+            disabled: !canCreateTodayMilestone,
+            onClick: () => {
+              void handleCreateTodayMilestone();
+            },
+          },
+        ]
+      : null,
+  );
+
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled: workoutsEnabled,
+    label: "Search workouts",
+    inputRef: searchInputRef,
+  });
+
   if (!enabled || !normalizedTeamId) {
     return (
       <div className="workspace-status-list-scroll">
@@ -272,6 +342,22 @@ export function WorkoutsDashboard({
 
   return (
     <div className="workout-dashboard workout-dashboard--linear">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <input
+          ref={searchInputRef}
+          type="search"
+          className="vault-folder-explorer-search-input"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search workouts…"
+          aria-label="Search workouts"
+          disabled={!workoutsEnabled}
+        />
+      </div>
       <header className="workout-dashboard-header">
         <div className="workout-dashboard-header-title-row">
           <h1 className="workout-dashboard-title">Workouts</h1>
@@ -323,8 +409,12 @@ export function WorkoutsDashboard({
         <div className="workspace-status-list-empty">
           <p>No workout sessions yet. Use New session to create today&apos;s workout.</p>
         </div>
+      ) : filteredSessionCount === 0 ? (
+        <div className="workspace-status-list-empty">
+          <p>No workout sessions match your search.</p>
+        </div>
       ) : (
-        groupedSessions.map((group) => (
+        filteredGroupedSessions.map((group) => (
           <section key={group.key} className="workout-dashboard-group">
             {periodView !== "yearly" ? (
               <h2 className="workout-dashboard-group-title">{group.label}</h2>

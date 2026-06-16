@@ -116,8 +116,9 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     setDocumentDeleteActionState(null);
     setProjectsBrowseSearchActionState(null);
     setProjectDocumentsCreateActionState(null);
-    setIosMobileQuickActionsState(null);
-    setIosMobileSearchActionState(null);
+    // iOS bottom-nav quick actions and search are owned by mounted explorers via
+    // useIosMobileQuickActions / useIosExplorerSearchChrome — do not clear here or
+    // re-tapping a tab (resetProjectsOverview) leaves the FAB missing until remount.
   }, []);
 
   const value = useMemo(

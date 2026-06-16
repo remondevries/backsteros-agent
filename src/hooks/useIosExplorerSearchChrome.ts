@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useContentPanelChrome } from "../app/contentPanelChromeContext";
 import { isIosDevice } from "../platform/iosStandalone";
 
@@ -11,19 +11,13 @@ export function useIosExplorerSearchChrome({
   label: string;
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
-  const { setIosMobileSearchAction } = useContentPanelChrome();
+  const { iosMobileSearchAction, setIosMobileSearchAction } = useContentPanelChrome();
   const [searchVisible, setSearchVisible] = useState(false);
   const inputRefStable = useRef(inputRef);
   inputRefStable.current = inputRef;
   const iosActive = isIosDevice() && enabled;
 
-  useEffect(() => {
-    if (!iosActive) {
-      setSearchVisible(false);
-      setIosMobileSearchAction(null);
-      return;
-    }
-
+  const registerSearchAction = useCallback(() => {
     setIosMobileSearchAction({
       label,
       onActivate: () => {
@@ -33,9 +27,24 @@ export function useIosExplorerSearchChrome({
         });
       },
     });
+  }, [label, setIosMobileSearchAction]);
 
+  useEffect(() => {
+    if (!iosActive) {
+      setSearchVisible(false);
+      setIosMobileSearchAction(null);
+      return;
+    }
+
+    registerSearchAction();
     return () => setIosMobileSearchAction(null);
-  }, [iosActive, label, setIosMobileSearchAction]);
+  }, [iosActive, registerSearchAction, setIosMobileSearchAction]);
+
+  // Re-register when another part of the app cleared chrome without unmounting this explorer.
+  useEffect(() => {
+    if (!iosActive || iosMobileSearchAction !== null) return;
+    registerSearchAction();
+  }, [iosActive, iosMobileSearchAction, registerSearchAction]);
 
   return {
     searchVisibleClassName: searchVisible ? "ios-explorer-search-visible" : undefined,

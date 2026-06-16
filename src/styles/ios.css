@@ -368,7 +368,8 @@ html.ios-device .content-panel-slot .sidebar-explorer-search-field {
 }
 
 html.ios-device .vault-folder-explorer-add,
-html.ios-device .knowledge-base-create-dropdown {
+html.ios-device .knowledge-base-create-dropdown,
+html.ios-device .workout-dashboard-refresh {
   display: none;
 }
 
@@ -543,7 +544,7 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
 .ios-mobile-bottom-nav-actions {
   flex-shrink: 0;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
 }

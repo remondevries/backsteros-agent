@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearProjectIcon } from "../chat/LinearProjectIcon";
 import {
   createLinearProjectDocument,
@@ -7,6 +7,7 @@ import {
 } from "../lib/api";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamProjects } from "../hooks/useLinearTeamProjects";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
@@ -53,6 +54,7 @@ export function LinearKnowledgeBaseExplorer({
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const [selectedProjectLabel, setSelectedProjectLabel] = useState<string | null>(null);
@@ -308,10 +310,21 @@ export function LinearKnowledgeBaseExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: "Search knowledge base",
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLinearTeamMeetingDocument } from "../lib/api";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useLinearMeetingDocuments } from "../hooks/useLinearMeetingDocuments";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
 import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
@@ -54,6 +55,7 @@ export function LinearMeetingsExplorer({
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [creatingDocument, setCreatingDocument] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -199,10 +201,21 @@ export function LinearMeetingsExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: "Search meetings",
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}

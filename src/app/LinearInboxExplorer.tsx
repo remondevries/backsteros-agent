@@ -14,6 +14,7 @@ import {
 } from "../lib/linearIssueDetailSeed";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useBinaryContentModeShortcuts } from "../hooks/useBinaryContentModeShortcuts";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
@@ -74,6 +75,7 @@ export function LinearInboxExplorer({
   } = useContentPanelNavigation();
   const [contentMode, setContentMode] = useState<InboxContentMode>(readStoredInboxContentMode);
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [creatingDocument, setCreatingDocument] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -391,6 +393,12 @@ export function LinearInboxExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: searchAriaLabel,
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
       <div className="inbox-explorer-toolbar">
@@ -399,8 +407,13 @@ export function LinearInboxExplorer({
           onChange={setContentMode}
           disabled={!enabled}
         />
-        <div className="vault-folder-explorer-search">
+        <div
+          className={["vault-folder-explorer-search", searchVisibleClassName]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <input
+            ref={searchInputRef}
             type="search"
             className="vault-folder-explorer-search-input"
             value={searchQuery}

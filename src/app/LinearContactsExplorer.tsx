@@ -14,6 +14,7 @@ import {
 import { groupByLetter } from "../lib/alphabeticalLetterGroups";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
 import {
   contentListGroupHeaderId,
@@ -64,6 +65,7 @@ export function LinearContactsExplorer({
   const { activeLinearIssue, setActiveLinearIssue, clearActiveLinearIssue } =
     useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const activeLinearIssueIdRef = useRef<string | null>(null);
@@ -285,10 +287,21 @@ export function LinearContactsExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: "Search contacts",
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}

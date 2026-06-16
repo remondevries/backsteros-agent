@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { createLinearTeamDocument } from "../lib/api";
@@ -56,6 +57,7 @@ export function LinearDailyExplorer({
 }) {
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [creatingDocument, setCreatingDocument] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -209,10 +211,21 @@ export function LinearDailyExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: "Search daily documents",
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}
