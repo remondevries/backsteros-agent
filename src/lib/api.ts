@@ -1737,6 +1737,20 @@ export async function createLinearTeamIssue(teamId: string, options?: { title?: 
   return result;
 }
 
+export async function createLinearProjectIssue(projectId: string, options?: { title?: string }) {
+  const result = await request<{ issue: LinearIssueEntity | null; error?: string }>(
+    `/linear/projects/${encodeURIComponent(projectId)}/issues`,
+    {
+      method: "POST",
+      body: JSON.stringify(options ?? {}),
+    },
+  );
+  if (result.issue) {
+    invalidateLinearContentListCaches();
+  }
+  return result;
+}
+
 export async function uploadLinearTeamLetter(
   teamId: string,
   file: File,

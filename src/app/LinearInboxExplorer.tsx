@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
-import { createLinearTeamDocument, createLinearTeamIssue } from "../lib/api";
-import {
-  applyPendingDraftUpdatesToEntity,
-  clearInboxDraftIssueUpdates,
-  createInboxDraftIssue,
-  flushInboxDraftIssueUpdates,
-} from "../lib/inboxDraftIssue";
+import { createInboxDraftIssue } from "../lib/inboxDraftIssue";
+import { linearSync, createDraftDocumentEntity, rollbackOptimisticDocumentCreate, rollbackOptimisticIssueCreate } from "../lib/linearSync";
 import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
 import {
-  migrateLinearIssueDetailSeed,
   seedLinearIssueDetailFromEntity,
 } from "../lib/linearIssueDetailSeed";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
@@ -88,8 +82,6 @@ export function LinearInboxExplorer({
     error: issuesError,
     refresh: refreshIssues,
     prependIssue,
-    replaceIssue,
-    removeIssue,
   } = useLinearTeamIssues(teamId, enabled && showingIssues);
   const {
     documents,
@@ -232,7 +224,7 @@ export function LinearInboxExplorer({
     [setActiveLinearDocument],
   );
 
-  const handleCreateIssue = useCallback(async () => {
+  const handleCreateIssue = useCallback(() => {
     if (!enabled) return;
 
     setCreateError(null);
@@ -241,100 +233,52 @@ export function LinearInboxExplorer({
     prependIssue(draft);
     openIssue(draft, "issue", { freshCreate: true });
 
-    try {
-      const result = await createLinearTeamIssue(teamId);
-
-      if (result.error || !result.issue) {
-        removeIssue(draft.id);
-        clearInboxDraftIssueUpdates(draft.id);
-        if (activeLinearIssueIdRef.current === draft.id) {
-          clearActiveLinearIssue();
-        }
-        setCreateError(result.error ?? "Failed to create issue.");
-        return;
-      }
-
-      let mergedIssue = applyPendingDraftUpdatesToEntity(draft.id, result.issue);
-      try {
-        const flushedIssue = await flushInboxDraftIssueUpdates(draft.id, result.issue.id);
-        if (flushedIssue) {
-          mergedIssue = {
-            ...mergedIssue,
-            title: flushedIssue.title,
-            status: flushedIssue.status,
-            stateId: flushedIssue.stateId,
-            stateType: flushedIssue.stateType,
-            statusColor: flushedIssue.statusColor,
-            priority: flushedIssue.priority,
-            priorityLabel: flushedIssue.priorityLabel,
-            assigneeId: flushedIssue.assigneeId ?? undefined,
-            assigneeName: flushedIssue.assigneeName ?? undefined,
-            assigneeAvatarUrl: flushedIssue.assigneeAvatarUrl ?? undefined,
-            dueDate: flushedIssue.dueDate ?? undefined,
-            estimate: flushedIssue.estimate,
-            labels: flushedIssue.labels.map((label) => ({
-              name: label.name,
-              color: label.color,
-            })),
-          };
-        }
-      } catch (err) {
-        setCreateError(err instanceof Error ? err.message : "Failed to save inbox draft changes.");
-      }
-
-      replaceIssue(draft.id, mergedIssue);
-      migrateLinearIssueDetailSeed(draft.id, mergedIssue, { freshCreate: false });
-
-      if (activeLinearIssueIdRef.current === draft.id) {
-        setActiveLinearIssue({
-          id: mergedIssue.id,
-          identifier: mergedIssue.identifier?.trim() || undefined,
-          title: mergedIssue.title,
-          status: mergedIssue.status,
-          stateType: mergedIssue.stateType,
-          projectName: mergedIssue.projectName?.trim() || undefined,
-        });
-      }
-    } catch (err) {
-      removeIssue(draft.id);
-      clearInboxDraftIssueUpdates(draft.id);
+    void linearSync.enqueueIssueCreate({
+      kind: "team",
+      teamId,
+      localIssue: draft,
+    }).catch((err) => {
+      rollbackOptimisticIssueCreate(draft.id);
       if (activeLinearIssueIdRef.current === draft.id) {
         clearActiveLinearIssue();
       }
       setCreateError(err instanceof Error ? err.message : "Failed to create issue.");
-    }
+    });
   }, [
     clearActiveLinearIssue,
     enabled,
     openIssue,
     prependIssue,
-    removeIssue,
-    replaceIssue,
-    setActiveLinearIssue,
     teamId,
   ]);
 
-  const handleCreateDocument = useCallback(async () => {
+  const handleCreateDocument = useCallback(() => {
     if (!enabled || creatingDocument) return;
 
     setCreatingDocument(true);
     setCreateError(null);
-    try {
-      const result = await createLinearTeamDocument(teamId);
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create document.");
-        return;
-      }
 
-      prependDocument(result.document);
-      seedLinearDocumentContentFromEntity(result.document);
-      openDocument(result.document);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create document.");
-    } finally {
-      setCreatingDocument(false);
-    }
-  }, [creatingDocument, enabled, openDocument, prependDocument, teamId]);
+    const draft = createDraftDocumentEntity({ title: "Untitled" });
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openDocument(draft);
+
+    void linearSync.enqueueDocumentCreate({
+      kind: "team",
+      teamId,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create document.");
+      })
+      .finally(() => {
+        setCreatingDocument(false);
+      });
+  }, [activeLinearDocument?.id, creatingDocument, clearActiveLinearDocument, enabled, openDocument, prependDocument, teamId]);
 
   const listNavItems = useMemo(() => {
     if (showingIssues) {
@@ -362,6 +306,9 @@ export function LinearInboxExplorer({
   });
 
   const showList = enabled && !loading && !error;
+  const inboxDetailOpen = showingIssues
+    ? activeLinearIssue != null
+    : activeLinearDocument != null;
   const searchPlaceholder = showingIssues ? "Search issues…" : "Search documents…";
   const searchAriaLabel = showingIssues ? "Search inbox issues" : "Search inbox documents";
   const createLabel = showingIssues ? "New issue" : "New document";
@@ -375,7 +322,7 @@ export function LinearInboxExplorer({
       : "No inbox documents yet.";
 
   useExplorerIosChrome(
-    enabled
+    enabled && !inboxDetailOpen
       ? [
           {
             id: "inbox-create",

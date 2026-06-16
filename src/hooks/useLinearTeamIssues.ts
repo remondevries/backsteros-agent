@@ -86,6 +86,25 @@ export function useLinearTeamIssues(
         return;
       }
 
+      if (change.type === "prepend") {
+        setIssues((current) => {
+          if (current.some((issue) => issue.id === change.issue.id)) return current;
+          return applyIssueFilter([change.issue, ...current]);
+        });
+        return;
+      }
+
+      if (change.type === "replace") {
+        setIssues((current) =>
+          applyIssueFilter(
+            current.map((issue) =>
+              issue.id === change.previousId ? change.issue : issue,
+            ),
+          ),
+        );
+        return;
+      }
+
       setIssues((current) =>
         applyIssueFilter(
           current.map((issue) =>

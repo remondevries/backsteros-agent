@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createLinearTeamMeetingDocument } from "../lib/api";
+import { createDraftDocumentEntity, linearSync, rollbackOptimisticDocumentCreate } from "../lib/linearSync";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
@@ -53,7 +53,8 @@ export function LinearMeetingsExplorer({
   teamId: string;
   enabled: boolean;
 }) {
-  const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
+  const { activeLinearDocument, setActiveLinearDocument, clearActiveLinearDocument } =
+    useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -114,29 +115,34 @@ export function LinearMeetingsExplorer({
     [setActiveLinearDocument],
   );
 
-  const handleCreateDocument = useCallback(async () => {
+  const handleCreateDocument = useCallback(() => {
     if (!canCreateMeeting) return;
 
     setCreatingDocument(true);
     setCreateError(null);
-    try {
-      const result = await createLinearTeamMeetingDocument(teamId);
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create meeting note.");
-        return;
-      }
 
-      const createdDocument = result.document;
-      expandGroup(resolveMeetingDocumentWeekKey(createdDocument));
-      prependDocument(createdDocument);
-      seedLinearDocumentContentFromEntity(createdDocument);
-      openDocument(createdDocument);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create meeting note.");
-    } finally {
-      setCreatingDocument(false);
-    }
-  }, [canCreateMeeting, expandGroup, openDocument, prependDocument, teamId]);
+    const draft = createDraftDocumentEntity({ title: "Untitled" });
+    expandGroup(resolveMeetingDocumentWeekKey(draft));
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openDocument(draft);
+
+    void linearSync.enqueueDocumentCreate({
+      kind: "team-meeting",
+      teamId,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create meeting note.");
+      })
+      .finally(() => {
+        setCreatingDocument(false);
+      });
+  }, [activeLinearDocument?.id, canCreateMeeting, clearActiveLinearDocument, expandGroup, openDocument, prependDocument, teamId]);
 
   const firstVisibleDocument = useMemo(() => {
     for (const group of groupedDocuments) {

@@ -3,7 +3,7 @@ import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExpl
 import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
-import { createLinearTeamDocument } from "../lib/api";
+import { createDraftDocumentEntity, linearSync, rollbackOptimisticDocumentCreate } from "../lib/linearSync";
 import { seedLinearDocumentContentFromEntity } from "../lib/linearDocumentContentSeed";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
 import {
@@ -55,7 +55,8 @@ export function LinearDailyExplorer({
   teamId: string;
   enabled: boolean;
 }) {
-  const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
+  const { activeLinearDocument, setActiveLinearDocument, clearActiveLinearDocument } =
+    useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -130,31 +131,38 @@ export function LinearDailyExplorer({
     onOpenFirst: () => openDocument(filteredDocuments[0]!),
   });
 
-  const handleCreateDocument = useCallback(async () => {
+  const handleCreateDocument = useCallback(() => {
     if (!enabled || creatingDocument || hasTodayDailyNote) return;
 
     setCreatingDocument(true);
     setCreateError(null);
-    try {
-      const result = await createLinearTeamDocument(teamId, { title: todayDateKey });
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create document.");
-        return;
-      }
 
-      const createdDocument = result.document;
+    const draft = createDraftDocumentEntity({ title: todayDateKey });
+    expandGroup(dailyMonthKeyForToday());
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openDocument(draft);
 
-      expandGroup(dailyMonthKeyForToday());
-      prependDocument(createdDocument);
-      seedLinearDocumentContentFromEntity(createdDocument);
-      openDocument(createdDocument);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create document.");
-    } finally {
-      setCreatingDocument(false);
-    }
+    void linearSync.enqueueDocumentCreate({
+      kind: "team",
+      teamId,
+      title: todayDateKey,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create document.");
+      })
+      .finally(() => {
+        setCreatingDocument(false);
+      });
   }, [
+    activeLinearDocument?.id,
     creatingDocument,
+    clearActiveLinearDocument,
     enabled,
     expandGroup,
     hasTodayDailyNote,

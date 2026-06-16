@@ -1,19 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
-  formatLinearAuthErrorMessage,
-  isLinearAuthErrorMessage,
+  formatLinearQuotaErrorMessage,
+  isLinearQuotaErrorMessage,
 } from "./auth-errors.ts";
 
-describe("linear auth errors", () => {
-  test("detects Linear auth failures", () => {
-    expect(isLinearAuthErrorMessage("Authentication required, not authenticated")).toBe(true);
-    expect(isLinearAuthErrorMessage("Unauthorized")).toBe(true);
-    expect(isLinearAuthErrorMessage("project not in same team as issue")).toBe(false);
+describe("formatLinearQuotaErrorMessage", () => {
+  test("maps quota exceeded to a friendly rate limit message", () => {
+    expect(formatLinearQuotaErrorMessage("quota exceeded")).toBe(
+      "Linear rate limit reached. Wait a minute and try again.",
+    );
   });
 
-  test("formats auth failures for users", () => {
-    expect(formatLinearAuthErrorMessage("Authentication required, not authenticated")).toContain(
-      "Linear session expired",
-    );
+  test("detects quota errors", () => {
+    expect(isLinearQuotaErrorMessage("Quota exceeded")).toBe(true);
+    expect(isLinearQuotaErrorMessage("Title is required")).toBe(false);
   });
 });

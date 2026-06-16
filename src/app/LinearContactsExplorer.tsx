@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
-import { createLinearTeamIssue } from "../lib/api";
-import {
-  applyPendingDraftUpdatesToEntity,
-  clearInboxDraftIssueUpdates,
-  createInboxDraftIssue,
-  flushInboxDraftIssueUpdates,
-} from "../lib/inboxDraftIssue";
-import {
-  migrateLinearIssueDetailSeed,
-  seedLinearIssueDetailFromEntity,
-} from "../lib/linearIssueDetailSeed";
+import { createInboxDraftIssue } from "../lib/inboxDraftIssue";
+import { linearSync, rollbackOptimisticIssueCreate } from "../lib/linearSync";
+import { seedLinearIssueDetailFromEntity } from "../lib/linearIssueDetailSeed";
 import { groupByLetter } from "../lib/alphabeticalLetterGroups";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
@@ -77,8 +69,6 @@ export function LinearContactsExplorer({
     error,
     refresh,
     prependIssue,
-    replaceIssue,
-    removeIssue,
   } = useLinearTeamIssues(teamId, enabled, {
     excludeCompleted: false,
     excludeSubIssues: true,
@@ -159,7 +149,7 @@ export function LinearContactsExplorer({
     onOpenFirst: () => openIssue(firstVisibleIssue!),
   });
 
-  const handleCreateIssue = useCallback(async () => {
+  const handleCreateIssue = useCallback(() => {
     if (!enabled) return;
 
     setCreateError(null);
@@ -168,76 +158,22 @@ export function LinearContactsExplorer({
     prependIssue(draft);
     openIssue(draft, "issue", { freshCreate: true });
 
-    try {
-      const result = await createLinearTeamIssue(teamId);
-
-      if (result.error || !result.issue) {
-        removeIssue(draft.id);
-        clearInboxDraftIssueUpdates(draft.id);
-        if (activeLinearIssueIdRef.current === draft.id) {
-          clearActiveLinearIssue();
-        }
-        setCreateError(result.error ?? "Failed to create contact.");
-        return;
-      }
-
-      let mergedIssue = applyPendingDraftUpdatesToEntity(draft.id, result.issue);
-      try {
-        const flushedIssue = await flushInboxDraftIssueUpdates(draft.id, result.issue.id);
-        if (flushedIssue) {
-          mergedIssue = {
-            ...mergedIssue,
-            title: flushedIssue.title,
-            status: flushedIssue.status,
-            stateId: flushedIssue.stateId,
-            stateType: flushedIssue.stateType,
-            statusColor: flushedIssue.statusColor,
-            priority: flushedIssue.priority,
-            priorityLabel: flushedIssue.priorityLabel,
-            assigneeId: flushedIssue.assigneeId ?? undefined,
-            assigneeName: flushedIssue.assigneeName ?? undefined,
-            assigneeAvatarUrl: flushedIssue.assigneeAvatarUrl ?? undefined,
-            dueDate: flushedIssue.dueDate ?? undefined,
-            estimate: flushedIssue.estimate,
-            labels: flushedIssue.labels.map((label) => ({
-              name: label.name,
-              color: label.color,
-            })),
-          };
-        }
-      } catch (err) {
-        setCreateError(err instanceof Error ? err.message : "Failed to save contact draft changes.");
-      }
-
-      replaceIssue(draft.id, mergedIssue);
-      migrateLinearIssueDetailSeed(draft.id, mergedIssue, { freshCreate: false });
-
-      if (activeLinearIssueIdRef.current === draft.id) {
-        setActiveLinearIssue({
-          id: mergedIssue.id,
-          identifier: mergedIssue.identifier?.trim() || undefined,
-          title: mergedIssue.title,
-          status: mergedIssue.status,
-          stateType: mergedIssue.stateType,
-          projectName: mergedIssue.projectName?.trim() || undefined,
-        });
-      }
-    } catch (err) {
-      removeIssue(draft.id);
-      clearInboxDraftIssueUpdates(draft.id);
+    void linearSync.enqueueIssueCreate({
+      kind: "team",
+      teamId,
+      localIssue: draft,
+    }).catch((err) => {
+      rollbackOptimisticIssueCreate(draft.id);
       if (activeLinearIssueIdRef.current === draft.id) {
         clearActiveLinearIssue();
       }
       setCreateError(err instanceof Error ? err.message : "Failed to create contact.");
-    }
+    });
   }, [
     clearActiveLinearIssue,
     enabled,
     openIssue,
     prependIssue,
-    removeIssue,
-    replaceIssue,
-    setActiveLinearIssue,
     teamId,
   ]);
 

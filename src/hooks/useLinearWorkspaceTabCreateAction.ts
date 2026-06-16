@@ -1,20 +1,35 @@
-import { useEffect, useRef } from "react";
-import { useContentPanelChrome } from "../app/contentPanelChromeContext";
+import { useRef } from "react";
+import { useContentPanelNavigation } from "../app/contentPanelNavigation";
+import { isContentDetailViewOpen } from "../lib/iosQuickActionVisibility";
 import { useIosMobileQuickActions } from "./useIosMobileQuickActions";
+import { useProjectDocumentsTabCreateAction } from "./useProjectDocumentsTabCreateAction";
 
 export function useLinearWorkspaceTabCreateAction(
   action: { disabled: boolean; label: string; onCreate: () => void } | null,
+  options?: { iosQuickAction?: boolean },
 ) {
-  const { setProjectDocumentsCreateAction } = useContentPanelChrome();
+  const navigation = useContentPanelNavigation();
   const onCreateRef = useRef(action?.onCreate);
   onCreateRef.current = action?.onCreate;
 
-  const visible = action !== null;
+  const detailOpen = isContentDetailViewOpen(navigation);
+  const visible = action !== null && !detailOpen;
+  const iosQuickAction = options?.iosQuickAction !== false;
   const disabled = action?.disabled ?? false;
   const label = action?.label ?? "Create";
 
-  useIosMobileQuickActions(
+  useProjectDocumentsTabCreateAction(
     visible
+      ? {
+          disabled,
+          label,
+          onCreate: () => onCreateRef.current?.(),
+        }
+      : null,
+  );
+
+  useIosMobileQuickActions(
+    visible && iosQuickAction
       ? [
           {
             id: "linear-workspace-tab-create",
@@ -25,19 +40,4 @@ export function useLinearWorkspaceTabCreateAction(
         ]
       : null,
   );
-
-  useEffect(() => {
-    if (!visible) {
-      setProjectDocumentsCreateAction(null);
-      return;
-    }
-
-    setProjectDocumentsCreateAction({
-      disabled,
-      label,
-      onCreate: () => onCreateRef.current?.(),
-    });
-
-    return () => setProjectDocumentsCreateAction(null);
-  }, [disabled, label, setProjectDocumentsCreateAction, visible]);
 }

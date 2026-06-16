@@ -1,9 +1,13 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import type { LinearIssueEntity } from "../../chat/types";
+import { createInboxDraftIssue } from "../../lib/inboxDraftIssue";
+import { linearSync, rollbackOptimisticIssueCreate } from "../../lib/linearSync";
+import { seedLinearIssueDetailFromEntity } from "../../lib/linearIssueDetailSeed";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearIssueStatusDragDrop } from "../../hooks/useLinearIssueStatusDragDrop";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
+import { useLinearWorkspaceTabCreateAction } from "../../hooks/useLinearWorkspaceTabCreateAction";
 import { groupVariantFromStatusKey } from "../../lib/groupVariantFromStatusKey";
 import { buildStatusGroupedNavItems } from "../../lib/buildStatusGroupedNavItems";
 import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
@@ -25,11 +29,23 @@ export function ProjectIssuesPanel({
   projectId: string;
   enabled: boolean;
 }) {
-  const { setActiveLinearIssue, activeLinearIssue } = useContentPanelNavigation();
-  const { issues, workflowStates, loading, refreshing, error, refresh } = useLinearProjectIssues(
-    projectId,
-    enabled,
-  );
+  const {
+    setActiveLinearIssue,
+    activeLinearIssue,
+    clearActiveLinearIssue,
+  } = useContentPanelNavigation();
+  const activeLinearIssueIdRef = useRef(activeLinearIssue?.id ?? null);
+  activeLinearIssueIdRef.current = activeLinearIssue?.id ?? null;
+  const [createError, setCreateError] = useState<string | null>(null);
+  const {
+    issues,
+    workflowStates,
+    loading,
+    refreshing,
+    error,
+    refresh,
+    prependIssue,
+  } = useLinearProjectIssues(projectId, enabled);
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
 
   const {
@@ -56,11 +72,16 @@ export function ProjectIssuesPanel({
   });
 
   const openLinearIssue = useCallback(
-    (issue: LinearIssueEntity, mode: "issue" | "terminal" = "issue") => {
+    (
+      issue: LinearIssueEntity,
+      mode: "issue" | "terminal" = "issue",
+      options?: { freshCreate?: boolean },
+    ) => {
       if (draggingIssueId) return;
       if (mode === "terminal") {
         requestLinearIssueViewMode(issue.id, "terminal");
       }
+      seedLinearIssueDetailFromEntity(issue, { freshCreate: options?.freshCreate });
       setActiveLinearIssue({
         id: issue.id,
         identifier: issue.identifier ?? issue.id,
@@ -71,6 +92,46 @@ export function ProjectIssuesPanel({
       });
     },
     [draggingIssueId, setActiveLinearIssue],
+  );
+
+  const handleCreateIssue = useCallback(() => {
+    if (!enabled) return;
+
+    setCreateError(null);
+    const draft = createInboxDraftIssue();
+
+    prependIssue(draft);
+    openLinearIssue(draft, "issue", { freshCreate: true });
+
+    void linearSync.enqueueIssueCreate({
+      kind: "project",
+      projectId,
+      localIssue: draft,
+    }).catch((err) => {
+      rollbackOptimisticIssueCreate(draft.id);
+      if (activeLinearIssueIdRef.current === draft.id) {
+        clearActiveLinearIssue();
+      }
+      setCreateError(err instanceof Error ? err.message : "Failed to create issue.");
+    });
+  }, [
+    clearActiveLinearIssue,
+    enabled,
+    openLinearIssue,
+    prependIssue,
+    projectId,
+  ]);
+
+  useLinearWorkspaceTabCreateAction(
+    enabled
+      ? {
+          disabled: false,
+          label: "New issue",
+          onCreate: () => {
+            void handleCreateIssue();
+          },
+        }
+      : null,
   );
 
   const workflowStateByCanonical = useMemo(
@@ -144,6 +205,11 @@ export function ProjectIssuesPanel({
   if (issues.length === 0 && workflowStates.length === 0) {
     return (
       <div className="workspace-status-list-scroll">
+        {createError ? (
+          <div className="workspace-status-list-error workspace-status-list-error--inline" role="alert">
+            {createError}
+          </div>
+        ) : null}
         <div className="workspace-status-list-empty">
           <p>No issues in this project.</p>
         </div>
@@ -154,6 +220,11 @@ export function ProjectIssuesPanel({
   if (groups.length === 0) {
     return (
       <div className="workspace-status-list-scroll">
+        {createError ? (
+          <div className="workspace-status-list-error workspace-status-list-error--inline" role="alert">
+            {createError}
+          </div>
+        ) : null}
         <div className="workspace-status-list-empty">
           <p>No issues in this project.</p>
         </div>
@@ -163,6 +234,11 @@ export function ProjectIssuesPanel({
 
   return (
     <div className="workspace-status-list-scroll">
+      {createError ? (
+        <div className="workspace-status-list-error workspace-status-list-error--inline" role="alert">
+          {createError}
+        </div>
+      ) : null}
       <StatusGroupedList
         className="workspace-status-list workspace-status-list--issues"
         groups={groups}

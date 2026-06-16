@@ -8,8 +8,8 @@ import {
   type MouseEvent,
 } from "react";
 import type { LinearIssueEntity } from "../chat/types";
-import { fetchLinearIssueDetail, updateLinearIssueDetail } from "../lib/api";
-import { notifyLinearIssueListUpdateFromDetail } from "../lib/linearIssueListPatch";
+import { fetchLinearIssueDetail } from "../lib/api";
+import { linearSync } from "../lib/linearSync";
 import {
   applyIssueStatusOverrides,
   canonicalStatusKey,
@@ -125,7 +125,8 @@ export function useLinearIssueStatusDragDrop({
 
       if (needsDetailFallback) {
         try {
-          const detailResponse = await fetchLinearIssueDetail(droppedIssueId);
+          const resolvedId = await linearSync.resolveId(droppedIssueId);
+          const detailResponse = await fetchLinearIssueDetail(resolvedId);
           const detailStates = detailResponse.issue?.workflowStates ?? [];
           const resolvedState = resolveWorkflowStateFromList(
             detailStates,
@@ -163,13 +164,7 @@ export function useLinearIssueStatusDragDrop({
       setMoveError(null);
 
       try {
-        const result = await updateLinearIssueDetail(droppedIssueId, { stateId: targetStateId });
-        if (result.error) {
-          throw new Error(result.error);
-        }
-        if (result.issue) {
-          notifyLinearIssueListUpdateFromDetail(result.issue);
-        }
+        await linearSync.enqueueIssueUpdate(droppedIssueId, { stateId: targetStateId });
       } catch (moveIssueError) {
         setIssueOverrides((current) => {
           const next = { ...current };

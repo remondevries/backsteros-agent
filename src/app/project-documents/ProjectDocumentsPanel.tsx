@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { createLinearProjectDocument } from "../../lib/api";
-import {
-  compareDocumentsNewestFirst,
+import { compareDocumentsNewestFirst,
   documentStatusGroupVariant,
   type ProjectDocumentEntity,
 } from "../../lib/documentStatusGroups";
+import { seedLinearDocumentContentFromEntity } from "../../lib/linearDocumentContentSeed";
+import { createDraftDocumentEntity, linearSync, rollbackOptimisticDocumentCreate } from "../../lib/linearSync";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../../hooks/useLinearProjectDocuments";
 import { useLinearWorkspaceTabCreateAction } from "../../hooks/useLinearWorkspaceTabCreateAction";
@@ -38,7 +38,8 @@ export function ProjectDocumentsPanel({
   teamId?: string | null;
   enabled: boolean;
 }) {
-  const { setActiveLinearDocument, activeLinearDocument } = useContentPanelNavigation();
+  const { setActiveLinearDocument, activeLinearDocument, clearActiveLinearDocument } =
+    useContentPanelNavigation();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const isProjectView = Boolean(projectId);
@@ -58,26 +59,36 @@ export function ProjectDocumentsPanel({
     onRefresh: refresh,
   });
 
-  const handleCreateDocument = useCallback(async () => {
+  const handleCreateDocument = useCallback(() => {
     if (!projectId || creating) return;
 
     setCreating(true);
     setCreateError(null);
-    try {
-      const result = await createLinearProjectDocument(projectId);
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create document.");
-        return;
-      }
 
-      prependDocument(result.document);
-      openProjectDocument(result.document, setActiveLinearDocument);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create document.");
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, prependDocument, projectId, setActiveLinearDocument]);
+    const draft = createDraftDocumentEntity({
+      projectId,
+      title: "Untitled",
+    });
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openProjectDocument(draft, setActiveLinearDocument);
+
+    void linearSync.enqueueDocumentCreate({
+      kind: "project",
+      projectId,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create document.");
+      })
+      .finally(() => {
+        setCreating(false);
+      });
+  }, [activeLinearDocument?.id, creating, clearActiveLinearDocument, prependDocument, projectId, setActiveLinearDocument]);
 
   useLinearWorkspaceTabCreateAction(
     isProjectView && enabled

@@ -1,15 +1,13 @@
-import { Suspense, useCallback, useRef, useState, type ChangeEvent } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { LETTER_RECEIVED_DATE_PROPERTY_LABELS } from "../../chat/letter";
-import { uploadLinearTeamLetter } from "../../lib/api";
+import { linearSync } from "../../lib/linearSync";
+import { onLinearLetterUploadComplete } from "../../lib/linearSync/events";
 import {
   clearInboxDraftIssueUpdates,
   peekDraftIssueUpdates,
   queueInboxDraftIssueUpdates,
 } from "../../lib/inboxDraftIssue";
-import { seedLinearDocumentContentFromEntity } from "../../lib/linearDocumentContentSeed";
 import { seedLinearIssueDetailFromEntity } from "../../lib/linearIssueDetailSeed";
-import { notifyLinearDocumentListChange } from "../../lib/linearDocumentListEvents";
-import { notifyLinearIssueListChange } from "../../lib/linearIssueListEvents";
 import {
   clearLetterComposeDraft,
   createLetterComposeDraftIssueForDocument,
@@ -69,6 +67,19 @@ export function LetterComposeView({
     seedLinearIssueDetailFromEntity(issue, { freshCreate: true });
     return issue.id;
   });
+
+  useEffect(() => {
+    return onLinearLetterUploadComplete((event) => {
+      if (event.documentDraftId !== documentDraftId) return;
+      clearLetterComposeDraft(documentDraftId);
+      seedLinearIssueDetailFromEntity(event.issue);
+      setActiveLinearDocument({
+        id: event.document.linearDocumentId,
+        title: event.document.title.trim() || title.trim() || "Untitled",
+        projectId: event.document.projectId,
+      });
+    });
+  }, [documentDraftId, setActiveLinearDocument, title]);
 
   const applyFile = useCallback(
     (file: File | null) => {
@@ -164,28 +175,15 @@ export function LetterComposeView({
     setSaving(true);
     setError(null);
     try {
-      const result = await uploadLinearTeamLetter(teamId, file, {
+      await linearSync.enqueueLetterUpload({
+        teamId,
+        documentDraftId,
+        draftIssueId,
         displayTitle,
         issueUpdates,
+        file,
       });
-      if (result.error || !result.document || !result.issue) {
-        setError(result.error ?? "Failed to save letter.");
-        return;
-      }
-
       clearInboxDraftIssueUpdates(draftIssueId);
-      clearLetterComposeDraft(documentDraftId);
-      notifyLinearDocumentListChange({ type: "refresh" });
-      notifyLinearIssueListChange({ type: "refresh" });
-      seedLinearIssueDetailFromEntity(result.issue);
-      seedLinearDocumentContentFromEntity(result.document, {
-        content: result.content ?? "",
-      });
-      setActiveLinearDocument({
-        id: result.document.linearDocumentId,
-        title: result.document.title.trim() || displayTitle,
-        projectId: result.document.projectId,
-      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save letter.");
     } finally {
@@ -195,7 +193,6 @@ export function LetterComposeView({
     documentDraftId,
     draftIssueId,
     saving,
-    setActiveLinearDocument,
     teamId,
     title,
   ]);

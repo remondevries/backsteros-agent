@@ -7,6 +7,8 @@ export type LinearDocumentListPatch = {
 
 export type LinearDocumentListChange =
   | { type: "update"; linearDocumentId: string; patch: LinearDocumentListPatch }
+  | { type: "prepend"; document: import("./documentStatusGroups").ProjectDocumentEntity }
+  | { type: "replace"; previousId: string; document: import("./documentStatusGroups").ProjectDocumentEntity }
   | { type: "remove"; linearDocumentId: string }
   | { type: "refresh"; documentId?: string };
 

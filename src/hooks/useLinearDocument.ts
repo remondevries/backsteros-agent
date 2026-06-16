@@ -1,14 +1,40 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchLinearDocument,
-  updateLinearDocument,
   type LinearDocumentContent,
 } from "../lib/api";
 import { onLinearDocumentListChange } from "../lib/linearDocumentListEvents";
+import { isDraftDocumentId } from "../lib/linearSync";
+import { linearSync } from "../lib/linearSync";
 import {
   clearLinearDocumentContentSeed,
   peekLinearDocumentContentSeed,
 } from "../lib/linearDocumentContentSeed";
+
+function applyDocumentUpdatesLocal(
+  document: LinearDocumentContent,
+  updates: {
+    title?: string;
+    content?: string;
+    body?: string;
+    projectId?: string | null;
+    teamId?: string;
+    issueId?: string | null;
+  },
+): LinearDocumentContent {
+  const content = updates.content ?? updates.body;
+  return {
+    ...document,
+    ...(updates.title !== undefined ? { title: updates.title } : null),
+    ...(content !== undefined ? { content } : null),
+    ...(updates.projectId !== undefined ? { projectId: updates.projectId ?? undefined } : null),
+    ...(updates.teamId !== undefined ? { teamId: updates.teamId } : null),
+    ...(updates.issueId !== undefined
+      ? { linkedIssueId: updates.issueId ?? undefined }
+      : null),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 export function useLinearDocument(documentId: string, enabled = true) {
   const [document, setDocument] = useState<LinearDocumentContent | null>(null);
@@ -35,18 +61,26 @@ export function useLinearDocument(documentId: string, enabled = true) {
       setError(null);
     }
 
-    void fetchLinearDocument(documentId).then((result) => {
-      if (cancelled) return;
-      if (result.error || !result.document) {
-        setDocument(null);
-        setError(result.error ?? "Failed to load document.");
-      } else {
-        setDocument(result.document);
-        setError(null);
-        clearLinearDocumentContentSeed(documentId);
-      }
-      setLoading(false);
-    });
+    if (isDraftDocumentId(documentId) && seed) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void linearSync.resolveId(documentId).then((resolvedId) =>
+      fetchLinearDocument(resolvedId).then((result) => {
+        if (cancelled) return;
+        if (result.error || !result.document) {
+          setDocument(null);
+          setError(result.error ?? "Failed to load document.");
+        } else {
+          setDocument(result.document);
+          setError(null);
+          clearLinearDocumentContentSeed(documentId);
+        }
+        setLoading(false);
+      }),
+    );
 
     return () => {
       cancelled = true;
@@ -58,7 +92,8 @@ export function useLinearDocument(documentId: string, enabled = true) {
     setRefreshing(true);
     setError(null);
     try {
-      const result = await fetchLinearDocument(documentId);
+      const resolvedId = await linearSync.resolveId(documentId);
+      const result = await fetchLinearDocument(resolvedId);
       if (result.error || !result.document) {
         setDocument(null);
         setError(result.error ?? "Failed to load document.");
@@ -85,19 +120,34 @@ export function useLinearDocument(documentId: string, enabled = true) {
     async (updates: {
       title?: string;
       content?: string;
+      body?: string;
       projectId?: string | null;
       teamId?: string;
       issueId?: string | null;
-    }) => {
-      const result = await updateLinearDocument(documentId, updates);
-      if (result.error || !result.document) {
-        return {
-          error: result.error ?? "Failed to save document.",
-          document: null,
-        };
+    }): Promise<
+      | { error: string; document: null }
+      | { error: null; document: LinearDocumentContent }
+    > => {
+      let nextDocument: LinearDocumentContent | null = null;
+      setDocument((current) => {
+        if (!current) return current;
+        nextDocument = applyDocumentUpdatesLocal(current, updates);
+        return nextDocument;
+      });
+
+      try {
+        await linearSync.enqueueDocumentUpdate(documentId, updates);
+        if (!nextDocument) {
+          return {
+            error: "Document is not loaded.",
+            document: null,
+          };
+        }
+        return { error: null, document: nextDocument };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to save document.";
+        return { error: message, document: null };
       }
-      setDocument(result.document);
-      return { error: null, document: result.document };
     },
     [documentId],
   );

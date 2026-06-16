@@ -119,7 +119,12 @@ import { fetchLinearProjectContext } from "./linear/project-context.ts";
 import { searchLinearIssues } from "./linear/search.ts";
 import { searchLinearDocuments } from "./linear/search-documents.ts";
 import { fetchLinearProjectOverview, updateLinearProjectContent } from "./linear/project-overview.ts";
-import { fetchLinearProjectIssues, fetchLinearTeamIssues, createLinearTeamIssue } from "./linear/project-issues.ts";
+import {
+  createLinearProjectIssue,
+  createLinearTeamIssue,
+  fetchLinearProjectIssues,
+  fetchLinearTeamIssues,
+} from "./linear/project-issues.ts";
 import { createLinearLetterFromUpload } from "./linear/create-letter-from-upload.ts";
 import { fetchLinearIssuesByDueDates } from "./linear/issues-by-due-date.ts";
 import {
@@ -939,6 +944,33 @@ app.get("/linear/projects/:projectId/issues", async (c) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load project issues";
     return c.json({ error: message, issues: [], workflowStates: [] }, 500);
+  }
+});
+
+app.post("/linear/projects/:projectId/issues", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        issue: null,
+      },
+      400,
+    );
+  }
+
+  const projectId = c.req.param("projectId")?.trim();
+  if (!projectId) {
+    return c.json({ error: "projectId is required", issue: null }, 400);
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => null)) as { title?: unknown } | null;
+    const title = typeof body?.title === "string" ? body.title.trim() : undefined;
+    const issue = await createLinearProjectIssue(projectId, title ? { title } : undefined);
+    return c.json({ issue });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create project issue";
+    return c.json({ error: message, issue: null }, 500);
   }
 });
 

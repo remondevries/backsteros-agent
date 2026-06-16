@@ -6,6 +6,7 @@ import {
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../../hooks/useLinearProjectDocuments";
 import { useLinearWorkspaceTabCreateAction } from "../../hooks/useLinearWorkspaceTabCreateAction";
+import { isIosDevice } from "../../platform/iosStandalone";
 import { isLinearMeetingDocumentIcon } from "../../lib/linearDocumentIcons";
 import { linearLinkedDocumentDisplayTitle } from "../../lib/linearLinkedDocumentTitle";
 import { createLetterComposeDraftDocument } from "../../lib/letterComposeDraft";
@@ -63,6 +64,7 @@ export function ProjectLettersPanel({
           onCreate: handleCreateLetter,
         }
       : null,
+    { iosQuickAction: !isIosDevice() },
   );
 
   const sortedDocuments = useMemo(

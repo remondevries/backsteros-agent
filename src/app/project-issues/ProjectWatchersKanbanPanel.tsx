@@ -16,8 +16,8 @@ import { LinearStatusIcon } from "../../chat/LinearStatusIcon";
 import type { LinearIssueEntity } from "../../chat/types";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectIssues } from "../../hooks/useLinearProjectIssues";
-import { fetchLinearIssueDetail, updateLinearIssueDetail } from "../../lib/api";
-import { notifyLinearIssueListUpdateFromDetail } from "../../lib/linearIssueListPatch";
+import { fetchLinearIssueDetail } from "../../lib/api";
+import { linearSync } from "../../lib/linearSync";
 import { formatIssueDueMetaLabel, linearIssueTitleForCardDisplay } from "../../lib/linearIssueDisplay";
 import { abbreviateGithubLabelName, githubLabelHoverTitle } from "../../lib/linearLabelDisplay";
 import { resolveTerminalLeafId } from "../../modules/terminal/leafId";
@@ -652,13 +652,7 @@ export function ProjectWatchersKanbanPanel({
       setMoveError(null);
 
       try {
-        const result = await updateLinearIssueDetail(droppedIssueId, { stateId: targetStateId });
-        if (result.error) {
-          throw new Error(result.error);
-        }
-        if (result.issue) {
-          notifyLinearIssueListUpdateFromDetail(result.issue);
-        }
+        await linearSync.enqueueIssueUpdate(droppedIssueId, { stateId: targetStateId });
       } catch (moveIssueError) {
         setIssueOverrides((current) => {
           const next = { ...current };

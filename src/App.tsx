@@ -13,6 +13,7 @@ import {
   subscribeToLinearWatcherEvents,
 } from "./lib/linearWatcherEvents";
 import { startLinearIssueAgentDispatch } from "./lib/linearIssueAgentDispatch";
+import { linearSync } from "./lib/linearSync";
 import { LinearIssueAgentDispatchHost } from "./app/project-issues/LinearIssueAgentDispatchHost";
 import type { ModelMode } from "./chat/types";
 import { useSystemTheme } from "./hooks/useSystemTheme";
@@ -543,6 +544,11 @@ export default function App() {
       setGateNotice(null);
     });
   }, []);
+
+  useEffect(() => {
+    if (!appReady || !linearAccessReady) return;
+    linearSync.start();
+  }, [linearAccessReady, appReady]);
 
   useEffect(() => {
     if (!appReady || !linearAccessReady) return;

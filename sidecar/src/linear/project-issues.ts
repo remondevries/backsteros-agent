@@ -1,7 +1,12 @@
 import { linearGraphqlRequest } from "./graphql.ts";
 import { cachedLinearList, linearListCacheKeys } from "./list-cache.ts";
 import { invalidateLinearIssueListCaches } from "./list-cache-invalidate.ts";
-import { fetchLinearTeamContext, resolveWorkflowStateId, seedLinearTeamContextCache } from "./project-context.ts";
+import {
+  fetchLinearProjectContext,
+  fetchLinearTeamContext,
+  resolveWorkflowStateId,
+  seedLinearTeamContextCache,
+} from "./project-context.ts";
 
 export type LinearProjectIssue = {
   id: string;
@@ -471,6 +476,55 @@ export async function createLinearTeamIssue(
   const issue = mapGraphqlProjectIssueNode(node, "—", "Unknown");
   if (!issue) {
     throw new Error("Linear returned an invalid inbox issue");
+  }
+
+  invalidateLinearIssueListCaches();
+  return issue;
+}
+
+export async function createLinearProjectIssue(
+  projectId: string,
+  options?: { title?: string },
+): Promise<LinearProjectIssue> {
+  const id = projectId.trim();
+  if (!id) {
+    throw new Error("projectId is required");
+  }
+
+  const projectContext = await fetchLinearProjectContext(id);
+  const stateId = resolveWorkflowStateId(
+    projectContext.states,
+    ["Triage", "Backlog", "Todo"],
+    "unstarted",
+  );
+  if (!stateId) {
+    throw new Error("Could not resolve an initial workflow state for this project");
+  }
+
+  const title = options?.title?.trim() || "Untitled";
+
+  const data = await linearGraphqlRequest<{
+    issueCreate?: {
+      success?: boolean;
+      issue?: GraphqlProjectIssueNode | null;
+    } | null;
+  }>(TEAM_ISSUE_CREATE_MUTATION, {
+    input: {
+      teamId: projectContext.teamId,
+      projectId: projectContext.projectId,
+      title,
+      stateId,
+    },
+  });
+
+  const node = data.issueCreate?.issue;
+  if (!data.issueCreate?.success || !node) {
+    throw new Error("Linear did not create the project issue");
+  }
+
+  const issue = mapGraphqlProjectIssueNode(node, projectContext.projectName, "Unknown");
+  if (!issue) {
+    throw new Error("Linear returned an invalid project issue");
   }
 
   invalidateLinearIssueListCaches();

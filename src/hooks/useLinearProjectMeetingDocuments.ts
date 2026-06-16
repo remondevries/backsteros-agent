@@ -71,6 +71,29 @@ export function useLinearProjectMeetingDocuments({
         return;
       }
 
+      if (change.type === "prepend") {
+        setDocuments((current) => {
+          if (current.some((doc) => doc.linearDocumentId === change.document.linearDocumentId)) {
+            return current;
+          }
+          return [change.document, ...current];
+        });
+        return;
+      }
+
+      if (change.type === "replace") {
+        setDocuments((current) =>
+          current.map((document) =>
+            document.linearDocumentId === change.previousId ? change.document : document,
+          ),
+        );
+        return;
+      }
+
+      if (change.type !== "update") {
+        return;
+      }
+
       setDocuments((current) =>
         current.map((document) =>
           document.linearDocumentId === change.linearDocumentId

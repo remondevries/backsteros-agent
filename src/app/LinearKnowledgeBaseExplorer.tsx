@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearProjectIcon } from "../chat/LinearProjectIcon";
-import {
-  createLinearProjectDocument,
-  createLinearTeamDocument,
-  createLinearTeamProject,
-} from "../lib/api";
+import { createLinearTeamProject } from "../lib/api";
+import { createDraftDocumentEntity, linearSync, rollbackOptimisticDocumentCreate } from "../lib/linearSync";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
 import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
@@ -52,7 +49,8 @@ export function LinearKnowledgeBaseExplorer({
   teamId: string;
   enabled: boolean;
 }) {
-  const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
+  const { activeLinearDocument, setActiveLinearDocument, clearActiveLinearDocument } =
+    useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -148,34 +146,42 @@ export function LinearKnowledgeBaseExplorer({
     [setActiveLinearDocument],
   );
 
-  const handleCreateDocument = useCallback(async () => {
+  const handleCreateDocument = useCallback(() => {
     if (!enabled || creating) return;
 
     setCreating(true);
     setCreateError(null);
-    try {
-      const projectId =
-        selectedProjectKey && selectedProjectKey !== KNOWLEDGE_BASE_NO_PROJECT_KEY
-          ? selectedProjectKey
-          : null;
-      const result = projectId
-        ? await createLinearProjectDocument(projectId)
-        : await createLinearTeamDocument(teamId);
 
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create document.");
-        return;
-      }
+    const projectId =
+      selectedProjectKey && selectedProjectKey !== KNOWLEDGE_BASE_NO_PROJECT_KEY
+        ? selectedProjectKey
+        : null;
+    const draft = createDraftDocumentEntity({
+      projectId: projectId ?? undefined,
+      title: "Untitled",
+    });
 
-      prependDocument(result.document);
-      seedLinearDocumentContentFromEntity(result.document);
-      openDocument(result.document);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create document.");
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, enabled, openDocument, prependDocument, selectedProjectKey, teamId]);
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openDocument(draft);
+
+    void linearSync.enqueueDocumentCreate({
+      kind: projectId ? "project" : "team",
+      projectId: projectId ?? undefined,
+      teamId,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create document.");
+      })
+      .finally(() => {
+        setCreating(false);
+      });
+  }, [activeLinearDocument?.id, creating, clearActiveLinearDocument, enabled, openDocument, prependDocument, selectedProjectKey, teamId]);
 
   const handleCreateFolder = useCallback(async () => {
     if (!enabled || creating) return;

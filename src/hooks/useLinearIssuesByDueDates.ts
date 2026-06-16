@@ -8,6 +8,27 @@ function patchIssuesByDueDateMap(
   dueDates: string[],
   change: Parameters<Parameters<typeof onLinearIssueListChange>[0]>[0],
 ): Record<string, LinearIssueEntity[]> {
+  if (change.type === "refresh") {
+    return current;
+  }
+
+  if (change.type === "replace") {
+    let changed = false;
+    const next: Record<string, LinearIssueEntity[]> = {};
+    for (const [date, issues] of Object.entries(current)) {
+      const mapped = issues.map((issue) =>
+        issue.id === change.previousId ? change.issue : issue,
+      );
+      if (mapped.some((issue, index) => issue !== issues[index])) {
+        changed = true;
+      }
+      if (mapped.length > 0) {
+        next[date] = mapped;
+      }
+    }
+    return changed ? next : current;
+  }
+
   if (change.type === "remove") {
     let changed = false;
     const next: Record<string, LinearIssueEntity[]> = {};
@@ -23,6 +44,10 @@ function patchIssuesByDueDateMap(
     return changed ? next : current;
   }
 
+  if (change.type !== "update") {
+    return current;
+  }
+
   let existingDate: string | null = null;
   let existingIssue: LinearIssueEntity | null = null;
   for (const [date, issues] of Object.entries(current)) {
@@ -34,9 +59,11 @@ function patchIssuesByDueDateMap(
     }
   }
 
-  if (!existingIssue) {
+  if (!existingIssue || existingDate === null) {
     return current;
   }
+
+  const existingDateKey = existingDate;
 
   const patchedIssue = { ...existingIssue, ...change.patch };
   const nextDueDate = patchedIssue.dueDate?.trim().slice(0, 10) || null;
@@ -45,18 +72,20 @@ function patchIssuesByDueDateMap(
   if (!dueDateChanged) {
     return {
       ...current,
-      [existingDate]: (current[existingDate] ?? []).map((issue) =>
+      [existingDateKey]: (current[existingDateKey] ?? []).map((issue: LinearIssueEntity) =>
         issue.id === change.issueId ? patchedIssue : issue,
       ),
     };
   }
 
   const next = { ...current };
-  const remaining = (next[existingDate] ?? []).filter((issue) => issue.id !== change.issueId);
+  const remaining = (next[existingDateKey] ?? []).filter(
+    (issue: LinearIssueEntity) => issue.id !== change.issueId,
+  );
   if (remaining.length > 0) {
-    next[existingDate] = remaining;
+    next[existingDateKey] = remaining;
   } else {
-    delete next[existingDate];
+    delete next[existingDateKey];
   }
 
   if (nextDueDate && dueDates.includes(nextDueDate)) {
@@ -102,9 +131,13 @@ export function useLinearIssuesByDueDates(dueDates: string[], enabled: boolean) 
     if (!enabled || dueDates.length === 0) return undefined;
 
     return onLinearIssueListChange((change) => {
+      if (change.type === "refresh") {
+        void refresh();
+        return;
+      }
       setIssuesByDueDate((current) => patchIssuesByDueDateMap(current, dueDates, change));
     });
-  }, [dueDates, dueDatesKey, enabled]);
+  }, [dueDates, dueDatesKey, enabled, refresh]);
 
   return { issuesByDueDate, loading, error, refresh };
 }

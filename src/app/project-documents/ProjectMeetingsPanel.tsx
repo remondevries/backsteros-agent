@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
-import { createLinearProjectMeetingDocument } from "../../lib/api";
-import {
-  compareDocumentsNewestFirst,
+import { compareDocumentsNewestFirst,
   type ProjectDocumentEntity,
 } from "../../lib/documentStatusGroups";
+import { seedLinearDocumentContentFromEntity } from "../../lib/linearDocumentContentSeed";
+import { createDraftDocumentEntity, linearSync, rollbackOptimisticDocumentCreate } from "../../lib/linearSync";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectMeetingDocuments } from "../../hooks/useLinearProjectMeetingDocuments";
 import { useLinearWorkspaceTabCreateAction } from "../../hooks/useLinearWorkspaceTabCreateAction";
+import { isIosDevice } from "../../platform/iosStandalone";
 import { useContentPanelNavigation } from "../contentPanelNavigation";
 import { useContentListNavigationRegistration } from "../../lib/contentListNavigationReact";
 import { meetingDocumentDisplayTitle } from "../../lib/meetingDocumentTitle";
@@ -30,7 +31,8 @@ export function ProjectMeetingsPanel({
   projectId: string;
   enabled: boolean;
 }) {
-  const { setActiveLinearDocument, activeLinearDocument } = useContentPanelNavigation();
+  const { setActiveLinearDocument, activeLinearDocument, clearActiveLinearDocument } =
+    useContentPanelNavigation();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const { documents, loading, refreshing, error, refresh, prependDocument } =
@@ -47,26 +49,36 @@ export function ProjectMeetingsPanel({
     onRefresh: refresh,
   });
 
-  const handleCreateMeeting = useCallback(async () => {
+  const handleCreateMeeting = useCallback(() => {
     if (creating) return;
 
     setCreating(true);
     setCreateError(null);
-    try {
-      const result = await createLinearProjectMeetingDocument(projectId);
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create meeting note.");
-        return;
-      }
 
-      prependDocument(result.document);
-      openMeetingDocument(result.document, setActiveLinearDocument);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create meeting note.");
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, prependDocument, projectId, setActiveLinearDocument]);
+    const draft = createDraftDocumentEntity({
+      projectId,
+      title: "Untitled",
+    });
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openMeetingDocument(draft, setActiveLinearDocument);
+
+    void linearSync.enqueueDocumentCreate({
+      kind: "project-meeting",
+      projectId,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create meeting note.");
+      })
+      .finally(() => {
+        setCreating(false);
+      });
+  }, [activeLinearDocument?.id, creating, clearActiveLinearDocument, prependDocument, projectId, setActiveLinearDocument]);
 
   useLinearWorkspaceTabCreateAction(
     enabled
@@ -78,6 +90,7 @@ export function ProjectMeetingsPanel({
           },
         }
       : null,
+    { iosQuickAction: !isIosDevice() },
   );
 
   const sortedDocuments = useMemo(

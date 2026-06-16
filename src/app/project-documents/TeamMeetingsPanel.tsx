@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
-import { createLinearTeamMeetingDocument } from "../../lib/api";
-import {
-  compareDocumentsNewestFirst,
+import { compareDocumentsNewestFirst,
   type ProjectDocumentEntity,
 } from "../../lib/documentStatusGroups";
+import { seedLinearDocumentContentFromEntity } from "../../lib/linearDocumentContentSeed";
+import { createDraftDocumentEntity, linearSync, rollbackOptimisticDocumentCreate } from "../../lib/linearSync";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useLinearProjectDocuments } from "../../hooks/useLinearProjectDocuments";
 import { useLinearWorkspaceTabCreateAction } from "../../hooks/useLinearWorkspaceTabCreateAction";
@@ -31,7 +31,8 @@ export function TeamMeetingsPanel({
   teamId: string;
   enabled: boolean;
 }) {
-  const { setActiveLinearDocument, activeLinearDocument } = useContentPanelNavigation();
+  const { setActiveLinearDocument, activeLinearDocument, clearActiveLinearDocument } =
+    useContentPanelNavigation();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const { documents: allDocuments, loading, refreshing, error, refresh, prependDocument } =
@@ -52,26 +53,33 @@ export function TeamMeetingsPanel({
     onRefresh: refresh,
   });
 
-  const handleCreateMeeting = useCallback(async () => {
+  const handleCreateMeeting = useCallback(() => {
     if (creating) return;
 
     setCreating(true);
     setCreateError(null);
-    try {
-      const result = await createLinearTeamMeetingDocument(teamId);
-      if (result.error || !result.document) {
-        setCreateError(result.error ?? "Failed to create meeting note.");
-        return;
-      }
 
-      prependDocument(result.document);
-      openMeetingDocument(result.document, setActiveLinearDocument);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create meeting note.");
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, prependDocument, setActiveLinearDocument, teamId]);
+    const draft = createDraftDocumentEntity({ title: "Untitled" });
+    prependDocument(draft);
+    seedLinearDocumentContentFromEntity(draft);
+    openMeetingDocument(draft, setActiveLinearDocument);
+
+    void linearSync.enqueueDocumentCreate({
+      kind: "team-meeting",
+      teamId,
+      localDocument: draft,
+    })
+      .catch((err) => {
+        rollbackOptimisticDocumentCreate(draft.linearDocumentId);
+        if (activeLinearDocument?.id === draft.linearDocumentId) {
+          clearActiveLinearDocument();
+        }
+        setCreateError(err instanceof Error ? err.message : "Failed to create meeting note.");
+      })
+      .finally(() => {
+        setCreating(false);
+      });
+  }, [activeLinearDocument?.id, creating, clearActiveLinearDocument, prependDocument, setActiveLinearDocument, teamId]);
 
   useLinearWorkspaceTabCreateAction(
     enabled

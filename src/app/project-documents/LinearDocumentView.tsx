@@ -4,7 +4,7 @@ import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useDocumentDeleteBreadcrumbAction } from "../../hooks/useDocumentDeleteBreadcrumbAction";
 import { useLinearDocument } from "../../hooks/useLinearDocument";
-import { deleteLinearDocument } from "../../lib/api";
+import { linearSync } from "../../lib/linearSync";
 import { notifyLinearDocumentListChange } from "../../lib/linearDocumentListEvents";
 import { parseDailyJournalDate, isDailyJournalDocumentTitle } from "../../lib/vaultDates";
 import {
@@ -436,13 +436,8 @@ export function LinearDocumentView({
     setDeleting(true);
     setSaveError(null);
     try {
-      const result = await deleteLinearDocument(documentId);
-      if (result.error || !result.ok) {
-        setSaveError(result.error ?? "Failed to delete document.");
-        return;
-      }
+      await linearSync.enqueueDocumentDelete(documentId);
       setDeleteConfirmOpen(false);
-      notifyLinearDocumentListChange({ type: "remove", linearDocumentId: documentId });
       clearActiveLinearDocument();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to delete document");

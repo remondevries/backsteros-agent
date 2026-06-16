@@ -7,6 +7,7 @@ import { cachedLinearList, linearListCacheKeys } from "./list-cache.ts";
 import { invalidateLinearDocumentListCaches } from "./list-cache-invalidate.ts";
 import { fetchLinearProjectContext } from "./project-context.ts";
 import { linearGraphqlRequest } from "./graphql.ts";
+import { withLinearRateLimitRetry } from "./rate-limit-retry.ts";
 
 export type LinearApiDocument = {
   id: string;
@@ -486,32 +487,34 @@ export async function createLinearApiDocument(
   title: string,
   content = "",
 ): Promise<LinearApiDocument> {
-  const response = await linearGraphqlRequest<{
-    documentCreate?: {
-      success?: boolean;
-      document?: GraphqlDocumentNode | null;
-    } | null;
-  }>(DOCUMENT_CREATE_MUTATION, {
-    input: {
-      projectId: projectId.trim(),
-      title: title.trim() || "Untitled note",
-      content,
-    },
-  });
+  return withLinearRateLimitRetry(async () => {
+    const response = await linearGraphqlRequest<{
+      documentCreate?: {
+        success?: boolean;
+        document?: GraphqlDocumentNode | null;
+      } | null;
+    }>(DOCUMENT_CREATE_MUTATION, {
+      input: {
+        projectId: projectId.trim(),
+        title: title.trim() || "Untitled note",
+        content,
+      },
+    });
 
-  if (!response.documentCreate?.success) {
-    throw new Error("Linear rejected document creation");
-  }
+    if (!response.documentCreate?.success) {
+      throw new Error("Linear rejected document creation");
+    }
 
-  const document = normalizeDocument(response.documentCreate.document ?? {}, {
-    id: projectId.trim(),
-  });
-  if (!document) {
-    throw new Error("Linear returned no document");
-  }
+    const document = normalizeDocument(response.documentCreate.document ?? {}, {
+      id: projectId.trim(),
+    });
+    if (!document) {
+      throw new Error("Linear returned no document");
+    }
 
-  invalidateLinearDocumentListCaches();
-  return document;
+    invalidateLinearDocumentListCaches();
+    return document;
+  }, { label: "documentCreate(project)" });
 }
 
 export async function createLinearApiTeamDocument(
@@ -521,31 +524,33 @@ export async function createLinearApiTeamDocument(
   options?: { issueId?: string },
 ): Promise<LinearApiDocument> {
   const issueId = options?.issueId?.trim();
-  const response = await linearGraphqlRequest<{
-    documentCreate?: {
-      success?: boolean;
-      document?: GraphqlDocumentNode | null;
-    } | null;
-  }>(DOCUMENT_CREATE_MUTATION, {
-    input: {
-      teamId: teamId.trim(),
-      title: title.trim() || "Untitled note",
-      content,
-      ...(issueId ? { issueId } : {}),
-    },
-  });
+  return withLinearRateLimitRetry(async () => {
+    const response = await linearGraphqlRequest<{
+      documentCreate?: {
+        success?: boolean;
+        document?: GraphqlDocumentNode | null;
+      } | null;
+    }>(DOCUMENT_CREATE_MUTATION, {
+      input: {
+        teamId: teamId.trim(),
+        title: title.trim() || "Untitled note",
+        content,
+        ...(issueId ? { issueId } : {}),
+      },
+    });
 
-  if (!response.documentCreate?.success) {
-    throw new Error("Linear rejected document creation");
-  }
+    if (!response.documentCreate?.success) {
+      throw new Error("Linear rejected document creation");
+    }
 
-  const document = normalizeDocument(response.documentCreate.document ?? {});
-  if (!document) {
-    throw new Error("Linear returned no document");
-  }
+    const document = normalizeDocument(response.documentCreate.document ?? {});
+    if (!document) {
+      throw new Error("Linear returned no document");
+    }
 
-  invalidateLinearDocumentListCaches();
-  return document;
+    invalidateLinearDocumentListCaches();
+    return document;
+  }, { label: "documentCreate(team)" });
 }
 
 export async function updateLinearApiDocument(

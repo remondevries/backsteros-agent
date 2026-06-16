@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { fetchLinearProjectIssues } from "../lib/api";
 import { onLinearIssueListChange } from "../lib/linearIssueListEvents";
+import { linearSync } from "../lib/linearSync";
 import {
   addLinearWatcherStreamListener,
   isLinearWatcherPollEvent,
@@ -79,6 +80,21 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
         return;
       }
 
+      if (change.type === "prepend") {
+        setIssues((current) => {
+          if (current.some((issue) => issue.id === change.issue.id)) return current;
+          return [change.issue, ...current];
+        });
+        return;
+      }
+
+      if (change.type === "replace") {
+        setIssues((current) =>
+          current.map((issue) => (issue.id === change.previousId ? change.issue : issue)),
+        );
+        return;
+      }
+
       setIssues((current) =>
         current.map((issue) =>
           issue.id === change.issueId ? { ...issue, ...change.patch } : issue,
@@ -94,11 +110,41 @@ export function useLinearProjectIssues(projectId: string | null, enabled: boolea
       if (isLinearWatcherPollEvent(event)) return;
       if (!isLinearWatcherChangeEvent(event)) return;
       if (event.projectId !== projectId) return;
-      void refresh({ background: true });
+      void linearSync.getStatus().then((status) => {
+        if (status.pendingCount > 0) return;
+        void refresh({ background: true });
+      });
     });
   }, [enabled, projectId, refresh]);
 
   const refreshInBackground = useCallback(() => refresh({ background: true }), [refresh]);
 
-  return { issues, workflowStates, loading, refreshing, error, refresh: refreshInBackground };
+  const prependIssue = useCallback((issue: LinearIssueEntity) => {
+    setIssues((current) => {
+      if (current.some((item) => item.id === issue.id)) {
+        return current;
+      }
+      return [issue, ...current];
+    });
+  }, []);
+
+  const replaceIssue = useCallback((previousId: string, issue: LinearIssueEntity) => {
+    setIssues((current) => current.map((item) => (item.id === previousId ? issue : item)));
+  }, []);
+
+  const removeIssue = useCallback((issueId: string) => {
+    setIssues((current) => current.filter((issue) => issue.id !== issueId));
+  }, []);
+
+  return {
+    issues,
+    workflowStates,
+    loading,
+    refreshing,
+    error,
+    refresh: refreshInBackground,
+    prependIssue,
+    replaceIssue,
+    removeIssue,
+  };
 }

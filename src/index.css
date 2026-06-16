@@ -1711,7 +1711,14 @@ html.tauri .content-panel-tabs-bar:has(.content-panel-navigation-toggle) {
   flex: 1;
   min-width: 0;
   gap: 8px;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.linear-project-view-tabs-list::-webkit-scrollbar {
+  display: none;
 }
 
 .linear-project-view-tabs-controls {

@@ -5,6 +5,7 @@ import {
   isIosBottomNavMoreItem,
 } from "../lib/iosNavConfig";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
+import { useIosKeyboardViewportSync } from "../hooks/useIosKeyboardViewportSync";
 import { isIosDevice } from "../platform/iosStandalone";
 import { useContentPanelChrome } from "./contentPanelChromeContext";
 import { sidebarNavItemIcon } from "./sidebarNavConfig";
@@ -36,6 +37,19 @@ const MORE_MENU_ITEMS = IOS_BOTTOM_NAV_MORE_ITEM_IDS.map((id) => ({
   label: sidebarNavItemLabel(id),
   icon: sidebarNavItemIcon(id),
 }));
+
+const IOS_BOTTOM_NAV_MORE_TRAY_INDEX = IOS_BOTTOM_NAV_TRAY_ITEM_IDS.length;
+
+function activeTrayIndexForNavItem(
+  activeVaultNavItem: SidebarNavItemId | null,
+  moreOpen: boolean,
+): number {
+  if (moreOpen || isIosBottomNavMoreItem(activeVaultNavItem)) {
+    return IOS_BOTTOM_NAV_MORE_TRAY_INDEX;
+  }
+  const trayIndex = IOS_BOTTOM_NAV_TRAY_ITEM_IDS.findIndex((id) => id === activeVaultNavItem);
+  return trayIndex >= 0 ? trayIndex : 0;
+}
 
 function IosMobileQuickActionPlusIcon() {
   return (
@@ -70,10 +84,12 @@ export function IosMobileBottomNav({
   onVaultNavItemChange: (item: SidebarNavItemId) => void;
 }) {
   const { iosMobileQuickActions, iosMobileSearchAction } = useContentPanelChrome();
+  useIosKeyboardViewportSync();
   const moreAnchorRef = useRef<HTMLDivElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const quickActions = iosMobileQuickActions ?? [];
   const showActionStack = quickActions.length > 0 || iosMobileSearchAction !== null;
+  const activeTrayIndex = activeTrayIndexForNavItem(activeVaultNavItem, moreOpen);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -104,7 +120,13 @@ export function IosMobileBottomNav({
   return (
     <nav className="ios-mobile-bottom-nav" aria-label="Mobile navigation">
       <div className="ios-mobile-bottom-nav-cluster">
-        <div className="ios-mobile-bottom-nav-bar" role="toolbar" aria-label="Primary">
+        <div
+          className="ios-mobile-bottom-nav-bar"
+          role="toolbar"
+          aria-label="Primary"
+          data-active-index={activeTrayIndex}
+        >
+          <span className="ios-mobile-bottom-nav-indicator" aria-hidden="true" />
           {MOBILE_NAV_TRAY_ITEMS.map((item) => {
             if (item.id === "more") {
               const isMoreSectionActive = isIosBottomNavMoreItem(activeVaultNavItem);

@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 import { onLinearIssueDetailRefreshRequested } from "../lib/linearIssueDetailRefreshEvents";
+import { onLinearDocumentListChange } from "../lib/linearDocumentListEvents";
+import { onLinearIssueListChange } from "../lib/linearIssueListEvents";
 import { isInboxDraftIssueId } from "../lib/inboxDraftIssue";
 import { isLetterComposeDraftDocumentId } from "../lib/letterComposeDraft";
 import type { LinearWorkspaceSelection } from "./linearWorkspaceSelection";
@@ -363,6 +365,40 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
     clearChrome();
     setFocusResetNonce((current) => current + 1);
   }, [clearChrome, linearSelectionKey]);
+
+  useEffect(() => {
+    return onLinearIssueListChange((change) => {
+      if (change.type !== "replace") return;
+      setActiveLinearIssueState((current) => {
+        if (!current || current.id !== change.previousId) return current;
+        const issue = change.issue;
+        return {
+          ...current,
+          id: issue.id,
+          identifier: issue.identifier?.trim() || undefined,
+          title: issue.title,
+          status: issue.status ?? current.status,
+          stateType: issue.stateType ?? current.stateType,
+          projectName: issue.projectName?.trim() || current.projectName,
+        };
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    return onLinearDocumentListChange((change) => {
+      if (change.type !== "replace") return;
+      setActiveLinearDocumentState((current) => {
+        if (!current || current.id !== change.previousId) return current;
+        const document = change.document;
+        return {
+          id: document.linearDocumentId,
+          title: document.title,
+          projectId: document.projectId || current.projectId,
+        };
+      });
+    });
+  }, []);
 
   const setSidebarSegments = useCallback((segments: ContentPanelBreadcrumbSegment[]) => {
     setSidebarSegmentsState((current) =>

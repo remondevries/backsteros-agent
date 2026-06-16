@@ -23,6 +23,8 @@ export type LinearIssueListPatch = Partial<
 
 export type LinearIssueListChange =
   | { type: "update"; issueId: string; patch: LinearIssueListPatch }
+  | { type: "prepend"; issue: LinearIssueEntity }
+  | { type: "replace"; previousId: string; issue: LinearIssueEntity }
   | { type: "remove"; issueId: string }
   | { type: "refresh" };
 

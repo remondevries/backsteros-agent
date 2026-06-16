@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchLinearIssueDetail,
-  updateLinearIssueDetail as patchLinearIssueDetail,
   type LinearIssueDetail,
   type LinearIssueDetailUpdates,
 } from "../lib/api";
@@ -14,8 +13,9 @@ import {
 import {
   applyPendingDraftUpdatesToDetailLocal,
   isDraftIssueId,
-  queueInboxDraftIssueUpdates,
 } from "../lib/inboxDraftIssue";
+import { linearSync } from "../lib/linearSync";
+import { applyOptimisticIssueDetailLocal } from "../lib/linearSync/optimistic";
 
 export function useLinearIssueDetail(
   issueId: string,
@@ -25,7 +25,7 @@ export function useLinearIssueDetail(
   const [issue, setIssue] = useState<LinearIssueDetail | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [refreshing, setRefreshing] = useState(false);
-  const [updating, setUpdating] = useState(false);
+  const updating = false;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,7 +81,8 @@ export function useLinearIssueDetail(
     }
     setError(null);
     try {
-      const result = await fetchLinearIssueDetail(issueId);
+      const resolvedId = await linearSync.resolveId(issueId);
+      const result = await fetchLinearIssueDetail(resolvedId);
       if (result.error || !result.issue) {
         setIssue(null);
         setError(result.error ?? "Failed to load issue.");
@@ -100,37 +101,31 @@ export function useLinearIssueDetail(
   const updateIssue = useCallback(
     async (updates: LinearIssueDetailUpdates): Promise<string | null> => {
       if (!enabled || !issueId) return "Issue updates are disabled.";
-      if (isDraftIssueId(issueId)) {
-        queueInboxDraftIssueUpdates(issueId, updates);
-        let nextIssue: LinearIssueDetail | null = null;
-        setIssue((current) => {
-          if (!current) return current;
-          nextIssue = applyPendingDraftUpdatesToDetailLocal(current, updates);
-          return nextIssue;
+
+      let nextIssue: LinearIssueDetail | null = null;
+      setIssue((current) => {
+        if (!current) return current;
+        nextIssue = isDraftIssueId(issueId)
+          ? applyPendingDraftUpdatesToDetailLocal(current, updates)
+          : applyOptimisticIssueDetailLocal(current, updates);
+        return nextIssue;
+      });
+
+      if (nextIssue) {
+        notifyLinearIssueListChange({
+          type: "update",
+          issueId,
+          patch: linearIssueDetailToListPatch(nextIssue),
         });
-        if (nextIssue) {
-          notifyLinearIssueListChange({
-            type: "update",
-            issueId,
-            patch: linearIssueDetailToListPatch(nextIssue),
-          });
-        }
-        return null;
       }
-      setUpdating(true);
-      setError(null);
+
       try {
-        const result = await patchLinearIssueDetail(issueId, updates);
-        if (result.error || !result.issue) {
-          const message = result.error ?? "Failed to update issue.";
-          setError(message);
-          return message;
-        }
-        setIssue(result.issue);
-        notifyLinearIssueListUpdateFromDetail(result.issue);
+        await linearSync.enqueueIssueUpdate(issueId, updates);
         return null;
-      } finally {
-        setUpdating(false);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to queue issue update.";
+        setError(message);
+        return message;
       }
     },
     [enabled, issueId],

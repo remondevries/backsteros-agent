@@ -39,3 +39,30 @@ export function clearLinearDocumentContentSeed(documentId: string): void {
   if (!id) return;
   seeds.delete(id);
 }
+
+export function migrateLinearDocumentContentSeed(
+  draftDocumentId: string,
+  entity: ProjectDocumentEntity,
+  options?: { content?: string },
+): void {
+  const draftId = draftDocumentId.trim();
+  const realId = entity.linearDocumentId.trim();
+  if (!draftId || !realId || draftId === realId) return;
+
+  const draftSeed = seeds.get(draftId);
+  seeds.delete(draftId);
+  seeds.set(realId, {
+    id: realId,
+    title: entity.title,
+    content: options?.content ?? draftSeed?.content ?? "",
+    createdAt: entity.updatedAt,
+    updatedAt: entity.updatedAt,
+    projectId: entity.projectId,
+    projectName: entity.projectName,
+    linkedIssueId: entity.linkedIssueId,
+    linkedIssueIdentifier: entity.linkedIssueIdentifier,
+    teamId: draftSeed?.teamId,
+    teamName: draftSeed?.teamName,
+    url: draftSeed?.url,
+  });
+}

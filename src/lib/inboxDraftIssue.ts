@@ -1,14 +1,9 @@
-import type { LinearIssueEntity } from "../chat/types";
-import {
-  updateLinearIssueDetail,
-  type LinearIssueDetail,
-  type LinearIssueDetailUpdates,
-} from "./api";
+import type { LinearIssueDetail, LinearIssueDetailUpdates } from "./api";
+import { peekPendingIssueUpdates, clearPendingIssueUpdates } from "./linearSync/pendingCache";
+import { linearSync } from "./linearSync";
 
 export const INBOX_DRAFT_ISSUE_ID_PREFIX = "draft-inbox:";
 export const LETTER_DRAFT_ISSUE_ID_PREFIX = "draft-letter:";
-
-const pendingUpdates = new Map<string, LinearIssueDetailUpdates>();
 
 export function isInboxDraftIssueId(id: string | null | undefined): boolean {
   return typeof id === "string" && id.startsWith(INBOX_DRAFT_ISSUE_ID_PREFIX);
@@ -22,14 +17,14 @@ export function isDraftIssueId(id: string | null | undefined): boolean {
   return isInboxDraftIssueId(id) || isLetterDraftIssueId(id);
 }
 
-export function createInboxDraftIssue(): LinearIssueEntity {
+export function createInboxDraftIssue(): import("../chat/types").LinearIssueEntity {
   return {
     id: `${INBOX_DRAFT_ISSUE_ID_PREFIX}${crypto.randomUUID()}`,
     title: "Untitled",
   };
 }
 
-export function createLetterDraftIssue(title = "Untitled"): LinearIssueEntity {
+export function createLetterDraftIssue(title = "Untitled"): import("../chat/types").LinearIssueEntity {
   return {
     id: `${LETTER_DRAFT_ISSUE_ID_PREFIX}${crypto.randomUUID()}`,
     title: title.trim() || "Untitled",
@@ -71,17 +66,15 @@ export function queueInboxDraftIssueUpdates(
 ): void {
   const id = draftId.trim();
   if (!isDraftIssueId(id)) return;
-  pendingUpdates.set(id, { ...pendingUpdates.get(id), ...updates });
+  void linearSync.enqueueIssueUpdate(id, updates);
 }
 
 export function peekDraftIssueUpdates(draftId: string): LinearIssueDetailUpdates | null {
-  const updates = pendingUpdates.get(draftId.trim());
-  if (!updates || Object.keys(updates).length === 0) return null;
-  return { ...updates };
+  return peekPendingIssueUpdates(draftId.trim());
 }
 
 export function clearInboxDraftIssueUpdates(draftId: string): void {
-  pendingUpdates.delete(draftId.trim());
+  clearPendingIssueUpdates(draftId.trim());
 }
 
 function applyLinearIssueDetailUpdates(
@@ -111,37 +104,20 @@ function applyLinearIssueDetailUpdates(
   };
 }
 
-export async function flushInboxDraftIssueUpdates(
-  draftId: string,
-  realIssueId: string,
-): Promise<LinearIssueDetail | null> {
-  const updates = pendingUpdates.get(draftId.trim());
-  pendingUpdates.delete(draftId.trim());
-  if (!updates || Object.keys(updates).length === 0) {
-    return null;
-  }
-
-  const result = await updateLinearIssueDetail(realIssueId, updates);
-  if (result.error || !result.issue) {
-    throw new Error(result.error ?? "Failed to save inbox draft changes.");
-  }
-  return result.issue;
-}
-
 export function applyPendingDraftUpdatesToDetail(
   draftId: string,
   detail: LinearIssueDetail,
 ): LinearIssueDetail {
-  const updates = pendingUpdates.get(draftId.trim());
+  const updates = peekPendingIssueUpdates(draftId.trim());
   if (!updates) return detail;
   return applyLinearIssueDetailUpdates(detail, updates);
 }
 
 export function applyPendingDraftUpdatesToEntity(
   draftId: string,
-  entity: LinearIssueEntity,
-): LinearIssueEntity {
-  const updates = pendingUpdates.get(draftId.trim());
+  entity: import("../chat/types").LinearIssueEntity,
+): import("../chat/types").LinearIssueEntity {
+  const updates = peekPendingIssueUpdates(draftId.trim());
   if (!updates) return entity;
   return {
     ...entity,
