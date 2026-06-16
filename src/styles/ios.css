@@ -348,6 +348,21 @@ html.ios-device .content-panel-slot .vault-folder-explorer-search {
   display: none;
 }
 
+html.ios-device .content-panel-slot .vault-folder-explorer-search.ios-explorer-search-visible {
+  display: flex;
+}
+
+html.ios-device .content-panel-slot .linear-projects-table .vault-folder-explorer-search {
+  display: none;
+}
+
+html.ios-device
+  .content-panel-slot
+  .linear-projects-table
+  .vault-folder-explorer-search.ios-explorer-search-visible {
+  display: flex;
+}
+
 html.ios-device .content-panel-slot .sidebar-explorer-search-field {
   display: none;
 }
@@ -539,6 +554,16 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
 }
 
 .ios-mobile-bottom-nav-action--quick:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ios-mobile-bottom-nav-action--anchor {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.ios-mobile-bottom-nav-action--anchor:disabled {
   opacity: 0.45;
   cursor: default;
 }

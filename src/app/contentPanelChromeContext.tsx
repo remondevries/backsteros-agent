@@ -22,6 +22,12 @@ export type IosMobileQuickAction = {
   onClick: () => void;
 };
 
+export type IosMobileSearchAction = {
+  label: string;
+  disabled?: boolean;
+  onActivate: () => void;
+};
+
 type ContentPanelChromeContextValue = {
   contentPanelBarState: ContentPanelBarState | null;
   setContentPanelBarState: (state: ContentPanelBarState | null) => void;
@@ -37,6 +43,8 @@ type ContentPanelChromeContextValue = {
   setProjectDocumentsCreateAction: (action: ProjectDocumentsTabCreateAction | null) => void;
   iosMobileQuickActions: IosMobileQuickAction[] | null;
   setIosMobileQuickActions: (actions: IosMobileQuickAction[] | null) => void;
+  iosMobileSearchAction: IosMobileSearchAction | null;
+  setIosMobileSearchAction: (action: IosMobileSearchAction | null) => void;
   clearChrome: () => void;
 };
 
@@ -57,6 +65,9 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
   const [projectDocumentsCreateAction, setProjectDocumentsCreateActionState] =
     useState<ProjectDocumentsTabCreateAction | null>(null);
   const [iosMobileQuickActions, setIosMobileQuickActionsState] = useState<IosMobileQuickAction[] | null>(
+    null,
+  );
+  const [iosMobileSearchAction, setIosMobileSearchActionState] = useState<IosMobileSearchAction | null>(
     null,
   );
 
@@ -94,6 +105,10 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     setIosMobileQuickActionsState(actions);
   }, []);
 
+  const setIosMobileSearchAction = useCallback((action: IosMobileSearchAction | null) => {
+    setIosMobileSearchActionState(action);
+  }, []);
+
   const clearChrome = useCallback(() => {
     setContentPanelBarStateState(null);
     setIssuesWatcherActionState(null);
@@ -102,6 +117,7 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     setProjectsBrowseSearchActionState(null);
     setProjectDocumentsCreateActionState(null);
     setIosMobileQuickActionsState(null);
+    setIosMobileSearchActionState(null);
   }, []);
 
   const value = useMemo(
@@ -120,6 +136,8 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setProjectDocumentsCreateAction,
       iosMobileQuickActions,
       setIosMobileQuickActions,
+      iosMobileSearchAction,
+      setIosMobileSearchAction,
       clearChrome,
     }),
     [
@@ -127,6 +145,7 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       contentPanelBarState,
       documentDeleteAction,
       iosMobileQuickActions,
+      iosMobileSearchAction,
       issueViewModeAction,
       issuesWatcherAction,
       projectDocumentsCreateAction,
@@ -136,6 +155,7 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setIssueViewModeAction,
       setIssuesWatcherAction,
       setIosMobileQuickActions,
+      setIosMobileSearchAction,
       setProjectDocumentsCreateAction,
       setProjectsBrowseSearchAction,
     ],

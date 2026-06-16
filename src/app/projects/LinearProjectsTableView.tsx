@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useProjectsBrowseSearchBreadcrumbAction } from "../../hooks/useProjectsBrowseSearchBreadcrumbAction";
+import { useIosExplorerSearchChrome } from "../../hooks/useIosExplorerSearchChrome";
 import { useWorkspaceSetupTeamProjectIds } from "../../hooks/useWorkspaceSetupTeamProjectIds";
 import { LinearProjectStatusIcon } from "../../chat/LinearProjectStatusIcon";
 import { useLinearProjects } from "../../hooks/useLinearProjects";
@@ -32,21 +33,30 @@ export function LinearProjectsTableView({
 }) {
   const { linearSelection, setLinearSelection } = useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const normalizedTeamId = teamId?.trim() || null;
   const filterByTeam = Boolean(normalizedTeamId);
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  const searchPlaceholder = filterByTeam ? "Search organization projects…" : "Search projects…";
+  const searchAriaLabel = filterByTeam ? "Search organization projects" : "Search projects";
 
   useProjectsBrowseSearchBreadcrumbAction(
     enabled
       ? {
           value: searchQuery,
           onChange: setSearchQuery,
-          placeholder: filterByTeam ? "Search organization projects…" : "Search projects…",
-          ariaLabel: filterByTeam ? "Search organization projects" : "Search projects",
+          placeholder: searchPlaceholder,
+          ariaLabel: searchAriaLabel,
           disabled: !enabled,
         }
       : null,
   );
+
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: searchAriaLabel,
+    inputRef: searchInputRef,
+  });
   const { projects: allProjects, projectStatuses, loading: allLoading, error: allError } =
     useLinearProjects(enabled);
   const {
@@ -140,6 +150,22 @@ export function LinearProjectsTableView({
 
   return (
     <div className="linear-projects-table">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <input
+          ref={searchInputRef}
+          type="search"
+          className="vault-folder-explorer-search-input"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={searchPlaceholder}
+          aria-label={searchAriaLabel}
+          disabled={!enabled}
+        />
+      </div>
       <div className="linear-projects-table__header" aria-hidden="true">
         <span className="linear-projects-table__header-name">Name</span>
         <span className="linear-projects-table__header-cell linear-projects-table__header-health">

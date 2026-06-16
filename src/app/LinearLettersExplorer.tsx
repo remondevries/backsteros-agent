@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearStatusIcon } from "../chat/LinearStatusIcon";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
 import { useAutoOpenFirstListItem, useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useLinearProjectDocuments } from "../hooks/useLinearProjectDocuments";
 import { useLinearTeamIssues } from "../hooks/useLinearTeamIssues";
 import type { ProjectDocumentEntity } from "../lib/documentStatusGroups";
@@ -56,6 +57,7 @@ export function LinearLettersExplorer({
   const { activeLinearDocument, setActiveLinearDocument } = useContentPanelNavigation();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { collapsedGroups, toggleGroup } = useCollapsibleGroups();
   const {
     documents,
@@ -198,10 +200,21 @@ export function LinearLettersExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: "Search letters",
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLinearCustomers } from "../hooks/useLinearCustomers";
 import { useLinearTeams } from "../hooks/useLinearTeams";
 import type { LinearCustomerSummary, LinearTeamSummary } from "../lib/api";
@@ -8,6 +8,7 @@ import {
   workspaceSetupLinearTeamIdSet,
 } from "../lib/workspaceSetupTeamIds";
 import { useContentPanelBarState } from "../hooks/useContentPanelBarState";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { useBinaryContentModeShortcuts } from "../hooks/useBinaryContentModeShortcuts";
 import {
   contentListGroupHeaderId,
@@ -58,6 +59,7 @@ export function LinearOrganizationsExplorer({
   const [contentMode, setContentMode] = useState<OrganizationsContentMode>("organizations");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const {
     linearSelection,
@@ -253,6 +255,12 @@ export function LinearOrganizationsExplorer({
       ? "No matching customers."
       : "No customers yet.";
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: searchAriaLabel,
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
       <div className="vault-folder-explorer-header">
@@ -262,8 +270,13 @@ export function LinearOrganizationsExplorer({
           disabled={!enabled}
         />
       </div>
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}

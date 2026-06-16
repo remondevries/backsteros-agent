@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinearIssueEntity } from "../chat/types";
 import { createVaultDocument } from "../lib/api";
 import { useLinearIssuesByDueDates } from "../hooks/useLinearIssuesByDueDates";
@@ -14,6 +14,7 @@ import { vaultFolderTitle } from "../lib/vaultFolderContext";
 import { onVaultContentChanged } from "../lib/vaultContentEvents";
 import { useVaultDirectory } from "../hooks/useVaultDirectory";
 import { useExplorerIosChrome } from "../hooks/useExplorerIosChrome";
+import { useIosExplorerSearchChrome } from "../hooks/useIosExplorerSearchChrome";
 import { VirtualList, useVirtualListEnabled } from "../ui/VirtualList";
 import {
   useContentPanelNavigation,
@@ -90,6 +91,7 @@ export function VaultFolderExplorer({
   const rootPath = vaultNavItemLabel(activeNavItem);
   const [relativePath, setRelativePath] = useState<string>(rootPath);
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [collapsedMonthGroups, setCollapsedMonthGroups] = useState<Set<string>>(() => new Set());
 
@@ -454,6 +456,12 @@ export function VaultFolderExplorer({
       : null,
   );
 
+  const { searchVisibleClassName } = useIosExplorerSearchChrome({
+    enabled,
+    label: searchAriaLabel,
+    inputRef: searchInputRef,
+  });
+
   return (
     <div className="vault-folder-explorer">
       <DeleteNoteConfirmDialog
@@ -468,8 +476,13 @@ export function VaultFolderExplorer({
       {deleteError ? (
         <p className="vault-folder-explorer-status vault-folder-explorer-status-error">{deleteError}</p>
       ) : null}
-      <div className="vault-folder-explorer-search">
+      <div
+        className={["vault-folder-explorer-search", searchVisibleClassName]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
+          ref={searchInputRef}
           type="search"
           className="vault-folder-explorer-search-input"
           value={searchQuery}

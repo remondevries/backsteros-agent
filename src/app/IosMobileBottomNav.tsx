@@ -51,6 +51,17 @@ function IosMobileQuickActionPlusIcon() {
   );
 }
 
+function IosMobileSearchActionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path
+        d="M10.25 2a8.25 8.25 0 0 1 6.34 13.53l5.69 5.69a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215l-5.69-5.69A8.25 8.25 0 1 1 10.25 2ZM3.5 10.25a6.75 6.75 0 1 0 13.5 0 6.75 6.75 0 0 0-13.5 0Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export function IosMobileBottomNav({
   activeVaultNavItem,
   onVaultNavItemChange,
@@ -58,10 +69,11 @@ export function IosMobileBottomNav({
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId) => void;
 }) {
-  const { iosMobileQuickActions } = useContentPanelChrome();
+  const { iosMobileQuickActions, iosMobileSearchAction } = useContentPanelChrome();
   const moreAnchorRef = useRef<HTMLDivElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const quickActions = iosMobileQuickActions ?? [];
+  const showActionStack = quickActions.length > 0 || iosMobileSearchAction !== null;
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -189,7 +201,7 @@ export function IosMobileBottomNav({
             );
           })}
         </div>
-        {quickActions.length > 0 ? (
+        {showActionStack ? (
           <div className="ios-mobile-bottom-nav-actions" aria-label="Quick actions">
             {quickActions.map((action) => (
               <button
@@ -206,6 +218,20 @@ export function IosMobileBottomNav({
                 </span>
               </button>
             ))}
+            {iosMobileSearchAction ? (
+              <button
+                type="button"
+                className="ios-mobile-bottom-nav-action ios-mobile-bottom-nav-action--anchor"
+                aria-label={iosMobileSearchAction.label}
+                title={iosMobileSearchAction.label}
+                disabled={iosMobileSearchAction.disabled}
+                onClick={iosMobileSearchAction.onActivate}
+              >
+                <span className="ios-mobile-bottom-nav-action-icon" aria-hidden="true">
+                  <IosMobileSearchActionIcon />
+                </span>
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
