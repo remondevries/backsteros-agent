@@ -115,7 +115,22 @@ describe("buildChatFocusContext", () => {
 });
 
 describe("isChatFocusContextLoading", () => {
-  test("linear document loads until snapshot arrives", () => {
+  test("prefers linear document over a stale issue ref", () => {
+    const context = buildChatFocusContext({
+      activeLinearIssue: { id: "i1", identifier: "BOS-1", title: "Issue" },
+      activeLinearDocument: { id: "doc-1", title: "Spec", projectId: "p1" },
+      activeVaultDocument: null,
+      activeVaultFolder: null,
+      linearSelection: null,
+      linearWorkspaceView: null,
+      focusContentSnapshot: null,
+    });
+
+    expect(context?.kind).toBe("linear_document");
+    expect(context && isChatFocusContextLoading(context, null)).toBe(false);
+  });
+
+  test("linear document is ready without waiting for editor snapshot", () => {
     const context = buildChatFocusContext({
       activeLinearIssue: null,
       activeLinearDocument: { id: "doc-1", title: "Spec" },
@@ -126,15 +141,7 @@ describe("isChatFocusContextLoading", () => {
       focusContentSnapshot: null,
     });
 
-    expect(context && isChatFocusContextLoading(context, null)).toBe(true);
-    expect(
-      context &&
-        isChatFocusContextLoading(context, {
-          kind: "linear_document",
-          title: "Spec",
-          content: "",
-        }),
-    ).toBe(false);
+    expect(context && isChatFocusContextLoading(context, null)).toBe(false);
   });
 
   test("project workspace loads until snapshot arrives", () => {

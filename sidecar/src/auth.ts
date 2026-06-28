@@ -23,6 +23,19 @@ export function isAuthorizedRequest(
   return false;
 }
 
+export function isEventStreamAuthorized(
+  expectedToken: string,
+  authorizationHeader: string | undefined,
+  sessionCookie: string | undefined,
+  authQuery: string | undefined,
+): boolean {
+  if (isAuthorizedRequest(expectedToken, authorizationHeader, sessionCookie)) {
+    return true;
+  }
+  const queryToken = authQuery?.trim();
+  return Boolean(queryToken && queryToken === expectedToken);
+}
+
 export function createBearerOrCookieAuth(expectedToken: string): MiddlewareHandler {
   return async (c, next) => {
     const authorized = isAuthorizedRequest(

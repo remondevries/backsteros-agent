@@ -92,6 +92,7 @@ export function LinearDailyExplorer({
     loadingMessage: "Loading daily documents…",
     refreshing,
     onRefresh: refreshDocuments,
+    iosNavItemId: "daily",
   });
 
   useEffect(() => {
@@ -222,7 +223,6 @@ export function LinearDailyExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: "Search daily documents",
-    inputRef: searchInputRef,
   });
 
   return (
@@ -300,6 +300,7 @@ export function LinearDailyExplorer({
                           key={document.linearDocumentId}
                           document={document}
                           grouped={false}
+                          selected={activeLinearDocument?.id === document.linearDocumentId}
                           showMeta={false}
                           onClick={() => openDocument(document)}
                         />

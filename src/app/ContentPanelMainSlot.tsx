@@ -217,7 +217,7 @@ export function ContentPanelMainSlot({
         </div>
       ) : null}
       <div className="content-panel-main-slot" hidden={!showVaultDocument}>
-        {activeVaultDocument ? (
+        {showVaultDocument && activeVaultDocument ? (
           <VaultDocumentView
             path={activeVaultDocument.path}
             activeVaultNavItem={activeVaultNavItem}

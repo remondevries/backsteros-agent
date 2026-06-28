@@ -229,10 +229,15 @@ export type IssueViewModeBreadcrumbAction = {
   terminalAgentWaiting: boolean;
 };
 
-export type DocumentDeleteBreadcrumbAction = {
+export type OverflowDeleteBreadcrumbAction = {
   deleting: boolean;
   onDelete: () => void;
 };
+
+/** @deprecated Use OverflowDeleteBreadcrumbAction */
+export type DocumentDeleteBreadcrumbAction = OverflowDeleteBreadcrumbAction;
+
+export type IssueDeleteBreadcrumbAction = OverflowDeleteBreadcrumbAction;
 
 export type ProjectsBrowseSearchBreadcrumbAction = {
   value: string;
@@ -432,7 +437,12 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
   }, []);
 
   const setActiveLinearDocument = useCallback((document: ActiveLinearDocument | null) => {
-    setActiveLinearDocumentState(document);
+    setActiveLinearDocumentState((current) => {
+      if (current?.id !== document?.id) {
+        getFocusContentController()?.clearKind("linear_document");
+      }
+      return document;
+    });
     if (document) {
       setActiveLinearIssueState(null);
       setActiveVaultDocumentState(null);
@@ -487,14 +497,22 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
     skipSelectionResetRef.current = currentSelectionKey !== nextSelectionKey;
     setSidebarSegmentsState(snapshot.sidebarSegments);
     setLinearSelectionState(snapshot.linearSelection);
+    const restoredLinearDocument = snapshot.activeLinearDocument;
+    const restoredLinearIssue = restoredLinearDocument ? null : snapshot.activeLinearIssue;
     setActiveVaultDocumentState(snapshot.activeVaultDocument);
-    setActiveLinearDocumentState(snapshot.activeLinearDocument);
-    setActiveLinearIssueState(snapshot.activeLinearIssue);
+    setActiveLinearDocumentState(restoredLinearDocument);
+    setActiveLinearIssueState(restoredLinearIssue);
     setLinearWorkspaceViewState(snapshot.linearWorkspaceView);
     setIssuesPanelModeState(snapshot.issuesPanelMode);
     setWatchersPanelModeState(snapshot.watchersPanelMode);
     clearChrome();
-    getFocusContentController()?.setSnapshot(snapshot.focusContentSnapshot);
+    let focusSnapshot = snapshot.focusContentSnapshot;
+    if (restoredLinearDocument && focusSnapshot?.kind !== "linear_document") {
+      focusSnapshot = null;
+    } else if (restoredLinearIssue && focusSnapshot?.kind !== "linear_issue") {
+      focusSnapshot = null;
+    }
+    getFocusContentController()?.setSnapshot(focusSnapshot);
   }, [clearChrome, linearSelection]);
 
   const captureNavAreaContentSnapshot = useCallback((): ContentPanelTabSnapshot => {
@@ -567,7 +585,12 @@ function ContentPanelNavigationProviderInner({ children }: { children: ReactNode
 
       setActiveLinearIssueState(null);
       setActiveVaultDocumentState(null);
-      setActiveLinearDocumentState(document);
+      setActiveLinearDocumentState((current) => {
+        if (current?.id !== document.id) {
+          getFocusContentController()?.clearKind("linear_document");
+        }
+        return document;
+      });
     },
     [linearSelection],
   );

@@ -15,7 +15,7 @@ import {
 } from "../lib/vaultFolderContext";
 import type { ActiveVaultFolder } from "./contentPanelNavigation";
 import { useContentPanelNavigation, useFocusContent } from "./contentPanelNavigation";
-import { LinearIssueAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
+import { LinearAgentPanel } from "./linear-threads/LinearIssueAgentPanel";
 import { RightPanelChatHeader } from "./RightPanelChatHeader";
 import {
   panelChatComposerVariant,
@@ -92,6 +92,39 @@ export function RightPanelChatSlot({
     [focusContext, focusContentSnapshot],
   );
 
+  useEffect(() => {
+    if (!focusContext) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+      body: JSON.stringify({
+        sessionId: "180d80",
+        hypothesisId: "L,M",
+        location: "RightPanelChatSlot.tsx:context",
+        message: "Panel chat focus context state",
+        data: {
+          focusKind: focusContext.kind,
+          composerContextLoading,
+          snapshotKind: focusContentSnapshot?.kind ?? null,
+          hasActiveLinearDocument: Boolean(activeLinearDocument),
+          hasActiveLinearIssue: Boolean(activeLinearIssue),
+          contextItemCount: focusContext
+            ? buildComposerContextItems(focusContext).length
+            : 0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [
+    activeLinearDocument,
+    activeLinearIssue,
+    composerContextLoading,
+    focusContentSnapshot,
+    focusContext,
+  ]);
+
   const contextCardItems = useMemo(
     () => (focusContext ? buildComposerContextItems(focusContext) : []),
     [focusContext],
@@ -133,22 +166,29 @@ export function RightPanelChatSlot({
     activeLinearDocument,
   });
 
-  const isLinearIssueThreadMode =
-    linearPanelAgentActive && focusContext?.kind === "linear_issue";
+  const isLinearNativeAgentMode =
+    linearPanelAgentActive &&
+    (focusContext?.kind === "linear_issue" || focusContext?.kind === "linear_document");
 
   useEffect(() => {
-    if (isLinearIssueThreadMode) return undefined;
+    if (isLinearNativeAgentMode) return undefined;
 
     return registerRightPanelComposerFocus({
       focusComposer: () => {
         chatRef.current?.focusComposer();
       },
     });
-  }, [isLinearIssueThreadMode]);
+  }, [isLinearNativeAgentMode]);
 
-  if (isLinearIssueThreadMode) {
+  if (focusContext?.kind === "linear_issue") {
     return (
-      <LinearIssueAgentPanel issueId={focusContext.issueId} />
+      <LinearAgentPanel target={{ kind: "issue", id: focusContext.issueId }} />
+    );
+  }
+
+  if (focusContext?.kind === "linear_document") {
+    return (
+      <LinearAgentPanel target={{ kind: "document", id: focusContext.documentId }} />
     );
   }
 

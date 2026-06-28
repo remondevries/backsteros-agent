@@ -1,4 +1,5 @@
 import { useContentPanelNavigation } from "../app/contentPanelNavigation";
+import { workoutDateKeyFromPath } from "./workouts/workoutDays";
 
 /** True when main/sidebar focus is on a document, issue, or vault note rather than a list. */
 export function isContentDetailViewOpen(
@@ -7,9 +8,19 @@ export function isContentDetailViewOpen(
     "activeLinearDocument" | "activeLinearIssue" | "activeVaultDocument"
   >,
 ): boolean {
-  return (
-    navigation.activeLinearDocument != null ||
-    navigation.activeLinearIssue != null ||
-    navigation.activeVaultDocument != null
-  );
+  if (navigation.activeLinearDocument != null || navigation.activeLinearIssue != null) {
+    return true;
+  }
+
+  const vaultPath = navigation.activeVaultDocument?.path;
+  if (!vaultPath) {
+    return false;
+  }
+
+  // Workout day sessions are list-style views (group sets + reps), not document detail.
+  if (workoutDateKeyFromPath(vaultPath) != null) {
+    return false;
+  }
+
+  return true;
 }

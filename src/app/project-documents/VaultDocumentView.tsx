@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinearIssueEntity } from "../../chat/types";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useIosMobileLandscapeReadOnly } from "../../hooks/useIosMobileLandscapeReadOnly";
 import { useDocumentDeleteBreadcrumbAction } from "../../hooks/useDocumentDeleteBreadcrumbAction";
 import { useVaultDocument } from "../../hooks/useVaultDocument";
 import { deleteVaultDocument } from "../../lib/api";
@@ -47,6 +48,7 @@ export function VaultDocumentView({
     activeLinearIssue,
     clearActiveVaultDocument,
   } = useContentPanelNavigation();
+  const iosLandscapeReadOnly = useIosMobileLandscapeReadOnly();
   const { document, loading, refreshing, error, save, refresh } = useVaultDocument(path);
   const [whoopRefreshKey, setWhoopRefreshKey] = useState(0);
   const [titleDraft, setTitleDraft] = useState("");
@@ -344,7 +346,7 @@ export function VaultDocumentView({
               workoutsLinearTeamId={workoutsLinearTeamId}
             />
           )}
-          {isDailyNote ? (
+          {isDailyNote || iosLandscapeReadOnly ? (
             <h1
               className="vault-document-title vault-document-title--readonly"
               aria-label="Document title"
@@ -376,6 +378,7 @@ export function VaultDocumentView({
             hidePdfLinks
             placeholder={bodyPlaceholder}
             className="vault-document-tiptap"
+            disabled={iosLandscapeReadOnly}
           />
         </div>
         {isDailyNote && dueDate ? (

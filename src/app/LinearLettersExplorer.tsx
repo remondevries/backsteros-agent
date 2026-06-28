@@ -96,6 +96,7 @@ export function LinearLettersExplorer({
     loadingMessage: "Loading letters…",
     refreshing,
     onRefresh: handleRefresh,
+    iosNavItemId: "letters",
   });
 
   useEffect(() => {
@@ -203,7 +204,6 @@ export function LinearLettersExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: "Search letters",
-    inputRef: searchInputRef,
   });
 
   return (
@@ -292,6 +292,7 @@ export function LinearLettersExplorer({
                           key={document.linearDocumentId}
                           document={document}
                           grouped={false}
+                          selected={activeLinearDocument?.id === document.linearDocumentId}
                           showMeta={false}
                           iconFallback="letter"
                           onClick={() => openDocument(document)}

@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { LinearComment } from "../../lib/api";
 import {
   buildLinearThreadRootBodyForSave,
+  buildOptimisticLinearUserComment,
   findNewSubstantiveLinearAgentCommentIds,
   hasSubstantiveLinearAgentReply,
   isLinearAgentThinkingPlaceholder,
   linearThreadRootBodyForEditing,
   linearThreadCommentsToChatMessages,
   mergeLinearThreadComments,
+  reconcileLinearThreadComments,
   resolveLinearThreadReplyParentId,
   snapshotSubstantiveLinearAgentCommentIds,
 } from "./linearThreadFormat";
@@ -100,6 +102,18 @@ describe("resolveLinearThreadReplyParentId", () => {
 });
 
 describe("mergeLinearThreadComments", () => {
+  test("replaces pending optimistic comment with confirmed server comment", () => {
+    const pending = buildOptimisticLinearUserComment("Hello", "thread-1", "viewer-1");
+    const confirmed = {
+      ...pending,
+      id: "comment-1",
+      createdAt: "2026-06-13T12:00:01.000Z",
+    };
+    const merged = reconcileLinearThreadComments([pending], pending.id, confirmed);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.id).toBe("comment-1");
+  });
+
   test("inserts a new comment in createdAt order", () => {
     const merged = mergeLinearThreadComments(
       [

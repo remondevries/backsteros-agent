@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkoutGroupSetEntity, WorkoutRepEntity } from "../api";
-import { repVolumeProgressPercent, sumGroupSetRepCount, sumSessionGroupSetWeightKg, normalizeNumericInput } from "./workoutRepDisplay";
+import {
+  findLastWorkoutGroupSetWithoutReps,
+  findLastWorkoutRepInSession,
+  isWorkoutRepEmpty,
+  repVolumeProgressPercent,
+  sumGroupSetRepCount,
+  sumGroupSetWeightKg,
+  sumSessionGroupSetWeightKg,
+  normalizeNumericInput,
+} from "./workoutRepDisplay";
 
 function rep(partial: Partial<WorkoutRepEntity> & Pick<WorkoutRepEntity, "id">): WorkoutRepEntity {
   return {
@@ -35,8 +44,18 @@ describe("sumGroupSetRepCount", () => {
   });
 });
 
+describe("sumGroupSetWeightKg", () => {
+  test("sums weight × reps for each set in a group", () => {
+    const reps = [
+      rep({ id: "1", title: "80", description: "10" }),
+      rep({ id: "2", title: "90", description: "8", reps: 8 }),
+    ];
+    expect(sumGroupSetWeightKg(reps)).toBe(80 * 10 + 90 * 8);
+  });
+});
+
 describe("sumSessionGroupSetWeightKg", () => {
-  test("sums weight across all parent group sets", () => {
+  test("sums weight × reps across all parent group sets", () => {
     const groupSets: WorkoutGroupSetEntity[] = [
       {
         id: "g1",
@@ -44,8 +63,8 @@ describe("sumSessionGroupSetWeightKg", () => {
         title: "Bench",
         exercise: "Bench",
         reps: [
-          rep({ id: "r1", title: "80" }),
-          rep({ id: "r2", title: "90" }),
+          rep({ id: "r1", title: "80", description: "10" }),
+          rep({ id: "r2", title: "90", description: "5" }),
         ],
       },
       {
@@ -53,11 +72,11 @@ describe("sumSessionGroupSetWeightKg", () => {
         identifier: "W-2",
         title: "Squat",
         exercise: "Squat",
-        reps: [rep({ id: "r3", title: "100" })],
+        reps: [rep({ id: "r3", title: "100", description: "5" })],
       },
     ];
 
-    expect(sumSessionGroupSetWeightKg(groupSets)).toBe(270);
+    expect(sumSessionGroupSetWeightKg(groupSets)).toBe(80 * 10 + 90 * 5 + 100 * 5);
   });
 });
 
@@ -66,5 +85,68 @@ describe("normalizeNumericInput", () => {
     expect(normalizeNumericInput("12.5kg")).toBe("12.5");
     expect(normalizeNumericInput("12.5.3")).toBe("12.53");
     expect(normalizeNumericInput(".5")).toBe(".5");
+  });
+});
+
+describe("isWorkoutRepEmpty", () => {
+  test("treats blank weight and rep count as empty", () => {
+    expect(isWorkoutRepEmpty(rep({ id: "1", title: "Weight", description: "" }))).toBe(true);
+    expect(isWorkoutRepEmpty(rep({ id: "2", title: "Set 2", description: "" }))).toBe(true);
+  });
+
+  test("treats filled weight or reps as non-empty", () => {
+    expect(isWorkoutRepEmpty(rep({ id: "3", title: "80", description: "" }))).toBe(false);
+    expect(isWorkoutRepEmpty(rep({ id: "4", title: "Weight", description: "10" }))).toBe(false);
+  });
+});
+
+describe("findLastWorkoutRepInSession", () => {
+  test("returns the last rep in session order", () => {
+    const groupSets: WorkoutGroupSetEntity[] = [
+      {
+        id: "g1",
+        identifier: "W-1",
+        title: "Bench",
+        exercise: "Bench",
+        reps: [rep({ id: "r1", title: "80", description: "10" })],
+      },
+      {
+        id: "g2",
+        identifier: "W-2",
+        title: "Squat",
+        exercise: "Squat",
+        reps: [
+          rep({ id: "r2", title: "100", description: "5" }),
+          rep({ id: "r3", title: "Weight", description: "" }),
+        ],
+      },
+    ];
+
+    const last = findLastWorkoutRepInSession(groupSets);
+    expect(last?.rep.id).toBe("r3");
+    expect(last?.groupSet.id).toBe("g2");
+  });
+});
+
+describe("findLastWorkoutGroupSetWithoutReps", () => {
+  test("returns the last parent group with no rep sub-issues", () => {
+    const groupSets: WorkoutGroupSetEntity[] = [
+      {
+        id: "g1",
+        identifier: "W-1",
+        title: "Bench",
+        exercise: "Bench",
+        reps: [rep({ id: "r1", title: "80", description: "10" })],
+      },
+      {
+        id: "g2",
+        identifier: "W-2",
+        title: "Squat",
+        exercise: "Squat",
+        reps: [],
+      },
+    ];
+
+    expect(findLastWorkoutGroupSetWithoutReps(groupSets)?.id).toBe("g2");
   });
 });

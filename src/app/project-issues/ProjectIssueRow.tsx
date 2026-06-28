@@ -43,6 +43,7 @@ export function ProjectIssueRow({
   issue,
   grouped = true,
   dragging = false,
+  selected = false,
   leadingIcon = "priority",
   leadingStatusOverride,
   showMeta = true,
@@ -59,6 +60,7 @@ export function ProjectIssueRow({
   issue: LinearIssueEntity;
   grouped?: boolean;
   dragging?: boolean;
+  selected?: boolean;
   leadingIcon?: "priority" | "status";
   leadingStatusOverride?: "triage";
   showMeta?: boolean;
@@ -94,6 +96,7 @@ export function ProjectIssueRow({
     "project-issue-row",
     grouped ? "project-issue-row--grouped" : null,
     dragging ? "project-issue-row--dragging" : null,
+    selected ? "project-issue-row--selected" : null,
     keyboardFocused ? "project-issue-row--keyboard-focused" : null,
   ]
     .filter(Boolean)

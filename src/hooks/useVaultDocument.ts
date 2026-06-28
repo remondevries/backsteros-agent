@@ -14,16 +14,22 @@ export function useVaultDocument(path: string, enabled = true) {
     async (options?: { force?: boolean }) => {
       if (!enabled || !path) return null;
 
-      const result = await fetchVaultDocument(path, { force: options?.force ?? false });
-      if (result.error || !result.document) {
+      try {
+        const result = await fetchVaultDocument(path, { force: options?.force ?? false });
+        if (result.error || !result.document) {
+          setVaultDocument(null);
+          setError(result.error ?? "Failed to load document.");
+          return null;
+        }
+
+        setVaultDocument(result.document);
+        setError(null);
+        return result.document;
+      } catch (err) {
         setVaultDocument(null);
-        setError(result.error ?? "Failed to load document.");
+        setError(err instanceof Error ? err.message : "Failed to load document.");
         return null;
       }
-
-      setVaultDocument(result.document);
-      setError(null);
-      return result.document;
     },
     [enabled, path],
   );
@@ -61,10 +67,14 @@ export function useVaultDocument(path: string, enabled = true) {
         return;
       }
 
-      const result = await fetchVaultDocument(path, { force: true });
-      if (cancelled || result.error || !result.document) return;
-      setVaultDocument(result.document);
-      setError(null);
+      try {
+        const result = await fetchVaultDocument(path, { force: true });
+        if (cancelled || result.error || !result.document) return;
+        setVaultDocument(result.document);
+        setError(null);
+      } catch {
+        if (cancelled) return;
+      }
     }
 
     const interval = window.setInterval(() => {

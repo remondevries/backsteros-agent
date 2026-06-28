@@ -5,7 +5,15 @@ import {
 
 export { WORKOUT_SET_LABEL_GROUP };
 
-export async function assertWorkoutSetExercise(teamId: string, value: string): Promise<string> {
+export type WorkoutSetExerciseLabel = {
+  id: string;
+  name: string;
+};
+
+export async function resolveWorkoutSetExerciseLabel(
+  teamId: string,
+  value: string,
+): Promise<WorkoutSetExerciseLabel> {
   const trimmed = value.trim();
   if (!trimmed) {
     throw new Error("Exercise is required");
@@ -21,5 +29,10 @@ export async function assertWorkoutSetExercise(teamId: string, value: string): P
     );
   }
 
-  return match.name;
+  return { id: match.id, name: match.name };
+}
+
+export async function assertWorkoutSetExercise(teamId: string, value: string): Promise<string> {
+  const resolved = await resolveWorkoutSetExerciseLabel(teamId, value);
+  return resolved.name;
 }

@@ -1,6 +1,7 @@
 import type { LinearIssueEntity } from "../../chat/types";
 import type { ProjectDocumentEntity } from "../documentStatusGroups";
 import type { LinearIssueDetailUpdates } from "../api";
+import { isDraftIssueId } from "../inboxDraftIssue";
 import {
   enqueueLinearMutation,
   getLinearSyncCounts,
@@ -12,6 +13,7 @@ import {
   startLinearSyncProcessor,
   subscribeLinearSyncStatus,
 } from "./processor";
+import { rollbackOptimisticIssueCreate } from "./optimistic";
 import { resolveMappedId, removePendingMutationsForEntity } from "./store";
 import {
   clearPendingIssueUpdates,
@@ -79,6 +81,14 @@ export const linearSync = {
       payload: { issueId },
     };
     return enqueueLinearMutation(payload, issueEntityKey(issueId));
+  },
+
+  async cancelDraftIssue(draftIssueId: string): Promise<void> {
+    const id = draftIssueId.trim();
+    if (!isDraftIssueId(id)) return;
+    rollbackOptimisticIssueCreate(id);
+    clearPendingIssueUpdates(id);
+    await removePendingMutationsForEntity(issueEntityKey(id));
   },
 
   async enqueueDocumentCreate(options: {

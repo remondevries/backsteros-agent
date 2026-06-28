@@ -17,6 +17,7 @@ import type {
 } from "../chat/types";
 import type { LetterFilingOptions } from "../chat/letterFiling";
 import type { LinearAgentSessionSnapshot } from "./linearAgentSessionTypes";
+import type { LinearCommentTarget } from "./linearCommentTarget";
 import type { ProjectDocumentEntity } from "./documentStatusGroups";
 import { notifyLinearSessionExpired } from "./linearSessionExpired";
 import {
@@ -1500,6 +1501,96 @@ export async function deleteLinearIssueCommentThread(issueId: string, threadId: 
   );
 }
 
+export async function fetchLinearDocumentCommentThreads(documentId: string) {
+  return request<{ threads: LinearCommentThreadSummary[]; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}/comment-threads`,
+  );
+}
+
+export async function fetchLinearDocumentCommentThread(documentId: string, threadId: string) {
+  return request<{
+    viewerId: string | null;
+    comments: LinearComment[];
+    error?: string;
+  }>(
+    `/linear/documents/${encodeURIComponent(documentId)}/comment-threads/${encodeURIComponent(threadId)}`,
+  );
+}
+
+export async function createLinearDocumentComment(
+  documentId: string,
+  options: { body?: string; parentId?: string; newThread?: boolean },
+) {
+  return request<{ comment: LinearComment; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}/comment-threads`,
+    {
+      method: "POST",
+      body: JSON.stringify(options),
+    },
+  );
+}
+
+export async function updateLinearDocumentCommentThread(
+  documentId: string,
+  threadId: string,
+  body: string,
+) {
+  return request<{ comment: LinearComment; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}/comment-threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    },
+  );
+}
+
+export async function deleteLinearDocumentCommentThread(documentId: string, threadId: string) {
+  return request<{ success: boolean; error?: string }>(
+    `/linear/documents/${encodeURIComponent(documentId)}/comment-threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function fetchLinearCommentThreads(target: LinearCommentTarget) {
+  return target.kind === "issue"
+    ? fetchLinearIssueCommentThreads(target.id)
+    : fetchLinearDocumentCommentThreads(target.id);
+}
+
+export async function fetchLinearCommentThread(target: LinearCommentTarget, threadId: string) {
+  return target.kind === "issue"
+    ? fetchLinearIssueCommentThread(target.id, threadId)
+    : fetchLinearDocumentCommentThread(target.id, threadId);
+}
+
+export async function createLinearComment(target: LinearCommentTarget, options: {
+  body?: string;
+  parentId?: string;
+  newThread?: boolean;
+}) {
+  return target.kind === "issue"
+    ? createLinearIssueComment(target.id, options)
+    : createLinearDocumentComment(target.id, options);
+}
+
+export async function updateLinearCommentThread(
+  target: LinearCommentTarget,
+  threadId: string,
+  body: string,
+) {
+  return target.kind === "issue"
+    ? updateLinearIssueCommentThread(target.id, threadId, body)
+    : updateLinearDocumentCommentThread(target.id, threadId, body);
+}
+
+export async function deleteLinearCommentThread(target: LinearCommentTarget, threadId: string) {
+  return target.kind === "issue"
+    ? deleteLinearIssueCommentThread(target.id, threadId)
+    : deleteLinearDocumentCommentThread(target.id, threadId);
+}
+
 export async function deleteLinearIssue(issueId: string) {
   const result = await request<{ success: boolean; error?: string }>(
     `/linear/issues/${encodeURIComponent(issueId)}`,
@@ -1610,6 +1701,8 @@ export type WorkoutMilestoneEntity = {
   name: string;
   targetDate: string | null;
   projectId: string;
+  status: string | null;
+  progress: number | null;
 };
 
 export async function fetchLinearWorkoutMilestones(teamId: string) {
@@ -2108,7 +2201,12 @@ export async function sendMessage(
   attachments?: AttachmentWireInput[],
   toolPins?: ToolPinSelection,
   quickActionId?: string,
-  options?: { captureTime?: string; groceryWeek?: string; focusContext?: ChatFocusContext | null },
+  options?: {
+    captureTime?: string;
+    groceryWeek?: string;
+    focusContext?: ChatFocusContext | null;
+    panelAgent?: "linear" | "cursor";
+  },
 ) {
   return request<{ runId: string; attachments?: MessageAttachment[] }>(
     `/sessions/${encodeURIComponent(sessionId)}/messages`,
@@ -2122,6 +2220,7 @@ export async function sendMessage(
         captureTime: options?.captureTime,
         groceryWeek: options?.groceryWeek,
         focusContext: options?.focusContext ?? undefined,
+        panelAgent: options?.panelAgent,
       }),
     },
     120_000,

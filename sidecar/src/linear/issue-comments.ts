@@ -326,3 +326,160 @@ export async function createLinearAgentThread(
 ): Promise<LinearComment> {
   return createLinearIssueComment(issueId, buildLinearAgentThreadBody(userBody));
 }
+
+const DOCUMENT_COMMENTS_QUERY = `
+  query BacksterDocumentComments($documentId: String!) {
+    document(id: $documentId) {
+      documentContentId
+      comments(first: 250) {
+        nodes {
+          id
+          body
+          createdAt
+          parent { id }
+          agentSession { id }
+          user { id name avatarUrl }
+        }
+      }
+    }
+  }
+`;
+
+const DOCUMENT_CONTENT_ID_QUERY = `
+  query BacksterDocumentContentId($documentId: String!) {
+    document(id: $documentId) {
+      documentContentId
+    }
+  }
+`;
+
+async function fetchDocumentContentId(documentId: string): Promise<string> {
+  const response = await linearGraphqlRequest<{
+    document?: { documentContentId?: string | null } | null;
+  }>(DOCUMENT_CONTENT_ID_QUERY, { documentId });
+
+  const contentId = response.document?.documentContentId?.trim();
+  if (!contentId) {
+    throw new Error("Document content not found");
+  }
+  return contentId;
+}
+
+async function fetchDocumentComments(documentId: string): Promise<LinearComment[]> {
+  const response = await linearGraphqlRequest<{
+    document?: { comments?: { nodes?: GraphqlCommentNode[] } } | null;
+  }>(DOCUMENT_COMMENTS_QUERY, { documentId });
+
+  return (response.document?.comments?.nodes ?? [])
+    .map((node) => normalizeComment(node))
+    .filter((comment): comment is LinearComment => comment != null);
+}
+
+export async function fetchLinearDocumentCommentThreads(
+  documentId: string,
+): Promise<LinearCommentThreadSummary[]> {
+  const comments = await fetchDocumentComments(documentId);
+  const threads = comments
+    .filter((comment) => !comment.parentId)
+    .map((comment) => ({
+      id: comment.id,
+      body: comment.body,
+      createdAt: comment.createdAt,
+      author: comment.author,
+    }));
+
+  return sortByCreatedAtDesc(threads);
+}
+
+export async function fetchLinearDocumentCommentThread(
+  documentId: string,
+  threadId: string,
+): Promise<{ viewerId: string | null; comments: LinearComment[] }> {
+  const [comments, viewerId] = await Promise.all([
+    fetchDocumentComments(documentId),
+    fetchLinearViewerId().catch(() => undefined),
+  ]);
+
+  return {
+    viewerId: viewerId ?? null,
+    comments: collectThreadComments(comments, threadId),
+  };
+}
+
+export async function createLinearDocumentComment(
+  documentId: string,
+  body: string,
+  parentId?: string | null,
+): Promise<LinearComment> {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    throw new Error("Comment body is required");
+  }
+
+  const documentContentId = await fetchDocumentContentId(documentId);
+  const input: Record<string, string> = {
+    documentContentId,
+    body: trimmedBody,
+  };
+
+  const parent = parentId?.trim();
+  if (parent) {
+    input.parentId = parent;
+  }
+
+  const response = await linearGraphqlRequest<{
+    commentCreate?: {
+      success?: boolean;
+      comment?: GraphqlCommentNode | null;
+    } | null;
+  }>(COMMENT_CREATE_MUTATION, { input });
+
+  if (!response.commentCreate?.success) {
+    throw new Error("Linear rejected the comment");
+  }
+
+  const comment = normalizeComment(response.commentCreate.comment ?? {});
+  if (!comment) {
+    throw new Error("Linear returned no comment");
+  }
+
+  return comment;
+}
+
+export async function updateLinearDocumentCommentThreadRoot(
+  documentId: string,
+  threadId: string,
+  body: string,
+): Promise<LinearComment> {
+  const comments = await fetchDocumentComments(documentId);
+  const threadComments = collectThreadComments(comments, threadId);
+  const root = threadComments[0];
+  if (!root) {
+    throw new Error("Thread not found");
+  }
+
+  return updateLinearIssueComment(root.id, body);
+}
+
+export async function deleteLinearDocumentCommentThread(
+  documentId: string,
+  threadId: string,
+): Promise<void> {
+  const comments = await fetchDocumentComments(documentId);
+  const threadComments = collectThreadComments(comments, threadId);
+  if (threadComments.length === 0) {
+    throw new Error("Thread not found");
+  }
+
+  const toDelete = [...threadComments].reverse();
+  for (const comment of toDelete) {
+    await deleteLinearIssueComment(comment.id);
+  }
+}
+
+export async function createLinearAgentDocumentThread(
+  documentId: string,
+  userBody?: string | null,
+): Promise<LinearComment> {
+  return createLinearDocumentComment(documentId, buildLinearAgentThreadBody(userBody));
+}

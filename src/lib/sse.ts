@@ -69,11 +69,13 @@ export async function subscribeToRunWithAuth(
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const authHeader = getAuthHeader();
   const response = await fetch(
-    `${eventsUrl(sessionId, runId)}&auth=${encodeURIComponent(getAuthHeader().replace("Bearer ", ""))}`,
+    `${eventsUrl(sessionId, runId)}&auth=${encodeURIComponent(authHeader.replace("Bearer ", ""))}`,
     {
+      credentials: "include",
       headers: {
-        Authorization: getAuthHeader(),
+        ...(authHeader ? { Authorization: authHeader } : {}),
         Accept: "text/event-stream",
       },
       signal,
@@ -106,6 +108,31 @@ export async function subscribeToRunWithAuth(
         if (!json) continue;
 
         const event = JSON.parse(json) as AgentEvent;
+        // #region agent log
+        fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+          body: JSON.stringify({
+            sessionId: "180d80",
+            runId,
+            hypothesisId: "G,H",
+            location: "sse.ts:subscribeToRunWithAuth:event",
+            message: "SSE event parsed",
+            data: {
+              eventType: event.type,
+              textLen: event.type === "message.delta" ? event.text.length : undefined,
+              runStatus: event.type === "run.completed" ? event.status : undefined,
+              failedMessage:
+                event.type === "run.failed" || event.type === "startup.failed"
+                  ? "message" in event
+                    ? event.message.slice(0, 120)
+                    : undefined
+                  : undefined,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         onEvent(event);
 
         if (isTerminalEvent(event)) {

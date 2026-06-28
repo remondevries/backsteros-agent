@@ -18,7 +18,7 @@ import type { CursorSettingsView } from "./CursorIntegrationSection";
 import { ObsidianSettingsSection } from "./ObsidianSettingsSection";
 import { ProfileEditorSection } from "./ProfileEditorSection";
 import { SettingsSectionToggle } from "./SettingsSectionToggle";
-import { getVisibleSettingsTabs, isAdminOnlySettingsNavTab, isAdministratorNavTab, isIntegrationNavTab, type SettingsTabId } from "./settingsTabs";
+import { getVisibleSettingsTabs, isAdminOnlySettingsNavTab, isAdministratorNavTab, isIntegrationNavTab, DEFAULT_SETTINGS_TAB, type SettingsTabId } from "./settingsTabs";
 import { useIntegrationsStatus } from "./useIntegrationsStatus";
 import { useAdministratorAccess } from "./useAdministratorAccess";
 
@@ -127,7 +127,7 @@ export function SettingsPanel({
   const resolvedActiveTab =
     visibleSettingsTabs.some((tab) => tab.id === activeTab)
       ? activeTab
-      : visibleSettingsTabs[0]?.id ?? "general";
+      : visibleSettingsTabs[0]?.id ?? DEFAULT_SETTINGS_TAB;
   const activeTabMeta =
     visibleSettingsTabs.find((tab) => tab.id === resolvedActiveTab) ?? visibleSettingsTabs[0];
   const { status: integrationsStatus, refresh: refreshIntegrationsStatus } =

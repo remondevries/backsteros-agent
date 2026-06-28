@@ -89,6 +89,20 @@ export function useLinearDocument(documentId: string, enabled = true) {
 
   const refresh = useCallback(async () => {
     if (!enabled || !documentId) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+      body: JSON.stringify({
+        sessionId: "180d80",
+        hypothesisId: "DOC1",
+        location: "useLinearDocument.ts:refresh",
+        message: "Fetching document from API",
+        data: { documentId },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     setRefreshing(true);
     setError(null);
     try {
@@ -100,6 +114,20 @@ export function useLinearDocument(documentId: string, enabled = true) {
       } else {
         setDocument(result.document);
         setError(null);
+        // #region agent log
+        fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+          body: JSON.stringify({
+            sessionId: "180d80",
+            hypothesisId: "DOC1",
+            location: "useLinearDocument.ts:refreshDone",
+            message: "Document refresh loaded",
+            data: { documentId, contentLength: result.document.content.length },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
       }
     } finally {
       setRefreshing(false);

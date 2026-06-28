@@ -35,6 +35,7 @@ export function ProjectDocumentRow({
   grouped = true,
   showMeta = true,
   showOrganization = false,
+  selected = false,
   iconFallback = "document",
   onClick,
 }: {
@@ -42,6 +43,7 @@ export function ProjectDocumentRow({
   grouped?: boolean;
   showMeta?: boolean;
   showOrganization?: boolean;
+  selected?: boolean;
   iconFallback?: LinearDocumentNoteIconFallback;
   onClick: () => void;
 }) {
@@ -58,6 +60,7 @@ export function ProjectDocumentRow({
   const rowClass = [
     "project-document-row",
     grouped ? "project-document-row--grouped" : null,
+    selected ? "project-document-row--selected" : null,
     keyboardFocused ? "project-document-row--keyboard-focused" : null,
   ]
     .filter(Boolean)

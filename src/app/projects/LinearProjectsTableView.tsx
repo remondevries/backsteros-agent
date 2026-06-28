@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useProjectsBrowseSearchBreadcrumbAction } from "../../hooks/useProjectsBrowseSearchBreadcrumbAction";
+import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
 import { useIosExplorerSearchChrome } from "../../hooks/useIosExplorerSearchChrome";
 import { useWorkspaceSetupTeamProjectIds } from "../../hooks/useWorkspaceSetupTeamProjectIds";
 import { LinearProjectStatusIcon } from "../../chat/LinearProjectStatusIcon";
@@ -55,7 +56,6 @@ export function LinearProjectsTableView({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: searchAriaLabel,
-    inputRef: searchInputRef,
   });
   const { projects: allProjects, projectStatuses, loading: allLoading, error: allError } =
     useLinearProjects(enabled);
@@ -93,6 +93,13 @@ export function LinearProjectsTableView({
     ? allLoading || teamLoading
     : allLoading || workspaceExclusionsLoading;
   const error = allError ?? teamError ?? workspaceExclusionsError;
+
+  useContentPanelBarState({
+    error,
+    loading: enabled && loading && projects.length === 0,
+    loadingMessage: "Loading projects…",
+    iosNavItemId: filterByTeam ? undefined : "projects",
+  });
 
   const groups = useMemo(
     () => groupLinearProjectsByWorkflow(filteredProjects, projectStatuses),

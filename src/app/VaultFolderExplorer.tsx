@@ -459,7 +459,6 @@ export function VaultFolderExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: searchAriaLabel,
-    inputRef: searchInputRef,
   });
 
   return (
@@ -628,6 +627,7 @@ export function VaultFolderExplorer({
                                             key={`${entry.path}-${issue.id}`}
                                             issue={issue}
                                             grouped={false}
+                                            selected={activeLinearIssue?.id === issue.id}
                                             onClick={() => {
                                               openLinearIssue(issue);
                                             }}

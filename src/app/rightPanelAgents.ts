@@ -64,13 +64,27 @@ function isAgentImplemented(agentId: RightPanelAgentId): boolean {
   return IMPLEMENTED_AGENTS.has(agentId);
 }
 
+function isLinearPanelAgentAvailable(status: IntegrationsStatus | null): boolean {
+  return isLinearIntegrationAvailable(status);
+}
+
 function isAgentAvailable(
   agentId: RightPanelAgentId,
   status: IntegrationsStatus | null,
 ): boolean {
   if (agentId === "cursor") return isCursorAgentAvailable(status);
-  if (agentId === "linear") return isLinearIntegrationAvailable(status);
+  if (agentId === "linear") return isLinearPanelAgentAvailable(status);
   return false;
+}
+
+function linearPanelFallbackReason(status: IntegrationsStatus | null): string | undefined {
+  if (!isAgentImplemented("linear")) {
+    return "Linear agent is not available yet";
+  }
+  if (!isLinearIntegrationAvailable(status)) {
+    return "Connect Linear in Settings to use the Linear agent";
+  }
+  return undefined;
 }
 
 export function resolveRightPanelAgent(input: {
@@ -78,13 +92,18 @@ export function resolveRightPanelAgent(input: {
   activeLinearIssue: ActiveLinearIssue | null;
   activeLinearDocument: ActiveLinearDocument | null;
 }): ResolvedRightPanelAgent {
-  const requested = requestAgentForView(
-    supportsLinearPanelAgent({
-      activeLinearIssue: input.activeLinearIssue,
-      activeLinearDocument: input.activeLinearDocument,
-    }),
-  );
+  const focus = {
+    activeLinearIssue: input.activeLinearIssue,
+    activeLinearDocument: input.activeLinearDocument,
+  };
+  const requested = requestAgentForView(supportsLinearPanelAgent(focus));
   const label = AGENT_LABELS[requested];
+
+  if (requested === "linear" && isAgentImplemented("linear")) {
+    if (isLinearPanelAgentAvailable(input.integrationsStatus)) {
+      return { requested, active: "linear", label: AGENT_LABELS.linear };
+    }
+  }
 
   if (
     isAgentImplemented(requested) &&
@@ -97,20 +116,11 @@ export function resolveRightPanelAgent(input: {
   const cursorImplemented = isAgentImplemented("cursor");
 
   if (cursorImplemented && (cursorAvailable || requested !== "cursor")) {
-    let fallbackReason: string | undefined;
-    if (requested === "linear") {
-      if (!isAgentImplemented("linear")) {
-        fallbackReason = "Linear agent is not available yet";
-      } else if (!isLinearIntegrationAvailable(input.integrationsStatus)) {
-        fallbackReason = "Connect Linear in Settings to use the Linear agent";
-      }
-    }
-
     return {
       requested,
       active: "cursor",
       label: AGENT_LABELS.cursor,
-      fallbackReason,
+      fallbackReason: requested === "linear" ? linearPanelFallbackReason(input.integrationsStatus) : undefined,
     };
   }
 

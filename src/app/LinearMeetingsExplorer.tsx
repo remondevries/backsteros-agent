@@ -79,6 +79,7 @@ export function LinearMeetingsExplorer({
     loadingMessage: "Loading meetings…",
     refreshing,
     onRefresh: refreshDocuments,
+    iosNavItemId: "meetings",
   });
 
   useEffect(() => {
@@ -210,7 +211,6 @@ export function LinearMeetingsExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: "Search meetings",
-    inputRef: searchInputRef,
   });
 
   return (
@@ -286,6 +286,7 @@ export function LinearMeetingsExplorer({
                         <MeetingDocumentSidebarRow
                           key={document.linearDocumentId}
                           document={document}
+                          selected={activeLinearDocument?.id === document.linearDocumentId}
                           onClick={() => openDocument(document)}
                         />
                       ))}

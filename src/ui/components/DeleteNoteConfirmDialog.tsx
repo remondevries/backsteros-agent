@@ -6,12 +6,14 @@ export function DeleteNoteConfirmDialog({
   deleting,
   onCancel,
   onConfirm,
+  title = "Delete note?",
 }: {
   open: boolean;
   fileName: string;
   deleting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  title?: string;
 }) {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -61,7 +63,7 @@ export function DeleteNoteConfirmDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="delete-note-confirm-title" className="letter-modal-title">
-          Delete note?
+          {title}
         </h2>
         <p className="letter-modal-body">
           This will permanently delete <strong>{fileName}</strong>. This action cannot be undone.

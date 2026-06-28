@@ -87,6 +87,7 @@ export function LinearKnowledgeBaseExplorer({
       refreshDocuments();
       refreshTeamProjects();
     },
+    iosNavItemId: "knowledge-base",
   });
 
   useEffect(() => {
@@ -319,7 +320,6 @@ export function LinearKnowledgeBaseExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: "Search knowledge base",
-    inputRef: searchInputRef,
   });
 
   return (
@@ -387,6 +387,7 @@ export function LinearKnowledgeBaseExplorer({
                 key={document.linearDocumentId}
                 document={document}
                 grouped={false}
+                selected={activeLinearDocument?.id === document.linearDocumentId}
                 showMeta={false}
                 onClick={() => openDocument(document)}
               />

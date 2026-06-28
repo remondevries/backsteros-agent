@@ -109,6 +109,19 @@ export function buildChatFocusContext(options: {
     focusContentSnapshot,
   } = options;
 
+  // Match ContentPanelMainSlot: an open document takes precedence over a stale issue ref.
+  if (activeLinearDocument) {
+    const snapshot =
+      focusContentSnapshot?.kind === "linear_document" ? focusContentSnapshot : null;
+    return {
+      kind: "linear_document",
+      documentId: activeLinearDocument.id,
+      title: snapshot?.title ?? activeLinearDocument.title,
+      projectId: activeLinearDocument.projectId,
+      content: snapshot?.content,
+    };
+  }
+
   if (activeLinearIssue) {
     const snapshot =
       focusContentSnapshot?.kind === "linear_issue" ? focusContentSnapshot : null;
@@ -120,18 +133,6 @@ export function buildChatFocusContext(options: {
       description: snapshot?.description,
       status: activeLinearIssue.status,
       stateType: activeLinearIssue.stateType,
-    };
-  }
-
-  if (activeLinearDocument) {
-    const snapshot =
-      focusContentSnapshot?.kind === "linear_document" ? focusContentSnapshot : null;
-    return {
-      kind: "linear_document",
-      documentId: activeLinearDocument.id,
-      title: snapshot?.title ?? activeLinearDocument.title,
-      projectId: activeLinearDocument.projectId,
-      content: snapshot?.content,
     };
   }
 
@@ -255,7 +256,7 @@ export function isChatFocusContextLoading(
     return snapshot?.kind !== "linear_issue";
   }
   if (context.kind === "linear_document") {
-    return snapshot?.kind !== "linear_document";
+    return false;
   }
   if (context.kind === "vault_document") {
     return snapshot?.kind !== "vault_document";

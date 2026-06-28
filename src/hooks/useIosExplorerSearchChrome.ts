@@ -1,37 +1,30 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect } from "react";
 import { useContentPanelChrome } from "../app/contentPanelChromeContext";
+import { useCommandPalette } from "../command-palette/CommandPaletteContext";
 import { isIosDevice } from "../platform/iosStandalone";
 
 export function useIosExplorerSearchChrome({
   enabled,
   label,
-  inputRef,
 }: {
   enabled: boolean;
   label: string;
-  inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const { iosMobileSearchAction, setIosMobileSearchAction } = useContentPanelChrome();
-  const [searchVisible, setSearchVisible] = useState(false);
-  const inputRefStable = useRef(inputRef);
-  inputRefStable.current = inputRef;
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
   const iosActive = isIosDevice() && enabled;
 
   const registerSearchAction = useCallback(() => {
     setIosMobileSearchAction({
       label,
       onActivate: () => {
-        setSearchVisible(true);
-        requestAnimationFrame(() => {
-          inputRefStable.current.current?.focus({ preventScroll: true });
-        });
+        setCommandPaletteOpen(true);
       },
     });
-  }, [label, setIosMobileSearchAction]);
+  }, [label, setCommandPaletteOpen, setIosMobileSearchAction]);
 
   useEffect(() => {
     if (!iosActive) {
-      setSearchVisible(false);
       setIosMobileSearchAction(null);
       return;
     }
@@ -47,6 +40,6 @@ export function useIosExplorerSearchChrome({
   }, [iosActive, iosMobileSearchAction, registerSearchAction]);
 
   return {
-    searchVisibleClassName: searchVisible ? "ios-explorer-search-visible" : undefined,
+    searchVisibleClassName: undefined,
   };
 }

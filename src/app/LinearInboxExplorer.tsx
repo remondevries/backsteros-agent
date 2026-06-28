@@ -123,6 +123,7 @@ export function LinearInboxExplorer({
     loadingMessage: "Loading inbox…",
     refreshing,
     onRefresh: handleRefresh,
+    iosNavItemId: "inbox",
   });
 
   const sidebarBreadcrumbs = useMemo(() => {
@@ -343,7 +344,6 @@ export function LinearInboxExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: searchAriaLabel,
-    inputRef: searchInputRef,
   });
 
   return (
@@ -404,6 +404,7 @@ export function LinearInboxExplorer({
                   key={issue.id}
                   issue={issue}
                   grouped={false}
+                  selected={activeLinearIssue?.id === issue.id}
                   showMeta={true}
                   showIdentifier={false}
                   showPrimaryLabel={false}
@@ -426,6 +427,7 @@ export function LinearInboxExplorer({
                 key={document.linearDocumentId}
                 document={document}
                 grouped={false}
+                selected={activeLinearDocument?.id === document.linearDocumentId}
                 showMeta={false}
                 onClick={() => openDocument(document)}
               />

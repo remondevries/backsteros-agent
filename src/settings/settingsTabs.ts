@@ -1,5 +1,8 @@
 import { isLinearProductMode } from "../lib/productMode";
 
+/** Default tab when opening Settings (sidebar and `/settings` URL without a segment). */
+export const DEFAULT_SETTINGS_TAB: SettingsTabId = "account";
+
 export type SettingsTabId =
   | "general"
   | "account"

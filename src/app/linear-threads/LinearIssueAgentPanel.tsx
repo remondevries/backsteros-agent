@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createLinearIssueComment, deleteLinearIssueCommentThread, updateLinearIssueCommentThread } from "../../lib/api";
-import { useLinearIssueCommentThreads } from "../../hooks/useLinearIssueCommentThreads";
+import {
+  createLinearComment,
+  deleteLinearCommentThread,
+  updateLinearCommentThread,
+} from "../../lib/api";
+import { useLinearCommentThreads } from "../../hooks/useLinearIssueCommentThreads";
+import type { LinearCommentThreadSeed } from "../../hooks/useLinearIssueCommentThread";
 import { composerContextItems as buildComposerContextItems } from "../../lib/chatFocusContext";
+import type { LinearCommentTarget } from "../../lib/linearCommentTarget";
+import { linearCommentThreadStorageKey } from "../../lib/linearCommentTarget";
 import { registerRightPanelComposerFocus } from "../../lib/rightPanelChatFocus";
 import { useContentPanelNavigation, useFocusContent } from "../contentPanelNavigation";
 import { LinearIssueThreadChat, type LinearIssueThreadChatHandle } from "./LinearIssueThreadChat";
@@ -13,17 +20,17 @@ import { ThreadPlusIcon } from "./ThreadPlusIcon";
 
 type PanelMode = "chat" | "threads";
 
-function readStoredThreadId(issueId: string): string | null {
+function readStoredThreadId(target: LinearCommentTarget): string | null {
   try {
-    return localStorage.getItem(`backsteros.linearIssueThread.${issueId}`);
+    return localStorage.getItem(linearCommentThreadStorageKey(target));
   } catch {
     return null;
   }
 }
 
-function writeStoredThreadId(issueId: string, threadId: string | null) {
+function writeStoredThreadId(target: LinearCommentTarget, threadId: string | null) {
   try {
-    const key = `backsteros.linearIssueThread.${issueId}`;
+    const key = linearCommentThreadStorageKey(target);
     if (threadId) {
       localStorage.setItem(key, threadId);
     } else {
@@ -34,22 +41,23 @@ function writeStoredThreadId(issueId: string, threadId: string | null) {
   }
 }
 
-export function LinearIssueAgentPanel({
-  issueId,
+export function LinearAgentPanel({
+  target,
 }: {
-  issueId: string;
+  target: LinearCommentTarget;
 }) {
-  const { threads, loading, error, refresh } = useLinearIssueCommentThreads(issueId);
-  const { activeLinearIssue } = useContentPanelNavigation();
+  const { threads, loading, error, refresh } = useLinearCommentThreads(target);
+  const { activeLinearIssue, activeLinearDocument } = useContentPanelNavigation();
   const { focusContentSnapshot } = useFocusContent();
   const [panelMode, setPanelMode] = useState<PanelMode>("chat");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() =>
-    readStoredThreadId(issueId),
+    readStoredThreadId(target),
   );
   const [isDraftingNewThread, setIsDraftingNewThread] = useState(false);
   const [draftSessionKey, setDraftSessionKey] = useState(0);
   const [creatingThread, setCreatingThread] = useState(false);
   const [awaitAgentForThreadId, setAwaitAgentForThreadId] = useState<string | null>(null);
+  const [newThreadSeed, setNewThreadSeed] = useState<LinearCommentThreadSeed | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const threadChatRef = useRef<LinearIssueThreadChatHandle>(null);
   const pendingCreatedThreadIdRef = useRef<string | null>(null);
@@ -63,6 +71,10 @@ export function LinearIssueAgentPanel({
   }, []);
 
   useEffect(() => {
+    setNewThreadSeed(null);
+  }, [target]);
+
+  useEffect(() => {
     return registerRightPanelComposerFocus({
       focusComposer: () => {
         setPanelMode("chat");
@@ -73,12 +85,12 @@ export function LinearIssueAgentPanel({
 
   useEffect(() => {
     setPanelMode("chat");
-    setActiveThreadId(readStoredThreadId(issueId));
+    setActiveThreadId(readStoredThreadId(target));
     setIsDraftingNewThread(false);
     setDraftSessionKey(0);
     setActionError(null);
     pendingCreatedThreadIdRef.current = null;
-  }, [issueId]);
+  }, [target]);
 
   useEffect(() => {
     if (loading || isDraftingNewThread || creatingThread) return;
@@ -97,7 +109,7 @@ export function LinearIssueAgentPanel({
       return;
     }
 
-    const stored = readStoredThreadId(issueId);
+    const stored = readStoredThreadId(target);
     const storedExists = stored ? threads.some((thread) => thread.id === stored) : false;
     if (storedExists && stored) {
       setActiveThreadId(stored);
@@ -110,7 +122,7 @@ export function LinearIssueAgentPanel({
       }
       return threads[0]?.id ?? null;
     });
-  }, [creatingThread, issueId, isDraftingNewThread, loading, threads]);
+  }, [creatingThread, isDraftingNewThread, loading, target, threads]);
 
   const handleThreadUnavailable = useCallback(() => {
     setActiveThreadId((current) => {
@@ -122,11 +134,11 @@ export function LinearIssueAgentPanel({
 
   useEffect(() => {
     if (isDraftingNewThread) {
-      writeStoredThreadId(issueId, null);
+      writeStoredThreadId(target, null);
       return;
     }
-    writeStoredThreadId(issueId, activeThreadId);
-  }, [activeThreadId, issueId, isDraftingNewThread]);
+    writeStoredThreadId(target, activeThreadId);
+  }, [activeThreadId, isDraftingNewThread, target]);
 
   const handleSelectThread = useCallback((threadId: string) => {
     setIsDraftingNewThread(false);
@@ -144,7 +156,7 @@ export function LinearIssueAgentPanel({
     async (threadId: string, body: string) => {
       setActionError(null);
       try {
-        const result = await updateLinearIssueCommentThread(issueId, threadId, body);
+        const result = await updateLinearCommentThread(target, threadId, body);
         if (result.error || !result.comment) {
           setActionError(result.error ?? "Failed to update thread.");
           return false;
@@ -156,14 +168,14 @@ export function LinearIssueAgentPanel({
         return false;
       }
     },
-    [issueId, refresh],
+    [refresh, target],
   );
 
   const handleDeleteThread = useCallback(
     async (threadId: string) => {
       setActionError(null);
       try {
-        const result = await deleteLinearIssueCommentThread(issueId, threadId);
+        const result = await deleteLinearCommentThread(target, threadId);
         if (result.error || !result.success) {
           setActionError(result.error ?? "Failed to delete thread.");
           return false;
@@ -177,7 +189,7 @@ export function LinearIssueAgentPanel({
         return false;
       }
     },
-    [issueId, refresh],
+    [refresh, target],
   );
 
   const handleStartNewThreadDraft = useCallback(() => {
@@ -206,7 +218,7 @@ export function LinearIssueAgentPanel({
       setCreatingThread(true);
       setActionError(null);
       try {
-        const result = await createLinearIssueComment(issueId, { body: trimmed, newThread: true });
+        const result = await createLinearComment(target, { body: trimmed, newThread: true });
         if (result.error || !result.comment) {
           setActionError(result.error ?? "Failed to start a new thread.");
           return false;
@@ -214,12 +226,17 @@ export function LinearIssueAgentPanel({
 
         const newThreadId = result.comment.id;
         pendingCreatedThreadIdRef.current = newThreadId;
-        writeStoredThreadId(issueId, newThreadId);
+        setNewThreadSeed({
+          threadId: newThreadId,
+          comments: [result.comment],
+          viewerId: result.comment.author.id,
+        });
+        writeStoredThreadId(target, newThreadId);
         setActiveThreadId(newThreadId);
         setAwaitAgentForThreadId(newThreadId);
         setPanelMode("chat");
         setIsDraftingNewThread(false);
-        await refresh();
+        void refresh();
         return true;
       } catch {
         setActionError("Failed to start a new thread.");
@@ -228,24 +245,38 @@ export function LinearIssueAgentPanel({
         setCreatingThread(false);
       }
     },
-    [creatingThread, issueId, refresh],
+    [creatingThread, refresh, target],
   );
 
   const composerContextItems = useMemo(() => {
-    if (!activeLinearIssue || activeLinearIssue.id !== issueId) return [];
+    if (target.kind === "issue") {
+      if (!activeLinearIssue || activeLinearIssue.id !== target.id) return [];
+      return buildComposerContextItems({
+        kind: "linear_issue",
+        issueId: activeLinearIssue.id,
+        identifier: activeLinearIssue.identifier,
+        title: activeLinearIssue.title,
+        description:
+          focusContentSnapshot?.kind === "linear_issue"
+            ? focusContentSnapshot.description
+            : undefined,
+        status: activeLinearIssue.status,
+        stateType: activeLinearIssue.stateType,
+      });
+    }
+
+    if (!activeLinearDocument || activeLinearDocument.id !== target.id) return [];
     return buildComposerContextItems({
-      kind: "linear_issue",
-      issueId: activeLinearIssue.id,
-      identifier: activeLinearIssue.identifier,
-      title: activeLinearIssue.title,
-      description:
-        focusContentSnapshot?.kind === "linear_issue"
-          ? focusContentSnapshot.description
+      kind: "linear_document",
+      documentId: activeLinearDocument.id,
+      title: activeLinearDocument.title,
+      projectId: activeLinearDocument.projectId,
+      content:
+        focusContentSnapshot?.kind === "linear_document"
+          ? focusContentSnapshot.content
           : undefined,
-      status: activeLinearIssue.status,
-      stateType: activeLinearIssue.stateType,
     });
-  }, [activeLinearIssue, focusContentSnapshot, issueId]);
+  }, [activeLinearDocument, activeLinearIssue, focusContentSnapshot, target]);
 
   const viewingExistingThread = Boolean(activeThreadId) && !isDraftingNewThread;
   const hasThreadHistory = threads.length > 0;
@@ -303,9 +334,10 @@ export function LinearIssueAgentPanel({
           <LinearIssueThreadChat
             key={activeThreadId}
             ref={threadChatRef}
-            issueId={issueId}
+            target={target}
             threadId={activeThreadId}
             composerContextItems={composerContextItems}
+            seedThread={newThreadSeed?.threadId === activeThreadId ? newThreadSeed : null}
             awaitAgentReplyOnMount={activeThreadId === awaitAgentForThreadId}
             onAwaitAgentReplyStarted={() => setAwaitAgentForThreadId(null)}
             onThreadUnavailable={handleThreadUnavailable}
@@ -319,7 +351,7 @@ export function LinearIssueAgentPanel({
           <LinearIssueThreadChat
             key={`draft-new-thread-${draftSessionKey}`}
             ref={threadChatRef}
-            issueId={issueId}
+            target={target}
             threadId={null}
             composerContextItems={composerContextItems}
             onStartThread={handleStartThreadWithMessage}
@@ -330,4 +362,8 @@ export function LinearIssueAgentPanel({
       </div>
     </div>
   );
+}
+
+export function LinearIssueAgentPanel({ issueId }: { issueId: string }) {
+  return <LinearAgentPanel target={{ kind: "issue", id: issueId }} />;
 }

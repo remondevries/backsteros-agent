@@ -26,6 +26,7 @@ import { isLetterComposeDraftDocumentId } from "../lib/letterComposeDraft";
 import { showTrafficLights } from "../platform/trafficLights";
 import { isTauriRuntime } from "../platform/runtime";
 import { IosMobileBottomNav } from "./IosMobileBottomNav";
+import { ActiveWorkoutSessionProvider } from "./ActiveWorkoutSessionContext";
 
 const LETTER_COMPOSE_CHAT_BLOCKED_MESSAGE =
   "The assistant is unavailable while you upload a letter.";
@@ -371,6 +372,10 @@ function AppMainShell({
   );
 
   return (
+    <ActiveWorkoutSessionProvider
+      teamId={workoutsLinearTeamId}
+      onVaultNavItemChange={handleVaultNavItemChange}
+    >
     <div className="app-main-shell">
       <AppUrlSync
         enabled={urlSyncEnabled}
@@ -540,6 +545,7 @@ function AppMainShell({
         onVaultNavItemChange={handleVaultNavItemChange}
       />
     </div>
+    </ActiveWorkoutSessionProvider>
   );
 }
 

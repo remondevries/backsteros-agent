@@ -1,7 +1,7 @@
 import type { ContentPanelBreadcrumbSegment } from "./contentPanelNavigation";
 import { useContentPanelChrome } from "./contentPanelChromeContext";
 import { ContentPanelBreadcrumb } from "./ContentPanelBreadcrumb";
-import { DocumentBreadcrumbMenu } from "./DocumentBreadcrumbMenu";
+import { ContentPanelBreadcrumbOverflowMenu, DocumentBreadcrumbMenu } from "./DocumentBreadcrumbMenu";
 import { WatcherPollProgressRing } from "./project-issues/WatcherPollProgressRing";
 import { LinearIssueViewModeToggle } from "./project-issues/LinearIssueViewModeToggle";
 
@@ -14,6 +14,7 @@ export function ContentPanelBreadcrumbBar({
     issuesWatcherAction,
     issueViewModeAction,
     documentDeleteAction,
+    issueDeleteAction,
     projectsBrowseSearchAction,
   } = useContentPanelChrome();
 
@@ -21,6 +22,7 @@ export function ContentPanelBreadcrumbBar({
     issuesWatcherAction ||
     issueViewModeAction ||
     documentDeleteAction ||
+    issueDeleteAction ||
     projectsBrowseSearchAction;
 
   return (
@@ -65,6 +67,9 @@ export function ContentPanelBreadcrumbBar({
           ) : null}
           {documentDeleteAction ? (
             <DocumentBreadcrumbMenu action={documentDeleteAction} />
+          ) : null}
+          {issueDeleteAction ? (
+            <ContentPanelBreadcrumbOverflowMenu action={issueDeleteAction} menuLabel="Issue options" />
           ) : null}
           {projectsBrowseSearchAction ? (
             <label className="content-panel-breadcrumb-search-field">

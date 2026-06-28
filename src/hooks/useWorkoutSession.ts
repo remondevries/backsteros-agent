@@ -9,6 +9,7 @@ import {
   type WorkoutRepEntity,
   type WorkoutSessionEntity,
 } from "../lib/api";
+import { notifyWorkoutSessionChanged } from "../lib/workoutSessionEvents";
 
 export function useWorkoutSession({
   teamId,
@@ -99,6 +100,7 @@ export function useWorkoutSession({
             groupSets: [result.groupSet!, ...current.groupSets],
           };
         });
+        notifyWorkoutSessionChanged();
         return { groupSet: result.groupSet, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to create group set.";
@@ -148,6 +150,7 @@ export function useWorkoutSession({
           };
         });
 
+        notifyWorkoutSessionChanged();
         return { groupSet: result.groupSet, rep: result.rep, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to log rep.";
@@ -211,6 +214,7 @@ export function useWorkoutSession({
           };
         });
 
+        notifyWorkoutSessionChanged();
         return { groupSet: result.groupSet, rep: result.rep, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to add set.";
@@ -254,6 +258,7 @@ export function useWorkoutSession({
           return { success: false as const, error: message };
         }
         removeIssueFromSession(repId);
+        notifyWorkoutSessionChanged();
         return { success: true as const, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to delete rep.";
@@ -276,6 +281,7 @@ export function useWorkoutSession({
           throw new Error(result.error ?? "Failed to delete group set.");
         }
         removeIssueFromSession(groupSet.id);
+        notifyWorkoutSessionChanged();
         return { success: true as const, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to delete group set.";
@@ -290,7 +296,7 @@ export function useWorkoutSession({
   );
 
   const updateGroupSetExercise = useCallback(
-    async (groupSetId: string, exercise: string) => {
+    async (groupSetId: string, exercise: string, labelId?: string | null) => {
       const normalizedExercise = exercise.trim();
       if (!normalizedExercise) {
         return { success: false as const, error: "Exercise is required." };
@@ -299,7 +305,11 @@ export function useWorkoutSession({
       setUpdatingIssueId(groupSetId);
       setError(null);
       try {
-        const result = await updateLinearIssueDetail(groupSetId, { title: normalizedExercise });
+        const updates: { title: string; labelIds?: string[] } = { title: normalizedExercise };
+        if (labelId) {
+          updates.labelIds = [labelId];
+        }
+        const result = await updateLinearIssueDetail(groupSetId, updates);
         if (result.error || !result.issue) {
           const message = result.error ?? "Failed to update exercise.";
           setError(message);
@@ -322,6 +332,7 @@ export function useWorkoutSession({
           };
         });
 
+        notifyWorkoutSessionChanged();
         return { success: true as const, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to update exercise.";
@@ -373,6 +384,7 @@ export function useWorkoutSession({
           };
         });
 
+        notifyWorkoutSessionChanged();
         return { success: true as const, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to update reps.";
@@ -420,6 +432,7 @@ export function useWorkoutSession({
           };
         });
 
+        notifyWorkoutSessionChanged();
         return { success: true as const, error: null as string | null };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to update weight.";

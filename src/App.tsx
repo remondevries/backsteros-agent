@@ -28,7 +28,7 @@ import {
 import type { SidebarNavItemId } from "./app/sidebarNavConfig";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import type { SettingsTabId } from "./settings/settingsTabs";
-import { isAdminOnlySettingsNavTab } from "./settings/settingsTabs";
+import { DEFAULT_SETTINGS_TAB, isAdminOnlySettingsNavTab } from "./settings/settingsTabs";
 import { useAdministratorAccess } from "./settings/useAdministratorAccess";
 import { VaultProvider } from "./chat/VaultContext";
 import {
@@ -90,7 +90,7 @@ export default function App() {
   const [agentProfilePath, setAgentProfilePath] = useState<string | undefined>();
   const [showSettings, setShowSettings] = useState(() => readPersistedShowSettings());
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>(
-    () => readPersistedSettingsTab() ?? "account",
+    () => readPersistedSettingsTab() ?? DEFAULT_SETTINGS_TAB,
   );
   const { isAdministrator, loading: administratorAccessLoading } = useAdministratorAccess();
   const [connectGateFocusStep, setConnectGateFocusStep] =
@@ -261,7 +261,7 @@ export default function App() {
   ]);
 
   const handleOpenSettings = useCallback(() => {
-    setActiveSettingsTab("general");
+    setActiveSettingsTab(DEFAULT_SETTINGS_TAB);
     setShowSettings(true);
   }, []);
 
@@ -276,26 +276,26 @@ export default function App() {
       if (open) {
         return false;
       }
-      setActiveSettingsTab("general");
+      setActiveSettingsTab(DEFAULT_SETTINGS_TAB);
       return true;
     });
   }, [chatEnabled]);
 
   useEffect(() => {
     if (!chatEnabled && appReady) {
-      setActiveSettingsTab("general");
+      setActiveSettingsTab(DEFAULT_SETTINGS_TAB);
     }
   }, [chatEnabled, appReady]);
 
   useEffect(() => {
     if (vaultEnabled || activeSettingsTab !== "obsidian") return;
-    setActiveSettingsTab("general");
+    setActiveSettingsTab(DEFAULT_SETTINGS_TAB);
   }, [activeSettingsTab, vaultEnabled]);
 
   useEffect(() => {
     if (administratorAccessLoading || isAdministrator) return;
     if (!isAdminOnlySettingsNavTab(activeSettingsTab)) return;
-    setActiveSettingsTab("general");
+    setActiveSettingsTab(DEFAULT_SETTINGS_TAB);
   }, [activeSettingsTab, administratorAccessLoading, isAdministrator]);
 
   useEffect(() => {

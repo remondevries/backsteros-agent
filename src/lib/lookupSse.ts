@@ -15,11 +15,13 @@ export async function subscribeToLookupRun(
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const authHeader = getLookupAuthHeader();
   const response = await fetch(
-    `${lookupEventsUrl(sessionId, runId)}&auth=${encodeURIComponent(getLookupAuthHeader().replace("Bearer ", ""))}`,
+    `${lookupEventsUrl(sessionId, runId)}&auth=${encodeURIComponent(authHeader.replace("Bearer ", ""))}`,
     {
+      credentials: "include",
       headers: {
-        Authorization: getLookupAuthHeader(),
+        ...(authHeader ? { Authorization: authHeader } : {}),
         Accept: "text/event-stream",
       },
       signal,

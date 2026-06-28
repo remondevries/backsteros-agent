@@ -1,28 +1,54 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  isIosKeyboardOffsetVisible,
+  readIosKeyboardLayoutOffsetPx,
+} from "../lib/iosKeyboardViewport";
 import { isIosDevice } from "../platform/iosStandalone";
 
-const KEYBOARD_VISIBLE_THRESHOLD_PX = 8;
+let keyboardVisible = false;
+const keyboardVisibilityListeners = new Set<() => void>();
 
-function getKeyboardLayoutOffsetPx(): number {
-  const viewport = window.visualViewport;
-  if (!viewport) return 0;
-  const layoutHeight = window.innerHeight;
-  const visibleBottom = viewport.offsetTop + viewport.height;
-  return Math.max(0, Math.round(layoutHeight - visibleBottom));
+function notifyKeyboardVisibility(visible: boolean) {
+  if (keyboardVisible === visible) return;
+  keyboardVisible = visible;
+  for (const listener of keyboardVisibilityListeners) {
+    listener();
+  }
 }
 
 function applyKeyboardViewportOffset() {
-  const offset = getKeyboardLayoutOffsetPx();
+  const offset = readIosKeyboardLayoutOffsetPx();
+  const visible = isIosKeyboardOffsetVisible(offset);
   const root = document.documentElement;
   root.style.setProperty("--ios-keyboard-layout-offset", `${offset}px`);
-  if (offset > KEYBOARD_VISIBLE_THRESHOLD_PX) {
+  if (visible) {
     root.classList.add("ios-keyboard-visible");
   } else {
     root.classList.remove("ios-keyboard-visible");
   }
+  notifyKeyboardVisibility(visible);
 }
 
-/** Keeps fixed bottom UI pinned to the layout viewport bottom when the software keyboard opens. */
+/** Whether the software keyboard is covering the bottom of the layout viewport. */
+export function useIosKeyboardVisible(): boolean {
+  const [visible, setVisible] = useState(keyboardVisible);
+
+  useEffect(() => {
+    if (!isIosDevice()) return;
+
+    const sync = () => setVisible(keyboardVisible);
+    keyboardVisibilityListeners.add(sync);
+    sync();
+
+    return () => {
+      keyboardVisibilityListeners.delete(sync);
+    };
+  }, []);
+
+  return visible;
+}
+
+/** Tracks keyboard visibility for iOS mobile chrome (content inset + bottom nav hide). */
 export function useIosKeyboardViewportSync() {
   useEffect(() => {
     if (!isIosDevice()) return;
@@ -48,6 +74,7 @@ export function useIosKeyboardViewportSync() {
       document.removeEventListener("focusout", schedule);
       document.documentElement.style.removeProperty("--ios-keyboard-layout-offset");
       document.documentElement.classList.remove("ios-keyboard-visible");
+      notifyKeyboardVisibility(false);
     };
   }, []);
 }

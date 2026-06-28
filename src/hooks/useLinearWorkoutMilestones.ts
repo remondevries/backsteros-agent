@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { notifyWorkoutSessionChanged } from "../lib/workoutSessionEvents";
 import {
   createLinearWorkoutMilestone,
   fetchLinearWorkoutMilestones,
@@ -91,6 +92,7 @@ export function useLinearWorkoutMilestones({
       }
 
       prependMilestone(result.milestone);
+      notifyWorkoutSessionChanged();
       return { milestone: result.milestone, error: null as string | null };
     },
     [enabled, prependMilestone, teamId],

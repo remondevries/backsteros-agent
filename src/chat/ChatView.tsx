@@ -1449,6 +1449,7 @@ export const ChatView = forwardRef<
           captureTime: captureTimeForSend,
           groceryWeek: groceryWeekForSend,
           focusContext,
+          panelAgent: linearOnlyComposer ? "linear" : "cursor",
         },
       );
       liveRunIdRef.current = runId;
@@ -1518,6 +1519,33 @@ export const ChatView = forwardRef<
           runEventBatcher.flush();
           runEventBatcher.dispose();
         }
+        // #region agent log
+        setRuns((current) => {
+          const finishedRun = current[runId];
+          fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+            body: JSON.stringify({
+              sessionId: "180d80",
+              runId,
+              runId_tag: "post-fix",
+              hypothesisId: "H,I",
+              location: "ChatView.tsx:handleSend:after-stream",
+              message: "Client run state after SSE",
+              data: {
+                focusKind: focusContext?.kind ?? null,
+                runStatus: finishedRun?.status,
+                runTextLen: finishedRun?.text.length ?? 0,
+                stepCount: finishedRun?.steps.length ?? 0,
+                streamAborted: streamController.signal.aborted,
+                hasFailedMessage: Boolean(finishedRun?.text.trim()),
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          return current;
+        });
+        // #endregion
       } finally {
         window.clearTimeout(streamTimeout);
         if (streamControllerRef.current === streamController) {

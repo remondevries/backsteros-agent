@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   IOS_BOTTOM_NAV_MORE_ITEM_IDS,
   IOS_BOTTOM_NAV_TRAY_ITEM_IDS,
   isIosBottomNavMoreItem,
 } from "../lib/iosNavConfig";
 import { sidebarNavItemLabel, type SidebarNavItemId } from "../lib/sidebarNavItems";
-import { useIosKeyboardViewportSync } from "../hooks/useIosKeyboardViewportSync";
+import { useIosKeyboardViewportSync, useIosKeyboardVisible } from "../hooks/useIosKeyboardViewportSync";
 import { isIosDevice } from "../platform/iosStandalone";
 import { useContentPanelChrome } from "./contentPanelChromeContext";
+import { WorkoutRepsIcon } from "./workouts/WorkoutRepsIcon";
+import { useCommandPalette } from "../command-palette/CommandPaletteContext";
+import { useActiveWorkoutSession } from "./ActiveWorkoutSessionContext";
+import { RefreshIcon } from "./RefreshIcon";
 import { sidebarNavItemIcon } from "./sidebarNavConfig";
 import { SidebarMoreIcon } from "./SidebarNavIcons";
 
@@ -39,6 +43,20 @@ const MORE_MENU_ITEMS = IOS_BOTTOM_NAV_MORE_ITEM_IDS.map((id) => ({
 }));
 
 const IOS_BOTTOM_NAV_MORE_TRAY_INDEX = IOS_BOTTOM_NAV_TRAY_ITEM_IDS.length;
+const IOS_MORE_MENU_GAP_PX = 12;
+
+type MoreMenuPosition = {
+  bottom: number;
+  right: number;
+};
+
+function readMoreMenuPosition(anchor: HTMLElement): MoreMenuPosition {
+  const rect = anchor.getBoundingClientRect();
+  return {
+    bottom: window.innerHeight - rect.top + IOS_MORE_MENU_GAP_PX,
+    right: window.innerWidth - rect.right,
+  };
+}
 
 function activeTrayIndexForNavItem(
   activeVaultNavItem: SidebarNavItemId | null,
@@ -49,6 +67,14 @@ function activeTrayIndexForNavItem(
   }
   const trayIndex = IOS_BOTTOM_NAV_TRAY_ITEM_IDS.findIndex((id) => id === activeVaultNavItem);
   return trayIndex >= 0 ? trayIndex : 0;
+}
+
+function activeMoreMenuIndexForNavItem(activeVaultNavItem: SidebarNavItemId | null): number | null {
+  if (!isIosBottomNavMoreItem(activeVaultNavItem)) {
+    return null;
+  }
+  const index = IOS_BOTTOM_NAV_MORE_ITEM_IDS.findIndex((id) => id === activeVaultNavItem);
+  return index >= 0 ? index : null;
 }
 
 function IosMobileQuickActionPlusIcon() {
@@ -76,6 +102,10 @@ function IosMobileSearchActionIcon() {
   );
 }
 
+function IosMobileNavLoadingIcon() {
+  return <RefreshIcon spinning />;
+}
+
 export function IosMobileBottomNav({
   activeVaultNavItem,
   onVaultNavItemChange,
@@ -83,19 +113,28 @@ export function IosMobileBottomNav({
   activeVaultNavItem: SidebarNavItemId | null;
   onVaultNavItemChange: (item: SidebarNavItemId) => void;
 }) {
-  const { iosMobileQuickActions, iosMobileSearchAction } = useContentPanelChrome();
+  const { iosMobileQuickActions, iosMobileSearchAction, iosMobileNavLoadingItem } =
+    useContentPanelChrome();
+  const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen } = useCommandPalette();
+  const { isActive: activeWorkoutSession } = useActiveWorkoutSession();
   useIosKeyboardViewportSync();
+  const keyboardVisible = useIosKeyboardVisible();
   const moreAnchorRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenuPosition, setMoreMenuPosition] = useState<MoreMenuPosition | null>(null);
   const quickActions = iosMobileQuickActions ?? [];
   const showActionStack = quickActions.length > 0 || iosMobileSearchAction !== null;
   const activeTrayIndex = activeTrayIndexForNavItem(activeVaultNavItem, moreOpen);
+  const activeMoreMenuIndex = activeMoreMenuIndexForNavItem(activeVaultNavItem);
 
   useEffect(() => {
     if (!moreOpen) return;
 
     function onPointerDown(event: PointerEvent) {
-      if (moreAnchorRef.current?.contains(event.target as Node)) return;
+      const target = event.target as Node;
+      if (moreAnchorRef.current?.contains(target)) return;
+      if (moreMenuRef.current?.contains(target)) return;
       setMoreOpen(false);
     }
 
@@ -113,12 +152,47 @@ export function IosMobileBottomNav({
     };
   }, [moreOpen]);
 
+  useLayoutEffect(() => {
+    if (!moreOpen) {
+      setMoreMenuPosition(null);
+      return;
+    }
+
+    const anchor = moreAnchorRef.current;
+    if (!anchor) return;
+
+    const updatePosition = () => {
+      setMoreMenuPosition(readMoreMenuPosition(anchor));
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.visualViewport?.addEventListener("resize", updatePosition);
+    window.visualViewport?.addEventListener("scroll", updatePosition);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.visualViewport?.removeEventListener("resize", updatePosition);
+      window.visualViewport?.removeEventListener("scroll", updatePosition);
+    };
+  }, [moreOpen, showActionStack]);
+
+  useEffect(() => {
+    if (keyboardVisible) {
+      setMoreOpen(false);
+    }
+  }, [keyboardVisible]);
+
   if (!isIosDevice()) {
     return null;
   }
 
   return (
-    <nav className="ios-mobile-bottom-nav" aria-label="Mobile navigation">
+    <nav
+      className="ios-mobile-bottom-nav"
+      aria-label="Mobile navigation"
+      aria-hidden={keyboardVisible}
+    >
       <div className="ios-mobile-bottom-nav-cluster">
         <div
           className="ios-mobile-bottom-nav-bar"
@@ -130,6 +204,9 @@ export function IosMobileBottomNav({
           {MOBILE_NAV_TRAY_ITEMS.map((item) => {
             if (item.id === "more") {
               const isMoreSectionActive = isIosBottomNavMoreItem(activeVaultNavItem);
+              const moreNavLoading =
+                iosMobileNavLoadingItem !== null &&
+                isIosBottomNavMoreItem(iosMobileNavLoadingItem);
               return (
                 <div
                   key={item.id}
@@ -150,55 +227,19 @@ export function IosMobileBottomNav({
                     aria-label={item.label}
                     aria-haspopup="menu"
                     aria-expanded={moreOpen}
+                    aria-busy={moreNavLoading}
                     onClick={() => setMoreOpen((current) => !current)}
                   >
                     <span className="ios-mobile-bottom-nav-item-icon" aria-hidden="true">
-                      {item.icon}
+                      {moreNavLoading ? <IosMobileNavLoadingIcon /> : item.icon}
                     </span>
                   </button>
-                  {moreOpen ? (
-                    <div
-                      className="ios-mobile-bottom-nav-more-menu"
-                      role="menu"
-                      aria-label="More destinations"
-                    >
-                      {MORE_MENU_ITEMS.map((menuItem) => {
-                        const isActive = activeVaultNavItem === menuItem.id;
-                        return (
-                          <button
-                            key={menuItem.id}
-                            type="button"
-                            className={[
-                              "ios-mobile-bottom-nav-more-item",
-                              isActive ? "ios-mobile-bottom-nav-more-item--active" : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                            role="menuitem"
-                            onClick={() => {
-                              setMoreOpen(false);
-                              onVaultNavItemChange(menuItem.id);
-                            }}
-                          >
-                            <span
-                              className="ios-mobile-bottom-nav-more-item-icon"
-                              aria-hidden="true"
-                            >
-                              {menuItem.icon}
-                            </span>
-                            <span className="ios-mobile-bottom-nav-more-item-label">
-                              {menuItem.label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
                 </div>
               );
             }
 
             const isActive = activeVaultNavItem === item.id;
+            const trayNavLoading = iosMobileNavLoadingItem === item.id;
             return (
               <button
                 key={item.id}
@@ -211,13 +252,14 @@ export function IosMobileBottomNav({
                   .join(" ")}
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
+                aria-busy={trayNavLoading}
                 onClick={() => {
                   setMoreOpen(false);
                   onVaultNavItemChange(item.id);
                 }}
               >
                 <span className="ios-mobile-bottom-nav-item-icon" aria-hidden="true">
-                  {item.icon}
+                  {trayNavLoading ? <IosMobileNavLoadingIcon /> : item.icon}
                 </span>
               </button>
             );
@@ -244,19 +286,82 @@ export function IosMobileBottomNav({
               <button
                 type="button"
                 className="ios-mobile-bottom-nav-action ios-mobile-bottom-nav-action--anchor"
-                aria-label={iosMobileSearchAction.label}
-                title={iosMobileSearchAction.label}
+                aria-label={
+                  commandPaletteOpen ? "Close command palette" : iosMobileSearchAction.label
+                }
+                title={commandPaletteOpen ? "Close command palette" : iosMobileSearchAction.label}
                 disabled={iosMobileSearchAction.disabled}
-                onClick={iosMobileSearchAction.onActivate}
+                onClick={() => {
+                  if (commandPaletteOpen) {
+                    setCommandPaletteOpen(false);
+                    return;
+                  }
+                  iosMobileSearchAction.onActivate();
+                }}
               >
                 <span className="ios-mobile-bottom-nav-action-icon" aria-hidden="true">
-                  <IosMobileSearchActionIcon />
+                  {commandPaletteOpen ? <WorkoutRepsIcon /> : <IosMobileSearchActionIcon />}
                 </span>
+                {activeWorkoutSession && !commandPaletteOpen ? (
+                  <span
+                    className="ios-mobile-bottom-nav-action-active-dot"
+                    aria-hidden="true"
+                  />
+                ) : null}
               </button>
             ) : null}
           </div>
         ) : null}
       </div>
+      {moreOpen && moreMenuPosition ? (
+        <div
+          ref={moreMenuRef}
+          className="ios-mobile-bottom-nav-more-menu"
+          role="menu"
+          aria-label="More destinations"
+          data-active-index={
+            activeMoreMenuIndex === null ? undefined : String(activeMoreMenuIndex)
+          }
+          style={{
+            bottom: `${moreMenuPosition.bottom}px`,
+            right: `${moreMenuPosition.right}px`,
+          }}
+        >
+          <span className="ios-mobile-bottom-nav-more-indicator" aria-hidden="true" />
+          {MORE_MENU_ITEMS.map((menuItem) => {
+            const isActive = activeVaultNavItem === menuItem.id;
+            const menuNavLoading = iosMobileNavLoadingItem === menuItem.id;
+            return (
+              <button
+                key={menuItem.id}
+                type="button"
+                className={[
+                  "ios-mobile-bottom-nav-more-item",
+                  isActive ? "ios-mobile-bottom-nav-more-item--active" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                role="menuitem"
+                aria-busy={menuNavLoading}
+                onClick={() => {
+                  const isSwitch = activeVaultNavItem !== menuItem.id;
+                  onVaultNavItemChange(menuItem.id);
+                  if (isSwitch) {
+                    window.setTimeout(() => setMoreOpen(false), 180);
+                    return;
+                  }
+                  setMoreOpen(false);
+                }}
+              >
+                <span className="ios-mobile-bottom-nav-more-item-icon" aria-hidden="true">
+                  {menuNavLoading ? <IosMobileNavLoadingIcon /> : menuItem.icon}
+                </span>
+                <span className="ios-mobile-bottom-nav-more-item-label">{menuItem.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </nav>
   );
 }

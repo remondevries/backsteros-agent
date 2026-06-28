@@ -5,11 +5,36 @@ const USER = "550e8400-e29b-41d4-a716-446655440000";
 
 describe("appUrl", () => {
   test("parses settings paths", () => {
+    expect(parseAppUrl(`/${USER}/settings`)).toMatchObject({
+      userId: USER,
+      showSettings: true,
+      settingsTab: "account",
+    });
+
     expect(parseAppUrl(`/${USER}/settings/linear`)).toMatchObject({
       userId: USER,
       showSettings: true,
       settingsTab: "linear",
     });
+  });
+
+  test("builds bare settings path for account tab", () => {
+    const path = buildAppUrl({
+      linearUserId: USER,
+      showSettings: true,
+      activeSettingsTab: "account",
+      activeVaultNavItem: "inbox",
+      linearSelection: null,
+      linearWorkspaceView: null,
+      activeLinearIssueId: null,
+      activeLinearIssueIdentifier: null,
+      activeLinearIssueProjectName: null,
+      activeLinearDocumentId: null,
+      activeVaultDocumentPath: null,
+    });
+
+    expect(path).toBe(`/${USER}/settings`);
+    expect(parseAppUrl(path)?.settingsTab).toBe("account");
   });
 
   test("parses primary nav paths", () => {

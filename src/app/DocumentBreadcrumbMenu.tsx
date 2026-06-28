@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { DocumentDeleteBreadcrumbAction } from "./contentPanelNavigation";
+import type { OverflowDeleteBreadcrumbAction } from "./contentPanelNavigation";
 
 function DocumentBreadcrumbMoreIcon() {
   return (
@@ -12,7 +12,13 @@ function DocumentBreadcrumbMoreIcon() {
   );
 }
 
-export function DocumentBreadcrumbMenu({ action }: { action: DocumentDeleteBreadcrumbAction }) {
+export function ContentPanelBreadcrumbOverflowMenu({
+  action,
+  menuLabel = "Options",
+}: {
+  action: OverflowDeleteBreadcrumbAction;
+  menuLabel?: string;
+}) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
 
@@ -48,7 +54,7 @@ export function DocumentBreadcrumbMenu({ action }: { action: DocumentDeleteBread
         ]
           .filter(Boolean)
           .join(" ")}
-        aria-label="Document options"
+        aria-label={menuLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={action.deleting}
@@ -60,7 +66,7 @@ export function DocumentBreadcrumbMenu({ action }: { action: DocumentDeleteBread
         <div
           className="content-panel-breadcrumb-menu"
           role="menu"
-          aria-label="Document options"
+          aria-label={menuLabel}
         >
           <button
             type="button"
@@ -78,4 +84,12 @@ export function DocumentBreadcrumbMenu({ action }: { action: DocumentDeleteBread
       ) : null}
     </div>
   );
+}
+
+export function DocumentBreadcrumbMenu({
+  action,
+}: {
+  action: OverflowDeleteBreadcrumbAction;
+}) {
+  return <ContentPanelBreadcrumbOverflowMenu action={action} menuLabel="Document options" />;
 }

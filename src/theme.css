@@ -24,6 +24,7 @@
   --border-scrollbar: #171819;
   --border-hover: #171819;
   --list-item-outline: #2a2c49;
+  --sidebar-item-selected-outline: #6e77c6;
   --link: #7aa2f7;
   --link-hover: #a5c4ff;
   --accent: #4a78ff;
@@ -36,7 +37,7 @@
   --model-mode-test-bg: var(--accent);
   --model-mode-max-bg: #f97316;
   --hover-overlay: rgba(255, 255, 255, 0.08);
-  --sidebar-item-active-bg: #141415;
+  --sidebar-item-active-bg: #161617;
   --linear-priority-active: #9aa0a6;
   --linear-priority-inactive: #4b5563;
   --linear-priority-none: #9aa0a6;
@@ -214,6 +215,7 @@
     --border-scrollbar: #c7c7cc;
     --border-hover: #aeaeb2;
     --list-item-outline: var(--border-hover);
+    --sidebar-item-selected-outline: #6e77c6;
     --link: #0066cc;
     --link-hover: #004999;
     --accent: #0066cc;
@@ -226,7 +228,7 @@
     --model-mode-test-bg: var(--accent);
     --model-mode-max-bg: #f97316;
     --hover-overlay: rgba(0, 0, 0, 0.06);
-    --sidebar-item-active-bg: #ebebf0;
+    --sidebar-item-active-bg: #f8f8f8;
     --linear-priority-active: #6b7280;
     --linear-priority-inactive: #d1d5db;
     --linear-priority-none: #1c1c1e;

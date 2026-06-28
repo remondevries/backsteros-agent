@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinearIssueEntity } from "../../chat/types";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useIosMobileLandscapeReadOnly } from "../../hooks/useIosMobileLandscapeReadOnly";
 import { useDocumentDeleteBreadcrumbAction } from "../../hooks/useDocumentDeleteBreadcrumbAction";
 import { useLinearDocument } from "../../hooks/useLinearDocument";
 import { linearSync } from "../../lib/linearSync";
@@ -73,6 +74,8 @@ export function LinearDocumentView({
 }) {
   const { updateActiveLinearDocument, clearActiveLinearDocument, setActiveLinearIssue, activeLinearIssue } =
     useContentPanelNavigation();
+  const iosLandscapeReadOnly = useIosMobileLandscapeReadOnly();
+  const effectiveShowDetailsPanel = showDetailsPanel && !iosLandscapeReadOnly;
   const { document, loading, refreshing, error, save, updateProperties, refresh } =
     useLinearDocument(documentId);
   const [titleDraft, setTitleDraft] = useState("");
@@ -92,9 +95,12 @@ export function LinearDocumentView({
   const titleRef = useRef(titleDraft);
   const bodyRef = useRef(bodyDraft);
   const userEditedRef = useRef(false);
+  const documentIdRef = useRef(documentId);
+  const dirtyRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   titleRef.current = titleDraft;
   bodyRef.current = bodyDraft;
+  dirtyRef.current = dirty;
 
   useContentPanelBarState({
     saving: saving || deleting,
@@ -189,14 +195,47 @@ export function LinearDocumentView({
   );
 
   useEffect(() => {
-    setDirty(false);
-    setSaveError(null);
-    userEditedRef.current = false;
-  }, [documentId]);
-
-  useEffect(() => {
     if (!document || document.id !== documentId) return;
-    if (dirty || userEditedRef.current) return;
+    if (dirty) {
+      // #region agent log
+      fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+        body: JSON.stringify({
+          sessionId: "180d80",
+          hypothesisId: "DOC2",
+          location: "LinearDocumentView.tsx:syncBlocked",
+          message: "Skipped server sync because editor is dirty",
+          data: {
+            documentId,
+            serverContentLength: document.content.length,
+            bodyDraftLength: bodyDraft.length,
+            userEdited: userEditedRef.current,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return;
+    }
+    // #region agent log
+    fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+      body: JSON.stringify({
+        sessionId: "180d80",
+        hypothesisId: "DOC1",
+        location: "LinearDocumentView.tsx:syncFromServer",
+        message: "Applying server document to editor drafts",
+        data: {
+          documentId,
+          contentLength: document.content.length,
+          bodyDraftLength: bodyDraft.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (meetingsSection) {
       const parsed = parseMeetingDocumentTitle(document.title);
       setMeetingDate(parsed.date);
@@ -298,6 +337,80 @@ export function LinearDocumentView({
     [document?.projectId, document?.title, documentId, isDailyJournalDocument, lettersSection, linkedIssueIdentifier, linkedTitleActive, meetingDate, meetingTime, meetingsSection, projectId, save, titleDraft, updateActiveLinearDocument],
   );
 
+  const flushLeavingDocumentSave = useCallback(
+    async (leavingDocumentId: string, titleInput: string, body: string) => {
+      if (!userEditedRef.current) return;
+      const title = meetingsSection
+        ? buildMeetingDocumentTitle(meetingDate, titleInput, meetingTime)
+        : linkedTitleActive
+          ? buildLinearLinkedDocumentTitle(linkedIssueIdentifier, titleInput)
+          : titleInput;
+      // #region agent log
+      fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+        body: JSON.stringify({
+          sessionId: "180d80",
+          hypothesisId: "SW1",
+          location: "LinearDocumentView.tsx:flushLeavingDocumentSave",
+          message: "Flushing pending document save on navigation",
+          data: {
+            leavingDocumentId,
+            bodyLength: body.length,
+            titleLength: titleInput.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      try {
+        await linearSync.enqueueDocumentUpdate(
+          leavingDocumentId,
+          isDailyJournalDocument
+            ? { content: body }
+            : { title, content: body },
+        );
+        notifyLinearDocumentListChange({
+          type: "update",
+          linearDocumentId: leavingDocumentId,
+          patch: {
+            ...(isDailyJournalDocument ? {} : { title: titleInput.trim() || "Untitled" }),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      } catch {
+        // Best-effort flush when leaving the document; errors surface on next open.
+      }
+    },
+    [
+      isDailyJournalDocument,
+      linkedIssueIdentifier,
+      linkedTitleActive,
+      meetingDate,
+      meetingTime,
+      meetingsSection,
+    ],
+  );
+
+  useEffect(() => {
+    const previousDocumentId = documentIdRef.current;
+    if (previousDocumentId === documentId) return;
+
+    const shouldFlush = dirtyRef.current && userEditedRef.current;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (shouldFlush) {
+      void flushLeavingDocumentSave(previousDocumentId, titleRef.current, bodyRef.current);
+    }
+
+    documentIdRef.current = documentId;
+    setDirty(false);
+    setSaveError(null);
+    userEditedRef.current = false;
+  }, [documentId, flushLeavingDocumentSave]);
+
   const scheduleSave = useCallback(
     (title: string, body: string) => {
       if (debounceRef.current) {
@@ -314,30 +427,29 @@ export function LinearDocumentView({
     () => () => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const leavingDocumentId = documentIdRef.current;
+      if (dirtyRef.current && userEditedRef.current) {
+        void flushLeavingDocumentSave(leavingDocumentId, titleRef.current, bodyRef.current);
       }
     },
-    [],
+    [flushLeavingDocumentSave],
   );
 
-  const handleTitleFocus = () => {
-    userEditedRef.current = true;
-  };
-
   const handleTitleChange = (nextTitle: string) => {
+    userEditedRef.current = true;
     setTitleDraft(nextTitle);
-    if (!userEditedRef.current) return;
     setDirty(true);
     setSaveError(null);
     scheduleSave(nextTitle, bodyRef.current);
   };
 
-  const handleBodyFocus = () => {
-    userEditedRef.current = true;
-  };
-
   const handleBodyChange = (nextBody: string) => {
+    const serverBody = document?.id === documentId ? document.content : "";
+    if (nextBody === serverBody) return;
+    userEditedRef.current = true;
     setBodyDraft(nextBody);
-    if (!userEditedRef.current) return;
     setDirty(true);
     setSaveError(null);
     scheduleSave(titleRef.current, nextBody);
@@ -558,7 +670,7 @@ export function LinearDocumentView({
             workoutsLinearTeamId={workoutsLinearTeamId}
           />
         ) : null}
-        {isDailyJournalDocument ? (
+        {isDailyJournalDocument || iosLandscapeReadOnly ? (
           <h1
             className="vault-document-title vault-document-title--readonly"
             aria-label="Document title"
@@ -572,7 +684,6 @@ export function LinearDocumentView({
             className="vault-document-title"
             value={titleDraft}
             onChange={(event) => handleTitleChange(event.target.value)}
-            onFocus={handleTitleFocus}
             onBlur={handleBlur}
             onKeyDown={handleVaultDocumentTitleEnter}
             placeholder={titlePlaceholder}
@@ -584,18 +695,18 @@ export function LinearDocumentView({
         {lettersSection ? (
           <LetterIssueDescriptionEditor
             issueId={effectiveLinkedIssueKey}
-            disabled={updatingProperties}
+            disabled={updatingProperties || iosLandscapeReadOnly}
             placeholder={bodyPlaceholder}
           />
         ) : (
           <TiptapEditor
             value={bodyDraft}
             onChange={handleBodyChange}
-            onFocus={handleBodyFocus}
             onBlur={handleBlur}
             format="markdown"
             placeholder={bodyPlaceholder}
             className="vault-document-tiptap"
+            disabled={iosLandscapeReadOnly}
           />
         )}
       </div>
@@ -626,7 +737,7 @@ export function LinearDocumentView({
       />
     ) : null;
 
-  if (lettersSection) {
+  if (lettersSection && !iosLandscapeReadOnly) {
     return (
       <>
         {deleteConfirmDialog}
@@ -650,7 +761,7 @@ export function LinearDocumentView({
     );
   }
 
-  if (!showDetailsPanel) {
+  if (!effectiveShowDetailsPanel) {
     return (
       <>
         {deleteConfirmDialog}
@@ -664,7 +775,14 @@ export function LinearDocumentView({
   return (
     <>
       {deleteConfirmDialog}
-      <div className="linear-issue-layout">
+      <div
+        className={[
+          "linear-issue-layout",
+          iosLandscapeReadOnly ? "linear-issue-layout--ios-landscape-readonly" : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
       <div className="linear-issue-main">
         <DocumentPdfLinkAction content={bodyDraft}>
           <div className="vault-document-scroll">{documentArticle}</div>

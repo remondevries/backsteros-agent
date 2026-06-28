@@ -1,11 +1,7 @@
 import { fetchLinearTeamContext, resolveWorkflowStateId } from "./project-context.ts";
 import { linearGraphqlRequest } from "./graphql.ts";
 import { updateLinearIssueDetail } from "./issue-detail.ts";
-import {
-  WORKOUT_SET_LABEL_GROUP,
-  fetchLinearTeamLabelGroupLabels,
-} from "./team-labels.ts";
-import { assertWorkoutSetExercise } from "./workout-exercise-types.ts";
+import { resolveWorkoutSetExerciseLabel } from "./workout-exercise-types.ts";
 import {
   createLinearTeamProject,
   fetchLinearTeamProjects,
@@ -111,18 +107,7 @@ async function resolveExerciseSetLabelId(
   teamId: string,
   exerciseName: string,
 ): Promise<{ id: string; name: string }> {
-  const normalizedExercise = await assertWorkoutSetExercise(teamId, exerciseName);
-  const labels = await fetchLinearTeamLabelGroupLabels(teamId, WORKOUT_SET_LABEL_GROUP);
-  const match = labels.find(
-    (label) =>
-      label.name.localeCompare(normalizedExercise, undefined, { sensitivity: "base" }) === 0,
-  );
-  if (!match) {
-    throw new Error(
-      `Could not resolve "${WORKOUT_SET_LABEL_GROUP}" label for exercise ${normalizedExercise}`,
-    );
-  }
-  return { id: match.id, name: match.name };
+  return resolveWorkoutSetExerciseLabel(teamId, exerciseName);
 }
 
 type PersonalRecordIssueNode = {

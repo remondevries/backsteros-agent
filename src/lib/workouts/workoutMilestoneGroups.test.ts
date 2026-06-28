@@ -10,6 +10,8 @@ function milestone(partial: Partial<WorkoutMilestoneEntity> & Pick<WorkoutMilest
     name: partial.name ?? "2026-06-14",
     targetDate: partial.targetDate ?? null,
     projectId: partial.projectId ?? "project-1",
+    status: partial.status ?? "unstarted",
+    progress: partial.progress ?? 0,
     ...partial,
   } satisfies WorkoutMilestoneEntity;
 }

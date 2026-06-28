@@ -1,14 +1,19 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type RefObject } from "react";
 import type { WorkoutGroupSetEntity, WorkoutRepEntity } from "../../lib/api";
 import { useWorkoutSession } from "../../hooks/useWorkoutSession";
 import { useLinearWorkoutSetLabels } from "../../hooks/useLinearWorkoutSetLabels";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useIosExplorerSearchChrome } from "../../hooks/useIosExplorerSearchChrome";
+import { useLinearWorkspaceTabCreateAction } from "../../hooks/useLinearWorkspaceTabCreateAction";
 import { type LinearWorkoutSetLabel } from "../../lib/workouts/linearWorkoutTypes";
 import { resolveWorkoutExerciseFromLabels } from "../../lib/workouts/workoutExerciseLabelMatch";
 import {
+  findLastWorkoutGroupSetWithoutReps,
+  findLastWorkoutRepInSession,
   formatGroupSetTotalWeightKg,
   formatRepCountDisplay,
   formatRepWeightDisplay,
+  isWorkoutRepEmpty,
   normalizeIntegerInput,
   normalizeNumericInput,
   repVolumeProgressPercent,
@@ -16,37 +21,11 @@ import {
   sumSessionGroupSetWeightKg,
 } from "../../lib/workouts/workoutRepDisplay";
 import { WorkoutExerciseField } from "./WorkoutExerciseField";
+import { WorkoutIssueRowShell } from "./WorkoutSwipeToDeleteShell";
 import { WorkoutRepsIcon } from "./WorkoutRepsIcon";
 import { GroupChevron } from "../workspace-list/GroupChevron";
-
-function WorkoutPlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <path
-        d="M12 5v14M5 12h14"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function WorkoutTrashIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M2.75 4.5h10.5M6.25 4.5V3.25a.75.75 0 0 1 .75-.75h2a.75.75 0 0 1 .75.75V4.5m1.5 0v8.25a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75V4.5h7.5Z"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.25"
-      />
-    </svg>
-  );
-}
+import { GroupHeaderAddButton } from "../workspace-list/GroupHeaderAddButton";
+import { isIosDevice } from "../../platform/iosStandalone";
 
 const WORKOUT_WEIGHT_INPUT_PADDING_X = 12;
 
@@ -131,6 +110,28 @@ function WorkoutRepRow({
     repsInputRef.current?.select();
   };
 
+  const handleWeightSlotPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    if (event.target instanceof HTMLInputElement) {
+      return;
+    }
+    event.preventDefault();
+    focusWeightInput();
+  };
+
+  const handleRepsSlotPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    if (event.target instanceof HTMLInputElement) {
+      return;
+    }
+    event.preventDefault();
+    focusRepsInput();
+  };
+
   const handleWeightBlur = async () => {
     const nextWeight = weightDraft.trim();
     const currentWeight = formatRepWeightDisplay(rep.title);
@@ -187,10 +188,18 @@ function WorkoutRepRow({
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="workout-issue-row-shell">
+      <WorkoutIssueRowShell
+        onDelete={() => void onDelete()}
+        disabled={deleting || updating}
+        deleteAriaLabel={`Delete ${rep.title}`}
+        deleteTitle="Delete set"
+      >
         <div className="workout-issue-row workout-issue-row--rep" aria-busy={updating || undefined}>
           <div className="project-issue-row project-issue-row--grouped workout-rep-row workout-issue-row__content">
-            <div className="workout-rep-row__weight-slot" onClick={focusWeightInput}>
+            <div
+              className="workout-rep-row__weight-slot"
+              onPointerDown={handleWeightSlotPointerDown}
+            >
               <div className="workout-rep-row__weight-field">
                 <div className="workout-rep-row__weight-sizer">
                   <span ref={weightMeasureRef} className="workout-rep-row__weight-measure" aria-hidden="true">
@@ -240,7 +249,10 @@ function WorkoutRepRow({
               </div>
             </div>
 
-            <div className="workout-rep-row__reps-slot" onClick={focusRepsInput}>
+            <div
+              className="workout-rep-row__reps-slot"
+              onPointerDown={handleRepsSlotPointerDown}
+            >
               <div className="workout-rep-row__reps-field">
                 <div className="workout-rep-row__reps-sizer">
                   <span ref={repsMeasureRef} className="workout-rep-row__reps-measure" aria-hidden="true">
@@ -274,17 +286,7 @@ function WorkoutRepRow({
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="workout-issue-delete"
-          onClick={() => void onDelete()}
-          disabled={deleting || updating}
-          aria-label={`Delete ${rep.title}`}
-          title="Delete set"
-        >
-          <WorkoutTrashIcon />
-        </button>
-      </div>
+      </WorkoutIssueRowShell>
       {saveError ? (
         <p className="workout-issue-row__error" role="alert">
           {saveError}
@@ -300,11 +302,9 @@ function WorkoutGroupSetRow({
   labelsLoading,
   deleting,
   updating,
-  addingRep,
   collapsed,
   onToggleCollapsed,
   onUpdateExercise,
-  onAddRep,
   onDelete,
 }: {
   groupSet: WorkoutGroupSetEntity;
@@ -312,11 +312,9 @@ function WorkoutGroupSetRow({
   labelsLoading: boolean;
   deleting: boolean;
   updating: boolean;
-  addingRep: boolean;
   collapsed: boolean;
   onToggleCollapsed: () => void;
-  onUpdateExercise: (exercise: string) => Promise<{ success: boolean; error: string | null }>;
-  onAddRep: () => void;
+  onUpdateExercise: (exercise: string, labelId: string | null) => Promise<{ success: boolean; error: string | null }>;
   onDelete: () => void;
 }) {
   const exerciseName = groupSet.exercise?.trim() || groupSet.title.trim();
@@ -330,14 +328,23 @@ function WorkoutGroupSetRow({
     setSaveError(null);
   }, [groupSet.id, exerciseName, labels]);
 
-  const handleExerciseBlur = async (nextValue?: string) => {
+  const handleExerciseBlur = async (nextValue?: string, labelIdFromField?: string | null) => {
     const nextExercise = (nextValue ?? exerciseDraft).trim();
-    if (!nextExercise || nextExercise === exerciseName) {
+    const resolved = resolveWorkoutExerciseFromLabels(nextExercise, labels);
+    const exerciseToSave = resolved.text.trim();
+    const labelToSave =
+      labelIdFromField !== undefined ? labelIdFromField : resolved.labelId;
+
+    if (!exerciseToSave) {
+      setExerciseDraft(exerciseName);
+      return;
+    }
+    if (exerciseToSave === exerciseName && !labelToSave) {
       setExerciseDraft(exerciseName);
       return;
     }
 
-    const result = await onUpdateExercise(nextExercise);
+    const result = await onUpdateExercise(exerciseToSave, labelToSave);
     if (!result.success) {
       setSaveError(result.error);
       setExerciseDraft(exerciseName);
@@ -349,7 +356,12 @@ function WorkoutGroupSetRow({
 
   return (
     <li className="workspace-status-list__item workout-group-set-list__group-item">
-      <div className="workout-issue-row-shell">
+      <WorkoutIssueRowShell
+        onDelete={() => void onDelete()}
+        disabled={deleting || updating}
+        deleteAriaLabel={`Delete ${groupSet.title}`}
+        deleteTitle="Delete exercise group"
+      >
         <div
           className={[
             "workout-issue-row",
@@ -377,7 +389,7 @@ function WorkoutGroupSetRow({
             <WorkoutExerciseField
               value={exerciseDraft}
               onChange={setExerciseDraft}
-              onBlur={(resolved) => void handleExerciseBlur(resolved)}
+              onBlur={(resolved, labelId) => void handleExerciseBlur(resolved, labelId)}
               labels={labels}
               labelsLoading={labelsLoading}
               disabled={deleting || updating}
@@ -394,28 +406,8 @@ function WorkoutGroupSetRow({
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            className="workout-issue-add"
-            onClick={() => void onAddRep()}
-            disabled={deleting || updating || addingRep}
-            aria-label={`Add set to ${groupSet.title}`}
-            title="Add set"
-          >
-            {addingRep ? "…" : <WorkoutPlusIcon />}
-          </button>
         </div>
-        <button
-          type="button"
-          className="workout-issue-delete"
-          onClick={() => void onDelete()}
-          disabled={deleting || updating || addingRep}
-          aria-label={`Delete ${groupSet.title}`}
-          title="Delete exercise group"
-        >
-          <WorkoutTrashIcon />
-        </button>
-      </div>
+      </WorkoutIssueRowShell>
       {saveError ? (
         <p className="workout-issue-row__error workout-group-set-row__error" role="alert">
           {saveError}
@@ -428,22 +420,48 @@ function WorkoutGroupSetRow({
 function WorkoutSessionSummaryKpis({
   workoutCount,
   totalWeightLabel,
+  quickCreateLabel,
+  quickCreateDisabled,
+  onQuickCreate,
 }: {
   workoutCount: number;
   totalWeightLabel: string;
+  quickCreateLabel?: string;
+  quickCreateDisabled?: boolean;
+  onQuickCreate?: () => void;
 }) {
+  const showDesktopQuickCreate =
+    !isIosDevice() && quickCreateLabel && onQuickCreate;
+
   return (
     <div className="workout-session-panel__band workout-session-panel__summary-band">
       <div className="workout-session-panel__content">
-        <div className="workout-session-summary-kpis" aria-label="Session summary">
-          <div className="workout-kpi-tile workout-kpi-tile--stat">
-            <div className="workout-kpi-label">Workouts</div>
-            <div className="workout-kpi-value">{workoutCount}</div>
+        <div
+          className={[
+            "workout-session-summary-kpis",
+            showDesktopQuickCreate ? "workout-session-summary-kpis--with-action" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-label="Session summary"
+        >
+          <div className="workout-session-summary-kpis__stats">
+            <div className="workout-kpi-tile workout-kpi-tile--stat">
+              <div className="workout-kpi-label">Workouts</div>
+              <div className="workout-kpi-value">{workoutCount}</div>
+            </div>
+            <div className="workout-kpi-tile workout-kpi-tile--stat">
+              <div className="workout-kpi-label">Total weight</div>
+              <div className="workout-kpi-value">{totalWeightLabel}</div>
+            </div>
           </div>
-          <div className="workout-kpi-tile workout-kpi-tile--stat">
-            <div className="workout-kpi-label">Total weight</div>
-            <div className="workout-kpi-value">{totalWeightLabel}</div>
-          </div>
+          {showDesktopQuickCreate ? (
+            <GroupHeaderAddButton
+              label={quickCreateLabel}
+              disabled={quickCreateDisabled}
+              onClick={onQuickCreate}
+            />
+          ) : null}
         </div>
       </div>
     </div>
@@ -455,6 +473,11 @@ export function WorkoutSetEntryForm({
   submitting,
   labels,
   labelsLoading,
+  exerciseDraft,
+  onExerciseDraftChange,
+  formError,
+  onFormErrorChange,
+  exerciseInputRef,
   createGroupSet,
   onCreated,
 }: {
@@ -462,38 +485,41 @@ export function WorkoutSetEntryForm({
   submitting: boolean;
   labels: LinearWorkoutSetLabel[];
   labelsLoading: boolean;
+  exerciseDraft: string;
+  onExerciseDraftChange: (value: string) => void;
+  formError: string | null;
+  onFormErrorChange: (value: string | null) => void;
+  exerciseInputRef?: RefObject<HTMLInputElement | null>;
   createGroupSet: (exercise: string) => Promise<{
     groupSet: WorkoutGroupSetEntity | null;
     error: string | null;
   }>;
   onCreated?: () => void;
 }) {
-  const [exerciseDraft, setExerciseDraft] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setFormError(null);
+    onFormErrorChange(null);
 
     const resolved = resolveWorkoutExerciseFromLabels(exerciseDraft, labels);
     const exercise = resolved.text.trim();
     if (!exercise) {
-      setFormError("Enter an exercise name.");
+      onFormErrorChange("Enter an exercise name.");
       return;
     }
 
     if (resolved.text !== exerciseDraft) {
-      setExerciseDraft(resolved.text);
+      onExerciseDraftChange(resolved.text);
     }
 
     const result = await createGroupSet(exercise);
 
     if (result.error) {
-      setFormError(result.error);
+      onFormErrorChange(result.error);
       return;
     }
 
-    setExerciseDraft("");
+    onExerciseDraftChange("");
     onCreated?.();
   };
 
@@ -508,11 +534,12 @@ export function WorkoutSetEntryForm({
         <div className="workout-set-entry-row">
           <WorkoutExerciseField
             value={exerciseDraft}
-            onChange={setExerciseDraft}
+            onChange={onExerciseDraftChange}
             labels={labels}
             labelsLoading={labelsLoading}
             disabled={!enabled || submitting}
             inputClassName="workout-set-entry-row__exercise-input"
+            inputRef={exerciseInputRef}
           />
           <button
             type="submit"
@@ -563,8 +590,33 @@ export function WorkoutSessionPanel({
     dateKey,
     enabled,
   });
+  useIosExplorerSearchChrome({
+    enabled: enabled && Boolean(teamId.trim()),
+    label: "Search workouts",
+  });
   const [focusRepId, setFocusRepId] = useState<string | null>(null);
   const [collapsedGroupSetIds, setCollapsedGroupSetIds] = useState<Set<string>>(() => new Set());
+  const [exerciseDraft, setExerciseDraft] = useState("");
+  const [entryFormError, setEntryFormError] = useState<string | null>(null);
+  const exerciseInputRef = useRef<HTMLInputElement>(null);
+
+  const lastRepInSession = useMemo(() => findLastWorkoutRepInSession(groupSets), [groupSets]);
+  const groupSetWithoutReps = useMemo(
+    () => findLastWorkoutGroupSetWithoutReps(groupSets),
+    [groupSets],
+  );
+  const quickCreateWillAddGroup = useMemo(() => {
+    if (groupSetWithoutReps) {
+      return false;
+    }
+    if (!lastRepInSession) {
+      return true;
+    }
+    return isWorkoutRepEmpty(lastRepInSession.rep);
+  }, [groupSetWithoutReps, lastRepInSession]);
+  const quickCreateLabel = quickCreateWillAddGroup ? "New exercise" : "Add set";
+  const quickCreateBusy =
+    submitting || addingRepToGroupSetId !== null || deletingIssueId !== null;
 
   const sessionSummary = useMemo(() => {
     const totalWeightKg = sumSessionGroupSetWeightKg(groupSets);
@@ -597,13 +649,103 @@ export function WorkoutSessionPanel({
     });
   };
 
-  const handleAddRepToGroupSet = async (groupSet: WorkoutGroupSetEntity) => {
-    expandGroupSet(groupSet.id);
-    const result = await addRepToGroupSet(groupSet);
-    if (result.rep) {
-      setFocusRepId(result.rep.id);
+  const handleAddRepToGroupSet = useCallback(
+    async (groupSet: WorkoutGroupSetEntity) => {
+      expandGroupSet(groupSet.id);
+      const result = await addRepToGroupSet(groupSet);
+      if (result.rep) {
+        setFocusRepId(result.rep.id);
+      }
+      return result;
+    },
+    [addRepToGroupSet],
+  );
+
+  const handleQuickCreate = useCallback(async () => {
+    if (quickCreateBusy) {
+      return;
     }
-  };
+
+    const addRepTarget =
+      groupSetWithoutReps ??
+      (lastRepInSession && !isWorkoutRepEmpty(lastRepInSession.rep)
+        ? lastRepInSession.groupSet
+        : null);
+
+    if (addRepTarget) {
+      setEntryFormError(null);
+      const repResult = await handleAddRepToGroupSet(addRepTarget);
+      if (repResult.error) {
+        setEntryFormError(repResult.error);
+      }
+      return;
+    }
+
+    if (quickCreateWillAddGroup) {
+      if (
+        lastRepInSession &&
+        isWorkoutRepEmpty(lastRepInSession.rep)
+      ) {
+        const { rep, groupSet } = lastRepInSession;
+        const onlyRepInGroup = groupSet.reps.length === 1;
+        await deleteRep(rep.id);
+        if (onlyRepInGroup) {
+          await deleteGroupSet(groupSet);
+        }
+      }
+
+      const resolved = resolveWorkoutExerciseFromLabels(exerciseDraft, labels);
+      const exercise = resolved.text.trim();
+      if (!exercise) {
+        setEntryFormError("Enter an exercise name.");
+        exerciseInputRef.current?.focus();
+        return;
+      }
+
+      if (resolved.text !== exerciseDraft) {
+        setExerciseDraft(resolved.text);
+      }
+
+      setEntryFormError(null);
+      const groupResult = await createGroupSet(exercise);
+      if (groupResult.error || !groupResult.groupSet) {
+        if (groupResult.error) {
+          setEntryFormError(groupResult.error);
+        }
+        return;
+      }
+
+      setExerciseDraft("");
+      expandGroupSet(groupResult.groupSet.id);
+      const repResult = await handleAddRepToGroupSet(groupResult.groupSet);
+      if (repResult.error) {
+        setEntryFormError(repResult.error);
+      }
+    }
+  }, [
+    createGroupSet,
+    deleteGroupSet,
+    deleteRep,
+    exerciseDraft,
+    groupSetWithoutReps,
+    handleAddRepToGroupSet,
+    labels,
+    lastRepInSession,
+    quickCreateBusy,
+    quickCreateWillAddGroup,
+  ]);
+
+  useLinearWorkspaceTabCreateAction(
+    enabled && Boolean(teamId.trim())
+      ? {
+          disabled: quickCreateBusy,
+          label: quickCreateLabel,
+          onCreate: () => {
+            void handleQuickCreate();
+          },
+        }
+      : null,
+  );
 
   useContentPanelBarState({
     error,
@@ -611,6 +753,7 @@ export function WorkoutSessionPanel({
     loadingMessage: "Loading session…",
     refreshing,
     onRefresh: refresh,
+    iosNavItemId: "workouts",
   });
 
   if (!enabled || !teamId.trim()) {
@@ -632,12 +775,22 @@ export function WorkoutSessionPanel({
       <WorkoutSessionSummaryKpis
         workoutCount={sessionSummary.workoutCount}
         totalWeightLabel={sessionSummary.totalWeightLabel}
+        quickCreateLabel={quickCreateLabel}
+        quickCreateDisabled={quickCreateBusy}
+        onQuickCreate={() => {
+          void handleQuickCreate();
+        }}
       />
       <WorkoutSetEntryForm
         enabled={enabled}
         submitting={submitting}
         labels={labels}
         labelsLoading={labelsLoading}
+        exerciseDraft={exerciseDraft}
+        onExerciseDraftChange={setExerciseDraft}
+        formError={entryFormError}
+        onFormErrorChange={setEntryFormError}
+        exerciseInputRef={exerciseInputRef}
         createGroupSet={createGroupSet}
         onCreated={() => void refresh({ background: true })}
       />
@@ -666,11 +819,11 @@ export function WorkoutSessionPanel({
                   labelsLoading={labelsLoading}
                   deleting={deletingIssueId === groupSet.id}
                   updating={updatingIssueId === groupSet.id}
-                  addingRep={addingRepToGroupSetId === groupSet.id}
                   collapsed={collapsedGroupSetIds.has(groupSet.id)}
                   onToggleCollapsed={() => toggleGroupSetCollapsed(groupSet.id)}
-                  onUpdateExercise={(exercise) => updateGroupSetExercise(groupSet.id, exercise)}
-                  onAddRep={() => void handleAddRepToGroupSet(groupSet)}
+                  onUpdateExercise={(exercise, labelId) =>
+                    updateGroupSetExercise(groupSet.id, exercise, labelId)
+                  }
                   onDelete={() => void deleteGroupSet(groupSet)}
                 />,
                 ...(collapsedGroupSetIds.has(groupSet.id)

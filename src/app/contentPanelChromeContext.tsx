@@ -9,11 +9,13 @@ import {
 import type {
   ContentPanelBarState,
   DocumentDeleteBreadcrumbAction,
+  IssueDeleteBreadcrumbAction,
   IssueViewModeBreadcrumbAction,
   IssuesWatcherBreadcrumbAction,
   ProjectDocumentsTabCreateAction,
   ProjectsBrowseSearchBreadcrumbAction,
 } from "./contentPanelNavigation";
+import type { SidebarNavItemId } from "../lib/sidebarNavItems";
 
 export type IosMobileQuickAction = {
   id: string;
@@ -37,6 +39,8 @@ type ContentPanelChromeContextValue = {
   setIssueViewModeAction: (action: IssueViewModeBreadcrumbAction | null) => void;
   documentDeleteAction: DocumentDeleteBreadcrumbAction | null;
   setDocumentDeleteAction: (action: DocumentDeleteBreadcrumbAction | null) => void;
+  issueDeleteAction: IssueDeleteBreadcrumbAction | null;
+  setIssueDeleteAction: (action: IssueDeleteBreadcrumbAction | null) => void;
   projectsBrowseSearchAction: ProjectsBrowseSearchBreadcrumbAction | null;
   setProjectsBrowseSearchAction: (action: ProjectsBrowseSearchBreadcrumbAction | null) => void;
   projectDocumentsCreateAction: ProjectDocumentsTabCreateAction | null;
@@ -45,6 +49,8 @@ type ContentPanelChromeContextValue = {
   setIosMobileQuickActions: (actions: IosMobileQuickAction[] | null) => void;
   iosMobileSearchAction: IosMobileSearchAction | null;
   setIosMobileSearchAction: (action: IosMobileSearchAction | null) => void;
+  iosMobileNavLoadingItem: SidebarNavItemId | null;
+  setIosMobileNavLoadingItem: (item: SidebarNavItemId | null) => void;
   clearChrome: () => void;
 };
 
@@ -60,6 +66,8 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     useState<IssueViewModeBreadcrumbAction | null>(null);
   const [documentDeleteAction, setDocumentDeleteActionState] =
     useState<DocumentDeleteBreadcrumbAction | null>(null);
+  const [issueDeleteAction, setIssueDeleteActionState] =
+    useState<IssueDeleteBreadcrumbAction | null>(null);
   const [projectsBrowseSearchAction, setProjectsBrowseSearchActionState] =
     useState<ProjectsBrowseSearchBreadcrumbAction | null>(null);
   const [projectDocumentsCreateAction, setProjectDocumentsCreateActionState] =
@@ -68,6 +76,9 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     null,
   );
   const [iosMobileSearchAction, setIosMobileSearchActionState] = useState<IosMobileSearchAction | null>(
+    null,
+  );
+  const [iosMobileNavLoadingItem, setIosMobileNavLoadingItemState] = useState<SidebarNavItemId | null>(
     null,
   );
 
@@ -85,6 +96,10 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
 
   const setDocumentDeleteAction = useCallback((action: DocumentDeleteBreadcrumbAction | null) => {
     setDocumentDeleteActionState(action);
+  }, []);
+
+  const setIssueDeleteAction = useCallback((action: IssueDeleteBreadcrumbAction | null) => {
+    setIssueDeleteActionState(action);
   }, []);
 
   const setProjectsBrowseSearchAction = useCallback(
@@ -109,11 +124,16 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
     setIosMobileSearchActionState(action);
   }, []);
 
+  const setIosMobileNavLoadingItem = useCallback((item: SidebarNavItemId | null) => {
+    setIosMobileNavLoadingItemState(item);
+  }, []);
+
   const clearChrome = useCallback(() => {
     setContentPanelBarStateState(null);
     setIssuesWatcherActionState(null);
     setIssueViewModeActionState(null);
     setDocumentDeleteActionState(null);
+    setIssueDeleteActionState(null);
     setProjectsBrowseSearchActionState(null);
     setProjectDocumentsCreateActionState(null);
     // iOS bottom-nav quick actions and search are owned by mounted explorers via
@@ -131,6 +151,8 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setIssueViewModeAction,
       documentDeleteAction,
       setDocumentDeleteAction,
+      issueDeleteAction,
+      setIssueDeleteAction,
       projectsBrowseSearchAction,
       setProjectsBrowseSearchAction,
       projectDocumentsCreateAction,
@@ -139,24 +161,30 @@ export function ContentPanelChromeProvider({ children }: { children: ReactNode }
       setIosMobileQuickActions,
       iosMobileSearchAction,
       setIosMobileSearchAction,
+      iosMobileNavLoadingItem,
+      setIosMobileNavLoadingItem,
       clearChrome,
     }),
     [
       clearChrome,
       contentPanelBarState,
       documentDeleteAction,
+      issueDeleteAction,
       iosMobileQuickActions,
       iosMobileSearchAction,
+      iosMobileNavLoadingItem,
       issueViewModeAction,
       issuesWatcherAction,
       projectDocumentsCreateAction,
       projectsBrowseSearchAction,
       setContentPanelBarState,
       setDocumentDeleteAction,
+      setIssueDeleteAction,
       setIssueViewModeAction,
       setIssuesWatcherAction,
       setIosMobileQuickActions,
       setIosMobileSearchAction,
+      setIosMobileNavLoadingItem,
       setProjectDocumentsCreateAction,
       setProjectsBrowseSearchAction,
     ],

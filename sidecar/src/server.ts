@@ -8,6 +8,7 @@ import {
   clearSessionCookie,
   createBearerOrCookieAuth,
   isAuthorizedRequest,
+  isEventStreamAuthorized,
   SESSION_COOKIE,
   setSessionCookie,
 } from "./auth.ts";
@@ -95,7 +96,9 @@ import {
   createRunState,
   mapSdkMessageToEvents,
   reconcileAssistantTextFromRun,
+  resolveAgentRunFailureMessage,
 } from "./events.ts";
+import { readLocalSdkRunErrorCode } from "./sdk-run-errors.ts";
 import { resolveLinearIssueAvatars } from "./linearAvatars.ts";
 import {
   fetchAllIssuesDueToday,
@@ -159,15 +162,22 @@ import {
 import { deleteLinearIssue } from "./linear/issue-delete.ts";
 import { convertInboxIssueToProjectTask } from "./linear/inbox-issue-convert.ts";
 import {
+  createLinearAgentDocumentThread,
   createLinearAgentThread,
+  createLinearDocumentComment,
   createLinearIssueComment,
+  deleteLinearDocumentCommentThread,
   deleteLinearIssueCommentThread,
+  fetchLinearDocumentCommentThread,
+  fetchLinearDocumentCommentThreads,
   fetchLinearIssueCommentThread,
   fetchLinearIssueCommentThreads,
+  updateLinearDocumentCommentThreadRoot,
   updateLinearIssueCommentThreadRoot,
 } from "./linear/issue-comments.ts";
 import { fetchLinearAgentSession } from "./linear/agent-session.ts";
 import { buildFocusContextSection, type FocusContextInput } from "./context/focus.ts";
+import { toolSelectionForFocusContext } from "./context/focus-tools.ts";
 import { fetchLinearCustomers, fetchLinearCustomersPage } from "./linear/customers.ts";
 import { fetchLinearTeams, fetchLinearTeamsPage } from "./linear/teams.ts";
 import { createLinearTeamProject, fetchLinearTeamProjects } from "./linear/team-projects.ts";
@@ -1072,8 +1082,14 @@ app.put("/linear/watchers/config/:projectId", async (c) => {
 app.get("/linear/watchers/events", (c) => {
   const authHeader = c.req.header("authorization");
   const authQuery = c.req.query("auth");
-  const provided = authHeader?.replace("Bearer ", "") ?? authQuery;
-  if (provided !== token) {
+  if (
+    !isEventStreamAuthorized(
+      token,
+      authHeader,
+      getCookie(c, SESSION_COOKIE),
+      authQuery,
+    )
+  ) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
@@ -1510,6 +1526,147 @@ app.delete("/linear/issues/:issueId/comment-threads/:threadId", async (c) => {
 
   try {
     await deleteLinearIssueCommentThread(issueId, threadId);
+    return c.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete comment thread";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.get("/linear/documents/:documentId/comment-threads", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        threads: [],
+      },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  if (!documentId) {
+    return c.json({ error: "documentId is required", threads: [] }, 400);
+  }
+
+  try {
+    const threads = await fetchLinearDocumentCommentThreads(documentId);
+    return c.json({ threads });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load comment threads";
+    return c.json({ error: message, threads: [] }, 500);
+  }
+});
+
+app.get("/linear/documents/:documentId/comment-threads/:threadId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      {
+        error: "Linear is not connected. Connect OAuth in Settings.",
+        viewerId: null,
+        comments: [],
+      },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  const threadId = c.req.param("threadId")?.trim();
+  if (!documentId || !threadId) {
+    return c.json({ error: "documentId and threadId are required", viewerId: null, comments: [] }, 400);
+  }
+
+  try {
+    const thread = await fetchLinearDocumentCommentThread(documentId, threadId);
+    return c.json(thread);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load comment thread";
+    return c.json({ error: message, viewerId: null, comments: [] }, 500);
+  }
+});
+
+app.post("/linear/documents/:documentId/comment-threads", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      { error: "Linear is not connected. Connect OAuth in Settings." },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  if (!documentId) {
+    return c.json({ error: "documentId is required" }, 400);
+  }
+
+  const body = (await c.req.json()) as { body?: string; parentId?: string; newThread?: boolean };
+  try {
+    if (body.newThread) {
+      const userText = body.body?.trim() ?? "";
+      if (!userText) {
+        return c.json({ error: "body is required to start a thread" }, 400);
+      }
+      const comment = await createLinearAgentDocumentThread(documentId, userText);
+      return c.json({ comment });
+    }
+
+    const text = body.body?.trim() ?? "";
+    if (!text) {
+      return c.json({ error: "body is required" }, 400);
+    }
+
+    const comment = await createLinearDocumentComment(documentId, text, body.parentId);
+    return c.json({ comment });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create comment";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.patch("/linear/documents/:documentId/comment-threads/:threadId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      { error: "Linear is not connected. Connect OAuth in Settings." },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  const threadId = c.req.param("threadId")?.trim();
+  if (!documentId || !threadId) {
+    return c.json({ error: "documentId and threadId are required" }, 400);
+  }
+
+  const body = (await c.req.json()) as { body?: string };
+  const text = body.body?.trim() ?? "";
+  if (!text) {
+    return c.json({ error: "body is required" }, 400);
+  }
+
+  try {
+    const comment = await updateLinearDocumentCommentThreadRoot(documentId, threadId, text);
+    return c.json({ comment });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update comment thread";
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.delete("/linear/documents/:documentId/comment-threads/:threadId", async (c) => {
+  if (!getLinearAuthToken()) {
+    return c.json(
+      { error: "Linear is not connected. Connect OAuth in Settings." },
+      400,
+    );
+  }
+
+  const documentId = c.req.param("documentId")?.trim();
+  const threadId = c.req.param("threadId")?.trim();
+  if (!documentId || !threadId) {
+    return c.json({ error: "documentId and threadId are required" }, 400);
+  }
+
+  try {
+    await deleteLinearDocumentCommentThread(documentId, threadId);
     return c.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete comment thread";
@@ -3729,6 +3886,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
     captureTime?: string;
     groceryWeek?: string;
     focusContext?: FocusContextInput;
+    panelAgent?: "linear" | "cursor";
   };
   const text = body.text?.trim() ?? "";
   const attachments = (body.attachments ?? []).map((attachment) => ({
@@ -3761,7 +3919,6 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   }
 
   prepareWorkspace(notesPath, port, token);
-  const agent = await ensureAgentForSession(sessionId, notesPath);
 
   const isMorningReview = isMorningReviewQuickAction(body.quickActionId);
   const isGoodMorningWake = isGoodMorningWakeQuickAction(body.quickActionId);
@@ -3775,14 +3932,7 @@ app.post("/sessions/:sessionId/messages", async (c) => {
   const isDeleteFile = isDeleteFileQuickAction(body.quickActionId);
   const isStructuredQuickAction = isMorningReview || isGoodNightInitial || isLetterInitial;
   const focusToolSelection = body.focusContext
-    ? {
-        obsidian:
-          body.focusContext.kind === "vault_document" ||
-          body.focusContext.kind === "vault_folder",
-        linear: true,
-        calendar: false,
-        whoop: false,
-      }
+    ? toolSelectionForFocusContext(body.focusContext)
     : null;
   const effectiveToolSelection = focusToolSelection
     ?? (isGoodMorningWake || isGoodMorningFeel || isGoodNightReflection || isLetterConfirm || isDailyCapture || isGroceryList || isDeleteFile
@@ -3850,7 +4000,12 @@ app.post("/sessions/:sessionId/messages", async (c) => {
     const active = activeRuns.get(runId);
     if (!active) return;
 
+    const panelAgent = body.panelAgent === "linear" ? "linear" : "cursor";
+    const cursorApiKeyConfigured = Boolean(getCursorApiKey()?.trim());
+
     try {
+      const agent = await ensureAgentForSession(sessionId, notesPath);
+
       const selectedModel = getSelectedModelSelection(loadSettings());
       const sendOptions: Parameters<typeof agent.send>[1] = { model: selectedModel };
       if (effectiveToolSelection.obsidian) {
@@ -3890,7 +4045,13 @@ app.post("/sessions/:sessionId/messages", async (c) => {
           }),
         };
       }
-      const mcpServers = getMcpServersForSelection(effectiveToolSelection);
+      let mcpServers = getMcpServersForSelection(effectiveToolSelection);
+      const linearMcpRequested = Boolean(mcpServers?.linear);
+      if (mcpServers?.linear && !getLinearAuthToken()) {
+        const { linear: _linear, ...rest } = mcpServers;
+        mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+      }
+      const linearMcpAttached = Boolean(mcpServers?.linear);
       if (mcpServers) {
         sendOptions.mcpServers = mcpServers;
       }
@@ -4057,71 +4218,220 @@ app.post("/sessions/:sessionId/messages", async (c) => {
         return;
       }
 
-      let sdkRun: Run;
-      try {
-        sdkRun = await agent.send(messageForAgent, sendOptions);
-      } catch (sendError) {
-        const msg = sendError instanceof Error ? sendError.message : String(sendError);
-        if (/already has active run/i.test(msg)) {
-          // The agent has a wedged persisted run (e.g. a previous run was
-          // interrupted by a crash/restart). Expire it and retry once.
-          sdkRun = await agent.send(userMessage, {
-            ...sendOptions,
-            local: { ...(sendOptions.local ?? {}), force: true },
-          });
-        } else {
-          throw sendError;
-        }
-      }
-
-      active.sdkRun = sdkRun;
-
-      if (isRunCancelled(runId)) {
-        if (sdkRun.supports("cancel")) {
-          await sdkRun.cancel();
-        }
-        completeRun(runId, state, "cancelled");
-        return;
-      }
-
-      try {
-        for await (const message of sdkRun.stream()) {
-          if (isRunCancelled(runId)) {
-            if (sdkRun.supports("cancel")) {
-              await sdkRun.cancel();
-            }
-            break;
-          }
-          for (const event of await mapSdkMessageToEvents(message, state)) {
-            broadcast(runId, event);
-            scheduleLinearAvatarBackfill(runId, event);
-          }
-        }
-      } catch (streamError) {
-        if (isRunCancelled(runId) || isBenignSdkStreamError(streamError)) {
-          // Cancel or benign HTTP/2 teardown — fall through to wait/cancel handling.
-        } else {
-          throw streamError;
-        }
-      }
-
-      if (isRunCancelled(runId)) {
-        completeRun(runId, state, "cancelled");
-        return;
-      }
-
-      const result = await sdkRun.wait();
-      const status =
-        result.status === "finished"
+      const mapSdkRunStatus = (
+        sdkStatus: Awaited<ReturnType<Run["wait"]>>["status"],
+      ): "finished" | "error" | "cancelled" =>
+        sdkStatus === "finished"
           ? "finished"
-          : result.status === "cancelled"
+          : sdkStatus === "cancelled"
             ? "cancelled"
             : "error";
 
-      const fallbackText = reconcileAssistantTextFromRun(state, result);
+      const startSdkRun = async (
+        options: Parameters<typeof agent.send>[1],
+      ): Promise<Run> => {
+        try {
+          return await agent.send(messageForAgent, options);
+        } catch (sendError) {
+          const msg = sendError instanceof Error ? sendError.message : String(sendError);
+          if (/already has active run/i.test(msg)) {
+            // The agent has a wedged persisted run (e.g. a previous run was
+            // interrupted by a crash/restart). Expire it and retry once.
+            return await agent.send(userMessage, {
+              ...options,
+              local: { ...(options.local ?? {}), force: true },
+            });
+          }
+          throw sendError;
+        }
+      };
+
+      const consumeSdkRun = async (sdkRun: Run) => {
+        active.sdkRun = sdkRun;
+
+        if (isRunCancelled(runId)) {
+          if (sdkRun.supports("cancel")) {
+            await sdkRun.cancel();
+          }
+          return {
+            cancelled: true as const,
+            streamBenignError: null,
+            streamMessageTypes: {} as Record<string, number>,
+            statusDetails: [] as string[],
+            result: null,
+          };
+        }
+
+        let streamBenignError: string | null = null;
+        const streamMessageTypes: Record<string, number> = {};
+        const statusDetails: string[] = [];
+        try {
+          for await (const message of sdkRun.stream()) {
+            streamMessageTypes[message.type] = (streamMessageTypes[message.type] ?? 0) + 1;
+            if (message.type === "status") {
+              statusDetails.push(
+                `${message.status}${message.message ? `: ${message.message}` : ""}`,
+              );
+            }
+            if (isRunCancelled(runId)) {
+              if (sdkRun.supports("cancel")) {
+                await sdkRun.cancel();
+              }
+              break;
+            }
+            for (const event of await mapSdkMessageToEvents(message, state)) {
+              broadcast(runId, event);
+              scheduleLinearAvatarBackfill(runId, event);
+            }
+          }
+        } catch (streamError) {
+          if (isRunCancelled(runId) || isBenignSdkStreamError(streamError)) {
+            if (isBenignSdkStreamError(streamError) && streamError instanceof Error) {
+              streamBenignError = streamError.message;
+            }
+          } else {
+            throw streamError;
+          }
+        }
+
+        if (isRunCancelled(runId)) {
+          return {
+            cancelled: true as const,
+            streamBenignError,
+            streamMessageTypes,
+            statusDetails,
+            result: null,
+          };
+        }
+
+        const result = await sdkRun.wait();
+        return {
+          cancelled: false as const,
+          streamBenignError,
+          streamMessageTypes,
+          statusDetails,
+          result,
+        };
+      };
+
+      let streamBenignError: string | null = null;
+      const streamMessageTypes: Record<string, number> = {};
+      let statusDetails: string[] = [];
+      let retriedAfterError = false;
+
+      let consumed = await consumeSdkRun(await startSdkRun(sendOptions));
+      if (consumed.cancelled) {
+        completeRun(runId, state, "cancelled");
+        return;
+      }
+
+      let result = consumed.result!;
+      streamBenignError = consumed.streamBenignError;
+      Object.assign(streamMessageTypes, consumed.streamMessageTypes);
+      statusDetails = consumed.statusDetails;
+
+      let status = mapSdkRunStatus(result.status);
+      let fallbackText = reconcileAssistantTextFromRun(state, result);
       if (fallbackText) {
         broadcastAssistantMessage(runId, fallbackText);
       }
+
+      const shouldRetryAfterError =
+        status === "error" &&
+        !state.lastAssistantText.trim() &&
+        !fallbackText;
+
+      if (shouldRetryAfterError && !retriedAfterError) {
+        state.lastAssistantText = "";
+        state.lastStatusMessage = undefined;
+        state.toolCalls.clear();
+
+        const retryOptions: Parameters<typeof agent.send>[1] = { ...sendOptions };
+        if (retryOptions.mcpServers?.linear) {
+          const { linear: _linear, ...rest } = retryOptions.mcpServers;
+          retryOptions.mcpServers = Object.keys(rest).length > 0 ? rest : undefined;
+        }
+        retryOptions.local = { ...retryOptions.local, force: true };
+
+        retriedAfterError = true;
+        consumed = await consumeSdkRun(await startSdkRun(retryOptions));
+        if (consumed.cancelled) {
+          completeRun(runId, state, "cancelled");
+          return;
+        }
+
+        result = consumed.result!;
+        if (consumed.streamBenignError) {
+          streamBenignError = consumed.streamBenignError;
+        }
+        for (const [type, count] of Object.entries(consumed.streamMessageTypes)) {
+          streamMessageTypes[type] = (streamMessageTypes[type] ?? 0) + count;
+        }
+        statusDetails = [...statusDetails, ...consumed.statusDetails];
+
+        status = mapSdkRunStatus(result.status);
+        fallbackText = reconcileAssistantTextFromRun(state, result);
+        if (fallbackText) {
+          broadcastAssistantMessage(runId, fallbackText);
+        }
+      }
+
+      let runFailedBroadcast = false;
+      const sdkErrorCode =
+        status === "error" ? readLocalSdkRunErrorCode(notesPath, result.id) : null;
+      if (status === "error" && !state.lastAssistantText.trim() && !fallbackText) {
+        runFailedBroadcast = true;
+        broadcast(runId, {
+          type: "run.failed",
+          runId,
+          message: resolveAgentRunFailureMessage(state, {
+            streamBenignError,
+            linearMcpAttached: linearMcpAttached && !retriedAfterError,
+            linearMcpWithoutAuth: linearMcpRequested && !linearMcpAttached,
+            panelAgent,
+            focusKind: body.focusContext?.kind ?? null,
+            cursorApiKeyConfigured,
+            sdkErrorCode,
+          }),
+        });
+      }
+
+      const activeRun = activeRuns.get(runId);
+      // #region agent log
+      void fetch("http://127.0.0.1:7933/ingest/280fb855-6de7-45c0-90bf-5ee8faee78a1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "180d80" },
+        body: JSON.stringify({
+          sessionId: "180d80",
+          runId,
+          runId_tag: "post-fix",
+          hypothesisId: "F,G,J,K,N",
+          location: "server.ts:agent-run-complete",
+          message: "Agent run finished",
+          data: {
+            focusKind: body.focusContext?.kind ?? null,
+            sdkStatus: result.status,
+            finalStatus: status,
+            lastAssistantTextLen: state.lastAssistantText.length,
+            fallbackTextLen: fallbackText?.length ?? 0,
+            resultTextLen: typeof result.result === "string" ? result.result.length : 0,
+            lastStatusMessage: state.lastStatusMessage ?? null,
+            streamBenignError,
+            streamMessageTypes,
+            statusDetails,
+            userMessageLen: messageForAgent.text.length,
+            retriedAfterError,
+            linearMcpAttached,
+            sdkErrorCode,
+            runFailedBroadcast,
+            eventCount: activeRun?.events.length ?? 0,
+            messageDeltaCount:
+              activeRun?.events.filter((event) => event.type === "message.delta").length ?? 0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
 
       completeRun(runId, state, status);
     } catch (error) {
@@ -4130,13 +4440,23 @@ app.post("/sessions/:sessionId/messages", async (c) => {
         return;
       }
 
-      const message = error instanceof Error ? error.message : "Run failed";
+      const message =
+        error instanceof CursorAgentError
+          ? resolveAgentRunFailureMessage(state, {
+              panelAgent,
+              focusKind: body.focusContext?.kind ?? null,
+              cursorApiKeyConfigured,
+            })
+          : error instanceof Error
+            ? error.message
+            : "Run failed";
       if (error instanceof CursorAgentError) {
         broadcast(runId, {
           type: "startup.failed",
           message,
           retryable: error.isRetryable,
         });
+        completeRun(runId, state, "error");
       } else {
         broadcast(runId, {
           type: "run.failed",
@@ -4372,8 +4692,14 @@ app.post("/lookup/sessions/:sessionId/messages", async (c) => {
 app.get("/lookup/sessions/:sessionId/events", (c) => {
   const authHeader = c.req.header("authorization");
   const authQuery = c.req.query("auth");
-  const provided = authHeader?.replace("Bearer ", "") ?? authQuery;
-  if (provided !== token) {
+  if (
+    !isEventStreamAuthorized(
+      token,
+      authHeader,
+      getCookie(c, SESSION_COOKIE),
+      authQuery,
+    )
+  ) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
@@ -4451,8 +4777,14 @@ app.get("/lookup/sessions/:sessionId/events", (c) => {
 app.get("/sessions/:sessionId/events", (c) => {
   const authHeader = c.req.header("authorization");
   const authQuery = c.req.query("auth");
-  const provided = authHeader?.replace("Bearer ", "") ?? authQuery;
-  if (provided !== token) {
+  if (
+    !isEventStreamAuthorized(
+      token,
+      authHeader,
+      getCookie(c, SESSION_COOKIE),
+      authQuery,
+    )
+  ) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 

@@ -5,7 +5,11 @@ import {
   isLinearTeamViewId,
   type LinearWorkspaceViewId,
 } from "../app/linearProjectViews";
-import { normalizeSettingsTabId, type SettingsTabId } from "../settings/settingsTabs";
+import {
+  DEFAULT_SETTINGS_TAB,
+  normalizeSettingsTabId,
+  type SettingsTabId,
+} from "../settings/settingsTabs";
 import {
   canBuildIssueAppUrlPath,
   issueProjectSlug,
@@ -86,7 +90,7 @@ function isSafeUserId(value: string): boolean {
 }
 
 function parseSettingsTab(segment: string | undefined): SettingsTabId {
-  if (!segment) return "general";
+  if (!segment) return DEFAULT_SETTINGS_TAB;
   return normalizeSettingsTabId(segment as SettingsTabId);
 }
 
@@ -301,7 +305,7 @@ export function buildAppUrl(state: AppUrlState): string {
 
   if (state.showSettings) {
     parts.push("settings");
-    if (state.activeSettingsTab !== "general") {
+    if (state.activeSettingsTab !== DEFAULT_SETTINGS_TAB) {
       parts.push(state.activeSettingsTab);
     }
     return parts.join("/");

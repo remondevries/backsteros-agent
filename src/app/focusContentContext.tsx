@@ -224,7 +224,9 @@ export function useDebouncedFocusContentSnapshot(
   snapshot: FocusContentSnapshot | null,
   enabled: boolean,
 ) {
-  const { scheduleDebouncedSnapshot, flushFocusContentSnapshot } = useFocusContent();
+  const { scheduleDebouncedSnapshot, flushFocusContentSnapshot, setFocusContentSnapshot } =
+    useFocusContent();
+  const enabledRef = useRef(false);
 
   const snapshotKey = useMemo(() => {
     if (!snapshot) return "";
@@ -244,10 +246,17 @@ export function useDebouncedFocusContentSnapshot(
 
   useEffect(() => {
     if (!enabled || !snapshot) {
+      enabledRef.current = false;
+      return;
+    }
+    const justEnabled = !enabledRef.current;
+    enabledRef.current = true;
+    if (justEnabled) {
+      setFocusContentSnapshot(snapshot);
       return;
     }
     scheduleDebouncedSnapshot(snapshot);
-  }, [enabled, scheduleDebouncedSnapshot, snapshot, snapshotKey]);
+  }, [enabled, scheduleDebouncedSnapshot, setFocusContentSnapshot, snapshot, snapshotKey]);
 
   useEffect(
     () => () => {

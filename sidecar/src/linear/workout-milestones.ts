@@ -10,6 +10,8 @@ export type WorkoutMilestoneRecord = {
   name: string;
   targetDate: string | null;
   projectId: string;
+  status: string | null;
+  progress: number | null;
 };
 
 const PROJECT_MILESTONES_QUERY = `
@@ -20,6 +22,8 @@ const PROJECT_MILESTONES_QUERY = `
           id
           name
           targetDate
+          status
+          progress
         }
       }
     }
@@ -34,6 +38,8 @@ const MILESTONE_CREATE_MUTATION = `
         id
         name
         targetDate
+        status
+        progress
         project {
           id
         }
@@ -46,6 +52,8 @@ type GraphqlMilestoneNode = {
   id?: string | null;
   name?: string | null;
   targetDate?: string | null;
+  status?: string | null;
+  progress?: number | null;
   project?: { id?: string | null } | null;
 };
 
@@ -58,7 +66,10 @@ function normalizeMilestone(
   if (!id || !name) return null;
   const projectId = node.project?.id?.trim() || fallbackProjectId;
   const targetDate = node.targetDate?.trim() || null;
-  return { id, name, targetDate, projectId };
+  const status = node.status?.trim() || null;
+  const progress =
+    typeof node.progress === "number" && Number.isFinite(node.progress) ? node.progress : null;
+  return { id, name, targetDate, projectId, status, progress };
 }
 
 function assertWorkoutDateKey(dateKey: string): string {

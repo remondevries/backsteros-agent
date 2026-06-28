@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TiptapEditor } from "../../editor/TiptapEditor";
 import { XTermView } from "../../editor/XTermView";
 import { useContentPanelBarState } from "../../hooks/useContentPanelBarState";
+import { useIosMobileLandscapeReadOnly } from "../../hooks/useIosMobileLandscapeReadOnly";
 import { useLinearIssueDetail } from "../../hooks/useLinearIssueDetail";
 import { useLinearIssueSubIssues } from "../../hooks/useLinearIssueSubIssues";
 import { useLinearProjectWatcherPollProgress } from "../../hooks/useLinearProjectWatcherPollProgress";
@@ -19,6 +20,10 @@ import {
 import { useContentPanelNavigation, useDebouncedFocusContentSnapshot } from "../contentPanelNavigation";
 import type { LinearSidebarTeamConfig } from "../sidebarNavConfig";
 import { useIssueViewModeBreadcrumbAction } from "../../hooks/useIssueViewModeBreadcrumbAction";
+import { useIssueDeleteBreadcrumbAction } from "../../hooks/useIssueDeleteBreadcrumbAction";
+import { linearSync } from "../../lib/linearSync";
+import { isDraftIssueId, formatLinearIssueBreadcrumbLabel } from "../../lib/inboxDraftIssue";
+import { DeleteNoteConfirmDialog } from "../../ui/components/DeleteNoteConfirmDialog";
 import { LinearIssueDetailsSidePanel } from "./LinearIssueDetailsSidePanel";
 import type { LinearIssueViewMode } from "./LinearIssueViewModeToggle";
 import {
@@ -53,6 +58,8 @@ export function LinearIssueView({
 }) {
   const { updateActiveLinearIssue, linearIssueRefreshNonce, clearActiveLinearIssue, setActiveLinearIssue } =
     useContentPanelNavigation();
+  const iosLandscapeReadOnly = useIosMobileLandscapeReadOnly();
+  const effectiveShowDetailsPanel = showDetailsPanel && !iosLandscapeReadOnly;
   const { issue, loading, refreshing, updating, error, refresh, updateIssue } = useLinearIssueDetail(
     issueId,
     true,
@@ -89,6 +96,8 @@ export function LinearIssueView({
   const [titleDirty, setTitleDirty] = useState(false);
   const [titleSaving, setTitleSaving] = useState(false);
   const [titleSaveError, setTitleSaveError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const descriptionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descriptionRef = useRef(descriptionDraft);
@@ -101,7 +110,7 @@ export function LinearIssueView({
   titleRef.current = titleDraft;
 
   useContentPanelBarState({
-    saving: descriptionSaving || titleSaving,
+    saving: descriptionSaving || titleSaving || deleting,
     dirty: descriptionDirty || titleDirty,
     error: titleSaveError ?? descriptionSaveError ?? error,
     loading: loading && !issue,
@@ -414,8 +423,67 @@ export function LinearIssueView({
     };
   }, [issue?.identifier, issue?.projectName, showTerminal]);
 
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDescriptionSaveError(null);
+    setTitleSaveError(null);
+    try {
+      if (isDraftIssueId(issueId)) {
+        await linearSync.cancelDraftIssue(issueId);
+      } else {
+        await linearSync.enqueueIssueDelete(issueId);
+      }
+      setDeleteConfirmOpen(false);
+      clearActiveLinearIssue();
+    } catch (err) {
+      setDescriptionSaveError(
+        err instanceof Error ? err.message : "Failed to delete issue",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [clearActiveLinearIssue, deleting, issueId]);
+
+  useIssueDeleteBreadcrumbAction(
+    issue
+      ? {
+          deleting,
+          onDelete: () => setDeleteConfirmOpen(true),
+        }
+      : null,
+  );
+
+  const deleteDisplayName = issue
+    ? formatLinearIssueBreadcrumbLabel({
+        identifier: issue.identifier,
+        title: titleDraft.trim() || issue.title,
+      })
+    : "Untitled";
+
   return (
-    <div className="linear-issue-layout">
+    <>
+      <DeleteNoteConfirmDialog
+        open={deleteConfirmOpen}
+        title="Delete issue?"
+        fileName={deleteDisplayName}
+        deleting={deleting}
+        onCancel={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+        }}
+        onConfirm={() => {
+          void handleDelete();
+        }}
+      />
+    <div
+      className={[
+        "linear-issue-layout",
+        iosLandscapeReadOnly ? "linear-issue-layout--ios-landscape-readonly" : null,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="linear-issue-main">
         <div
           ref={issueScrollRef}
@@ -439,18 +507,27 @@ export function LinearIssueView({
           ) : issue ? (
             <article className="linear-issue">
               <header className="linear-issue-header">
-                <input
-                  ref={titleInputRef}
-                  type="text"
-                  className="linear-issue-title"
-                  value={titleDraft}
-                  onChange={(event) => handleTitleChange(event.target.value)}
-                  onFocus={handleTitleFocus}
-                  onBlur={handleTitleBlur}
-                  onKeyDown={handleVaultDocumentTitleEnter}
-                  placeholder="Issue title"
-                  aria-label="Issue title"
-                />
+                {iosLandscapeReadOnly ? (
+                  <h1
+                    className="linear-issue-title linear-issue-title--readonly"
+                    aria-label="Issue title"
+                  >
+                    {titleDraft || issue.title}
+                  </h1>
+                ) : (
+                  <input
+                    ref={titleInputRef}
+                    type="text"
+                    className="linear-issue-title"
+                    value={titleDraft}
+                    onChange={(event) => handleTitleChange(event.target.value)}
+                    onFocus={handleTitleFocus}
+                    onBlur={handleTitleBlur}
+                    onKeyDown={handleVaultDocumentTitleEnter}
+                    placeholder="Issue title"
+                    aria-label="Issue title"
+                  />
+                )}
                 {showSubIssueTitles && linkedCustomers.length > 0 ? (
                   <p className="linear-issue-linked-customer" aria-label="Linked customer">
                     {linkedCustomers.map((customer) => customer.name).join(", ")}
@@ -488,6 +565,7 @@ export function LinearIssueView({
                   format="markdown"
                   placeholder="Add a description…"
                   className="linear-issue-tiptap"
+                  disabled={iosLandscapeReadOnly}
                 />
               </div>
             </article>
@@ -495,7 +573,7 @@ export function LinearIssueView({
         </div>
       </div>
 
-      {issue && showDetailsPanel ? (
+      {issue && effectiveShowDetailsPanel ? (
         <LinearIssueDetailsSidePanel
           issueId={issue.id}
           workspaceTeamConfig={workspaceTeamConfig}
@@ -528,5 +606,6 @@ export function LinearIssueView({
         />
       ) : null}
     </div>
+    </>
   );
 }

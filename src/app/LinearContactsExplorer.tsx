@@ -82,6 +82,7 @@ export function LinearContactsExplorer({
     loadingMessage: "Loading contacts…",
     refreshing,
     onRefresh: refresh,
+    iosNavItemId: "contacts",
   });
 
   useContentPanelSidebarBreadcrumbs([], enabled);
@@ -226,7 +227,6 @@ export function LinearContactsExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: "Search contacts",
-    inputRef: searchInputRef,
   });
 
   return (
@@ -304,6 +304,7 @@ export function LinearContactsExplorer({
                             key={issue.id}
                             issue={issue}
                             grouped={false}
+                            selected={activeLinearIssue?.id === issue.id}
                             showMeta={false}
                             onClick={() => openIssue(issue)}
                             onTerminalIndicatorClick={() => openIssue(issue, "terminal")}

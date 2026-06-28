@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useId, useMemo, type RefObject } from "react";
 import type { LinearWorkoutSetLabel } from "../../lib/workouts/linearWorkoutTypes";
 import {
   findLabelIdForExerciseName,
@@ -17,16 +17,18 @@ export function WorkoutExerciseField({
   inputClassName,
   placeholder = "Exercise",
   showPicker = false,
+  inputRef,
 }: {
   value: string;
   onChange: (next: string) => void;
-  onBlur?: (value: string) => void;
+  onBlur?: (value: string, labelId: string | null) => void;
   labels: LinearWorkoutSetLabel[];
   labelsLoading: boolean;
   disabled?: boolean;
   inputClassName?: string;
   placeholder?: string;
   showPicker?: boolean;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   const fallbackId = useId();
   const selectedLabelId = findLabelIdForExerciseName(value, labels);
@@ -44,7 +46,7 @@ export function WorkoutExerciseField({
     if (resolved.text !== value) {
       onChange(resolved.text);
     }
-    onBlur?.(nextValue);
+    onBlur?.(nextValue, resolved.labelId);
   };
 
   const handlePickerChange = (labelId: string) => {
@@ -53,12 +55,14 @@ export function WorkoutExerciseField({
       return;
     }
     onChange(selectedLabel.name);
+    onBlur?.(selectedLabel.name, labelId);
   };
 
   return (
     <div className="workout-exercise-field">
       <div className="workout-exercise-field__input-wrap">
         <input
+          ref={inputRef}
           type="text"
           id={fallbackId}
           className={inputClassName ?? "workout-exercise-field__input"}

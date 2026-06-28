@@ -1,6 +1,11 @@
 import type { WorkoutGroupSetEntity, WorkoutRepEntity } from "../api";
 import { WORKOUT_REP_WEIGHT_PLACEHOLDER } from "./linearWorkoutTypes";
 
+export type WorkoutRepInSession = {
+  rep: WorkoutRepEntity;
+  groupSet: WorkoutGroupSetEntity;
+};
+
 export function formatRepWeightDisplay(title: string): string {
   if (title === WORKOUT_REP_WEIGHT_PLACEHOLDER || title.startsWith("Set ")) {
     return "";
@@ -40,6 +45,37 @@ export function normalizeNumericInput(raw: string): string {
   }
 
   return result;
+}
+
+export function isWorkoutRepEmpty(rep: WorkoutRepEntity): boolean {
+  const weight = formatRepWeightDisplay(rep.title).trim();
+  const reps = formatRepCountDisplay(rep).trim();
+  return !weight && !reps;
+}
+
+export function findLastWorkoutRepInSession(
+  groupSets: WorkoutGroupSetEntity[],
+): WorkoutRepInSession | null {
+  let last: WorkoutRepInSession | null = null;
+  for (const groupSet of groupSets) {
+    for (const rep of groupSet.reps) {
+      last = { rep, groupSet };
+    }
+  }
+  return last;
+}
+
+/** Last parent group set in session order that has no rep sub-issues yet. */
+export function findLastWorkoutGroupSetWithoutReps(
+  groupSets: WorkoutGroupSetEntity[],
+): WorkoutGroupSetEntity | null {
+  let last: WorkoutGroupSetEntity | null = null;
+  for (const groupSet of groupSets) {
+    if (groupSet.reps.length === 0) {
+      last = groupSet;
+    }
+  }
+  return last;
 }
 
 export function formatRepCountDisplay(rep: WorkoutRepEntity): string {
@@ -85,10 +121,7 @@ export function repVolumeProgressPercent(reps: WorkoutRepEntity[], rep: WorkoutR
 export function sumGroupSetWeightKg(reps: WorkoutRepEntity[]): number {
   let total = 0;
   for (const rep of reps) {
-    const weight = parseRepWeightKg(rep.title);
-    if (weight != null) {
-      total += weight;
-    }
+    total += repVolumeKg(rep);
   }
   return total;
 }

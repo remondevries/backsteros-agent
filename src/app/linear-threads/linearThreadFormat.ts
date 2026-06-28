@@ -138,6 +138,43 @@ export function mergeLinearThreadComments(
   );
 }
 
+export const PENDING_LINEAR_COMMENT_PREFIX = "pending-linear-comment-";
+
+export function isPendingLinearComment(id: string): boolean {
+  return id.startsWith(PENDING_LINEAR_COMMENT_PREFIX);
+}
+
+export function buildOptimisticLinearUserComment(
+  body: string,
+  threadId: string,
+  viewerId: string,
+  authorName = "You",
+): LinearComment {
+  return {
+    id: `${PENDING_LINEAR_COMMENT_PREFIX}${crypto.randomUUID()}`,
+    body: body.trim(),
+    createdAt: new Date().toISOString(),
+    author: { id: viewerId, name: authorName, avatarUrl: null },
+    parentId: threadId,
+    agentSessionId: null,
+  };
+}
+
+export function reconcileLinearThreadComments(
+  comments: LinearComment[],
+  pendingId: string,
+  confirmed: LinearComment | null,
+): LinearComment[] {
+  const pending = comments.find((comment) => comment.id === pendingId);
+  const withoutPending = comments.filter((comment) => comment.id !== pendingId);
+  if (!confirmed) return withoutPending;
+  const stabilized = {
+    ...confirmed,
+    createdAt: pending?.createdAt ?? confirmed.createdAt,
+  };
+  return mergeLinearThreadComments(withoutPending, stabilized);
+}
+
 export function linearThreadCommentsToChatMessages(
   comments: LinearComment[],
   _threadId: string | null,

@@ -147,6 +147,7 @@ html.ios-device .content-panel-slot .content-panel-main-slot > .linear-projects-
 html.ios-device .content-panel-slot .workspace-status-list-scroll,
 html.ios-device .content-panel-slot .vault-document-scroll,
 html.ios-device .content-panel-slot .linear-issue-scroll,
+html.ios-device .content-panel-slot .linear-issue-layout:not(.linear-issue-layout--letter-compose),
 html.ios-device .content-panel-slot .linear-project-view-body,
 html.ios-device .content-panel-slot .content-panel-sidebar-body,
 html.ios-device .content-panel-slot .linear-projects-table__body,
@@ -176,16 +177,16 @@ html.ios-device .content-panel-slot .content-panel-main-slot > .linear-projects-
   );
 }
 
-html.ios-device .content-panel-slot .content-panel-breadcrumb-bar {
+html.ios-device .content-panel-breadcrumb-bar {
   border-bottom: none;
 }
 
-html.ios-device .content-panel-slot .content-panel-breadcrumb-actions,
-html.ios-device .content-panel-slot .content-panel-breadcrumb-menu-anchor {
+html.ios-device .content-panel-breadcrumb-actions,
+html.ios-device .content-panel-breadcrumb-menu-anchor {
   overflow: visible;
 }
 
-html.ios-device .content-panel-slot .content-panel-breadcrumb-menu {
+html.ios-device .content-panel-breadcrumb-menu {
   min-width: 160px;
   padding: 6px;
   border: 0.5px solid var(--ios-frosted-surface-border);
@@ -200,7 +201,7 @@ html.ios-device .content-panel-slot .content-panel-breadcrumb-menu {
   transform: translateZ(0);
 }
 
-html.ios-device .content-panel-slot .content-panel-breadcrumb-menu-item {
+html.ios-device .content-panel-breadcrumb-menu-item {
   min-height: 44px;
   padding: 10px 12px;
   border-radius: 9999px;
@@ -208,13 +209,13 @@ html.ios-device .content-panel-slot .content-panel-breadcrumb-menu-item {
   font-weight: 500;
 }
 
-html.ios-device .content-panel-slot .content-panel-breadcrumb-menu-item:hover:not(:disabled),
-html.ios-device .content-panel-slot .content-panel-breadcrumb-menu-item:focus-visible {
+html.ios-device .content-panel-breadcrumb-menu-item:hover:not(:disabled),
+html.ios-device .content-panel-breadcrumb-menu-item:focus-visible {
   background: var(--ios-frosted-surface-active-bg);
   outline: none;
 }
 
-html.ios-device .content-panel-slot .content-panel-breadcrumb-menu-item--danger:hover:not(:disabled) {
+html.ios-device .content-panel-breadcrumb-menu-item--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger-text, #e5484d) 14%, transparent);
 }
 
@@ -317,10 +318,6 @@ html.ios-device .vault-folder-explorer-header:has(.model-mode-toggle) {
   gap: 10px;
   padding-top: 10px;
   padding-bottom: 8px;
-}
-
-html.ios-device .ios-mobile-bottom-nav-more-item--active {
-  background: var(--ios-frosted-surface-active-bg);
 }
 
 html.ios-device .content-panel-slot .content-panel {
@@ -444,9 +441,15 @@ html.ios-device .content-panel-slot button.meeting-document-sidebar-row--keyboar
   background: transparent;
 }
 
-/* Keyboard open: bottom nav sits below the visible area; content no longer reserves nav clearance. */
+/* Keyboard open: hide bottom nav and drop extra scroll inset so content can use the space. */
 html.ios-device.ios-keyboard-visible {
   --ios-mobile-content-inset-bottom: 12px;
+}
+
+html.ios-device.ios-keyboard-visible .ios-mobile-bottom-nav {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .ios-mobile-bottom-nav {
@@ -460,9 +463,9 @@ html.ios-device.ios-keyboard-visible {
   align-items: flex-end;
   padding: 0 16px var(--ios-safe-area-bottom, env(safe-area-inset-bottom, 0px));
   pointer-events: none;
-  transform: translateY(var(--ios-keyboard-layout-offset, 0px));
-  transition: transform var(--ios-sheet-transition-duration, 0.38s)
-    var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1));
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease;
 }
 
 .ios-mobile-bottom-nav::before {
@@ -545,6 +548,44 @@ html.ios-device.ios-keyboard-visible {
   transform: translateX(calc(400% + 16px));
 }
 
+.ios-mobile-bottom-nav-more-indicator {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 6px;
+  height: 44px;
+  border-radius: calc(var(--ios-mobile-more-menu-radius, 14px) - 2px);
+  background: var(--ios-frosted-surface-active-bg, rgba(255, 255, 255, 0.14));
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition:
+    transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 120ms ease;
+}
+
+.ios-mobile-bottom-nav-more-menu[data-active-index] .ios-mobile-bottom-nav-more-indicator {
+  opacity: 1;
+}
+
+.ios-mobile-bottom-nav-more-menu[data-active-index="1"] .ios-mobile-bottom-nav-more-indicator {
+  transform: translateY(47px);
+}
+
+.ios-mobile-bottom-nav-more-menu[data-active-index="2"] .ios-mobile-bottom-nav-more-indicator {
+  transform: translateY(94px);
+}
+
+.ios-mobile-bottom-nav-more-menu[data-active-index="3"] .ios-mobile-bottom-nav-more-indicator {
+  transform: translateY(141px);
+}
+
+.ios-mobile-bottom-nav-more-menu[data-active-index="4"] .ios-mobile-bottom-nav-more-indicator {
+  transform: translateY(188px);
+}
+
 /* Bottom-nav tab pill motion is core navigation — keep even when Reduce Motion is on. */
 
 .ios-mobile-bottom-nav-item {
@@ -585,9 +626,26 @@ html.ios-device.ios-keyboard-visible {
   width: 100%;
 }
 
-.ios-mobile-bottom-nav-more-anchor .ios-mobile-bottom-nav-more-menu {
-  right: 0;
-  left: auto;
+.ios-mobile-bottom-nav-more-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 220px;
+  --ios-mobile-more-menu-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px;
+  border-radius: var(--ios-mobile-more-menu-radius);
+  border: 0.5px solid var(--ios-mobile-nav-border, rgba(255, 255, 255, 0.14));
+  background: var(--ios-mobile-menu-bg, rgba(28, 28, 30, 0.88));
+  backdrop-filter: blur(48px) saturate(200%);
+  -webkit-backdrop-filter: blur(48px) saturate(200%);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.36),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+  isolation: isolate;
+  transform: translateZ(0);
+  pointer-events: auto;
 }
 
 .ios-mobile-bottom-nav-item-icon {
@@ -600,6 +658,12 @@ html.ios-device.ios-keyboard-visible {
 
 .ios-mobile-bottom-nav-item-icon svg {
   display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.ios-mobile-bottom-nav-item-icon .content-panel-breadcrumb-refresh-icon,
+.ios-mobile-bottom-nav-more-item-icon .content-panel-breadcrumb-refresh-icon {
   width: 22px;
   height: 22px;
 }
@@ -647,8 +711,34 @@ html.ios-device.ios-keyboard-visible {
 }
 
 .ios-mobile-bottom-nav-action--anchor {
+  position: relative;
   cursor: pointer;
   pointer-events: auto;
+}
+
+.ios-mobile-bottom-nav-action-active-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #34c759;
+  box-shadow: 0 0 0 2px var(--bg-app);
+  animation: ios-workout-active-dot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ios-workout-active-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
 }
 
 .ios-mobile-bottom-nav-action--anchor:disabled {
@@ -670,30 +760,9 @@ html.ios-device.ios-keyboard-visible {
   height: 22px;
 }
 
-.ios-mobile-bottom-nav-more-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 12px);
-  z-index: 90;
-  min-width: 220px;
-  --ios-mobile-more-menu-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px;
-  border-radius: var(--ios-mobile-more-menu-radius);
-  border: 0.5px solid var(--ios-mobile-nav-border, rgba(255, 255, 255, 0.14));
-  background: var(--ios-mobile-menu-bg, rgba(28, 28, 30, 0.82));
-  backdrop-filter: blur(40px) saturate(200%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%);
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.32),
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
-  isolation: isolate;
-  transform: translateZ(0);
-}
-
 .ios-mobile-bottom-nav-more-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -703,7 +772,7 @@ html.ios-device.ios-keyboard-visible {
   border: none;
   border-radius: var(--ios-mobile-more-menu-radius, 14px);
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-muted);
   font: inherit;
   font-size: 15px;
   font-weight: 500;
@@ -712,20 +781,15 @@ html.ios-device.ios-keyboard-visible {
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
+  transition: color 140ms ease;
 }
 
 .ios-mobile-bottom-nav-more-item:hover,
 .ios-mobile-bottom-nav-more-item:focus-visible {
-  background: var(--ios-frosted-surface-active-bg, rgba(255, 255, 255, 0.14));
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
   outline: none;
 }
 
 .ios-mobile-bottom-nav-more-item--active {
-  background: var(--ios-frosted-surface-active-bg, rgba(255, 255, 255, 0.14));
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
   color: var(--text-primary);
 }
 
@@ -925,6 +989,16 @@ html.ios-device .ios-projects-sidebar-panel .workspace-status-list-scroll {
 
 /* iOS sheet motion is core navigation — keep transitions even when Reduce Motion is on. */
 @media (prefers-reduced-motion: reduce) {
+  html.ios-device .ios-mobile-bottom-nav-indicator,
+  html.ios-device .ios-mobile-bottom-nav-more-indicator {
+    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  html.ios-device .ios-mobile-bottom-nav-item,
+  html.ios-device .ios-mobile-bottom-nav-more-item {
+    transition: color 140ms ease !important;
+  }
+
   html.ios-device .content-panel-main--ios-sidebar-active .content-panel-content {
     transition:
       transform var(--ios-sheet-transition-duration, 0.38s) var(--ios-sheet-transition-easing, cubic-bezier(0.32, 0.72, 0, 1)),
@@ -1068,6 +1142,24 @@ html.ios-device .document-pdf-modal--ios .document-pdf-viewer-shell--modal {
 html.ios-device .document-pdf-modal--ios .document-pdf-viewer-toolbar {
   opacity: 1;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+html.ios-device .linear-issue-layout--ios-landscape-readonly {
+  flex-direction: column;
+}
+
+html.ios-device .linear-issue-layout--ios-landscape-readonly .linear-issue-main {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+@media (orientation: landscape) {
+  html.ios-device
+    .linear-issue-layout:not(.linear-issue-layout--letter-compose)
+    .linear-issue-details-resizable {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

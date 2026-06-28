@@ -103,6 +103,20 @@ describe("resolveRightPanelAgent", () => {
     expect(resolved.active).toBe("linear");
   });
 
+  test("uses linear agent for documents without requiring cursor api key", () => {
+    const resolved = resolveRightPanelAgent({
+      integrationsStatus: {
+        ...linearConnectedStatus,
+        cursorApiKey: { configured: false },
+      },
+      activeLinearIssue: null,
+      activeLinearDocument: { id: "doc-1", title: "Doc" },
+    });
+    expect(resolved.requested).toBe("linear");
+    expect(resolved.active).toBe("linear");
+    expect(resolved.fallbackReason).toBeUndefined();
+  });
+
   test("falls back to cursor when linear is requested but not connected", () => {
     const resolved = resolveRightPanelAgent({
       integrationsStatus: baseStatus,

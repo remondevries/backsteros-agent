@@ -1,4 +1,5 @@
 import { categorizeTool, enrichToolResult, getToolLabel } from "./enrichers/index.ts";
+import { formatSdkRunErrorCode } from "./sdk-run-errors.ts";
 import type { AgentEvent, ToolCategory } from "./types.ts";
 import type { SDKMessage } from "@cursor/sdk";
 
@@ -10,10 +11,11 @@ function workspaceToolName(args?: unknown): string | undefined {
   return typeof combined.toolName === "string" ? combined.toolName : undefined;
 }
 
-interface RunState {
+export interface RunState {
   runId: string;
   startedAt: number;
   lastAssistantText: string;
+  lastStatusMessage?: string;
   toolCalls: Map<
     string,
     { name: string; category: ToolCategory; startedAt: number; label: string }
@@ -27,6 +29,64 @@ export function createRunState(runId: string): RunState {
     lastAssistantText: "",
     toolCalls: new Map(),
   };
+}
+
+function isGenericSdkFailureMessage(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized === "agent run error" ||
+    normalized === "run failed" ||
+    normalized === "agent run failed"
+  );
+}
+
+export function resolveAgentRunFailureMessage(
+  state: RunState,
+  options?: {
+    streamBenignError?: string | null;
+    linearMcpAttached?: boolean;
+    linearMcpWithoutAuth?: boolean;
+    panelAgent?: "linear" | "cursor";
+    focusKind?:
+      | "linear_issue"
+      | "linear_document"
+      | "vault_document"
+      | "vault_folder"
+      | "linear_workspace"
+      | null;
+    cursorApiKeyConfigured?: boolean;
+    sdkErrorCode?: string | null;
+  },
+): string {
+  const fromSdkStore = options?.sdkErrorCode
+    ? formatSdkRunErrorCode(options.sdkErrorCode)
+    : null;
+  if (fromSdkStore) {
+    return fromSdkStore;
+  }
+
+  const fromStatus = state.lastStatusMessage?.trim();
+  if (fromStatus && !isGenericSdkFailureMessage(fromStatus)) {
+    return fromStatus;
+  }
+
+  if (options?.streamBenignError) {
+    return "The agent stream ended unexpectedly. Try sending your message again.";
+  }
+
+  if (options?.linearMcpWithoutAuth) {
+    return "Linear MCP could not start because Linear is not connected. Connect Linear in Settings, then try again.";
+  }
+
+  if (options?.linearMcpAttached) {
+    return "The agent run failed while connecting to Linear tools. Check Linear in Settings, then try again.";
+  }
+
+  if (options?.panelAgent === "linear") {
+    return "The Linear assistant could not finish your request. Try again in a moment.";
+  }
+
+  return "The agent run failed without a response. Check that your Cursor API key is configured in Settings, then try again.";
 }
 
 export async function mapSdkMessageToEvents(
@@ -189,6 +249,26 @@ export async function mapSdkMessageToEvents(
           kind: "generic",
           label: message.text.slice(0, 120),
           status: "running",
+        });
+      }
+      break;
+    }
+    case "status": {
+      if (
+        message.status === "ERROR" ||
+        message.status === "EXPIRED" ||
+        message.status === "CANCELLED"
+      ) {
+        const detail =
+          message.message?.trim() || `Agent run ${message.status.toLowerCase()}`;
+        state.lastStatusMessage = detail;
+        events.push({
+          type: "activity.step",
+          runId,
+          stepId: `status-${message.status}-${Date.now()}`,
+          kind: "generic",
+          label: detail,
+          status: "error",
         });
       }
       break;

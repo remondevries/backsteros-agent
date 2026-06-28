@@ -5,7 +5,7 @@ import {
   findWorkoutMilestoneForDate,
   resolveWorkoutsProjectId,
 } from "./workout-milestones.ts";
-import { assertWorkoutSetExercise } from "./workout-exercise-types.ts";
+import { assertWorkoutSetExercise, resolveWorkoutSetExerciseLabel } from "./workout-exercise-types.ts";
 
 export type WorkoutRepRecord = {
   id: string;
@@ -335,7 +335,7 @@ export async function createWorkoutGroupSet(
   dateKey: string,
   exercise: string,
 ): Promise<WorkoutGroupSetRecord> {
-  const workoutExercise = await assertWorkoutSetExercise(teamId, exercise);
+  const workoutExercise = await resolveWorkoutSetExerciseLabel(teamId, exercise);
   const context = await resolveWorkoutSessionContext(teamId, dateKey);
 
   const data = await linearGraphqlRequest<{
@@ -346,7 +346,8 @@ export async function createWorkoutGroupSet(
   }>(ISSUE_CREATE_MUTATION, {
     input: {
       teamId: context.teamId,
-      title: workoutExercise,
+      title: workoutExercise.name,
+      labelIds: [workoutExercise.id],
       dueDate: context.date,
       stateId: context.inProgressStateId,
       projectId: context.projectId,

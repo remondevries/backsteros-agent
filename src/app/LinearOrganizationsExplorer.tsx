@@ -114,6 +114,7 @@ export function LinearOrganizationsExplorer({
       }
       void customersQuery.refresh({ background: true });
     },
+    iosNavItemId: "organizations",
   });
 
   useEffect(() => {
@@ -258,7 +259,6 @@ export function LinearOrganizationsExplorer({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled,
     label: searchAriaLabel,
-    inputRef: searchInputRef,
   });
 
   return (

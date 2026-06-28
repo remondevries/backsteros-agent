@@ -24,9 +24,11 @@ export function meetingDocumentSidebarRowParts(document: ProjectDocumentEntity) 
 
 export function MeetingDocumentSidebarRow({
   document,
+  selected = false,
   onClick,
 }: {
   document: ProjectDocumentEntity;
+  selected?: boolean;
   onClick: () => void;
 }) {
   const { displayTitle, date, time, organizationLabel } =
@@ -34,6 +36,7 @@ export function MeetingDocumentSidebarRow({
   const keyboardFocused = useContentListItemKeyboardFocused(document.linearDocumentId);
   const rowClass = [
     "meeting-document-sidebar-row",
+    selected ? "meeting-document-sidebar-row--selected" : null,
     keyboardFocused ? "meeting-document-sidebar-row--keyboard-focused" : null,
   ]
     .filter(Boolean)

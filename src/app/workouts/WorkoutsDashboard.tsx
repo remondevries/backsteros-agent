@@ -231,6 +231,7 @@ export function WorkoutsDashboard({
       void refresh();
       void refreshSessions();
     },
+    iosNavItemId: "workouts",
   });
 
   const sessionCount = useMemo(
@@ -323,7 +324,6 @@ export function WorkoutsDashboard({
   const { searchVisibleClassName } = useIosExplorerSearchChrome({
     enabled: workoutsEnabled,
     label: "Search workouts",
-    inputRef: searchInputRef,
   });
 
   if (!enabled || !normalizedTeamId) {
