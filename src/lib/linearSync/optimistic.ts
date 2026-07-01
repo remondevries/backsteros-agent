@@ -7,7 +7,7 @@ import {
 import {
   clearPendingIssueUpdates,
 } from "./pendingCache";
-import { notifyLinearDocumentListChange } from "../linearDocumentListEvents";
+import { notifyLinearDocumentListChange, type LinearDocumentListPatch } from "../linearDocumentListEvents";
 import { notifyLinearIssueListChange } from "../linearIssueListEvents";
 import {
   linearIssueDetailToListPatch,
@@ -78,17 +78,20 @@ export function applyOptimisticMutation(mutation: StoredMutation): void {
     }
     case "document.update": {
       const { documentId, updates } = payload.payload;
-      const patch: {
-        title?: string;
-        updatedAt?: string;
-        linkedIssueId?: string;
-        linkedIssueIdentifier?: string;
-      } = {};
+      const patch: LinearDocumentListPatch = {
+        updatedAt: new Date().toISOString(),
+      };
       if (updates.title !== undefined) patch.title = updates.title;
       if (updates.issueId !== undefined) {
         patch.linkedIssueId = updates.issueId ?? undefined;
       }
-      patch.updatedAt = new Date().toISOString();
+      if (updates.projectId !== undefined) {
+        patch.projectId = updates.projectId ?? undefined;
+        patch.projectName = undefined;
+      }
+      if (updates.teamId !== undefined) {
+        patch.organization = undefined;
+      }
       notifyLinearDocumentListChange({
         type: "update",
         linearDocumentId: documentId,
@@ -167,13 +170,24 @@ export function reconcileDocumentCreateSuccess(
 export function reconcileDocumentUpdateSuccess(
   localDocumentId: string,
   resolvedDocumentId: string,
-  document: { title: string; updatedAt: string; linkedIssueId?: string; linkedIssueIdentifier?: string },
+  document: {
+    title: string;
+    updatedAt: string;
+    linkedIssueId?: string;
+    linkedIssueIdentifier?: string;
+    projectId?: string;
+    projectName?: string;
+    teamName?: string;
+  },
 ): void {
-  const patch = {
+  const patch: LinearDocumentListPatch = {
     title: document.title,
     updatedAt: document.updatedAt,
     linkedIssueId: document.linkedIssueId,
     linkedIssueIdentifier: document.linkedIssueIdentifier,
+    projectId: document.projectId,
+    projectName: document.projectName,
+    organization: document.teamName?.trim() || undefined,
   };
 
   notifyLinearDocumentListChange({

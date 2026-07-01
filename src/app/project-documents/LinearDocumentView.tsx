@@ -6,6 +6,7 @@ import { useIosMobileLandscapeReadOnly } from "../../hooks/useIosMobileLandscape
 import { useDocumentDeleteBreadcrumbAction } from "../../hooks/useDocumentDeleteBreadcrumbAction";
 import { useLinearDocument } from "../../hooks/useLinearDocument";
 import { linearSync } from "../../lib/linearSync";
+import { linearDocumentContentToListPatch } from "../../lib/linearDocumentContentPatch";
 import { notifyLinearDocumentListChange } from "../../lib/linearDocumentListEvents";
 import { parseDailyJournalDate, isDailyJournalDocumentTitle } from "../../lib/vaultDates";
 import {
@@ -520,8 +521,9 @@ export function LinearDocumentView({
         });
 
         notifyLinearDocumentListChange({
-          type: "refresh",
-          documentId,
+          type: "update",
+          linearDocumentId: documentId,
+          patch: linearDocumentContentToListPatch(result.document),
         });
         return { error: null };
       } catch (err) {

@@ -3,6 +3,10 @@ import {
   fetchLinearDocument,
   type LinearDocumentContent,
 } from "../lib/api";
+import {
+  applyLinearDocumentContentUpdates,
+  mergeLinearDocumentListPatch,
+} from "../lib/linearDocumentContentPatch";
 import { onLinearDocumentListChange } from "../lib/linearDocumentListEvents";
 import { isDraftDocumentId } from "../lib/linearSync";
 import { linearSync } from "../lib/linearSync";
@@ -10,31 +14,6 @@ import {
   clearLinearDocumentContentSeed,
   peekLinearDocumentContentSeed,
 } from "../lib/linearDocumentContentSeed";
-
-function applyDocumentUpdatesLocal(
-  document: LinearDocumentContent,
-  updates: {
-    title?: string;
-    content?: string;
-    body?: string;
-    projectId?: string | null;
-    teamId?: string;
-    issueId?: string | null;
-  },
-): LinearDocumentContent {
-  const content = updates.content ?? updates.body;
-  return {
-    ...document,
-    ...(updates.title !== undefined ? { title: updates.title } : null),
-    ...(content !== undefined ? { content } : null),
-    ...(updates.projectId !== undefined ? { projectId: updates.projectId ?? undefined } : null),
-    ...(updates.teamId !== undefined ? { teamId: updates.teamId } : null),
-    ...(updates.issueId !== undefined
-      ? { linkedIssueId: updates.issueId ?? undefined }
-      : null),
-    updatedAt: new Date().toISOString(),
-  };
-}
 
 export function useLinearDocument(documentId: string, enabled = true) {
   const [document, setDocument] = useState<LinearDocumentContent | null>(null);
@@ -138,6 +117,14 @@ export function useLinearDocument(documentId: string, enabled = true) {
     if (!enabled || !documentId) return undefined;
 
     return onLinearDocumentListChange((change) => {
+      if (change.type === "update") {
+        if (change.linearDocumentId !== documentId) return;
+        setDocument((current) =>
+          current ? mergeLinearDocumentListPatch(current, change.patch) : current,
+        );
+        return;
+      }
+
       if (change.type !== "refresh") return;
       if (change.documentId && change.documentId !== documentId) return;
       void refresh();
@@ -159,7 +146,7 @@ export function useLinearDocument(documentId: string, enabled = true) {
       let nextDocument: LinearDocumentContent | null = null;
       setDocument((current) => {
         if (!current) return current;
-        nextDocument = applyDocumentUpdatesLocal(current, updates);
+        nextDocument = applyLinearDocumentContentUpdates(current, updates);
         return nextDocument;
       });
 

@@ -3,6 +3,9 @@ export type LinearDocumentListPatch = {
   updatedAt?: string;
   linkedIssueId?: string;
   linkedIssueIdentifier?: string;
+  projectId?: string;
+  projectName?: string;
+  organization?: string;
 };
 
 export type LinearDocumentListChange =

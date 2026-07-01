@@ -19,7 +19,11 @@ describe("linearDocumentListEvents", () => {
     notifyLinearDocumentListChange({
       type: "update",
       linearDocumentId: "doc-1",
-      patch: { title: "Renamed" },
+      patch: {
+        title: "Renamed",
+        projectId: "project-1",
+        organization: "Engineering",
+      },
     });
     notifyLinearDocumentListChange({ type: "remove", linearDocumentId: "doc-2" });
 
